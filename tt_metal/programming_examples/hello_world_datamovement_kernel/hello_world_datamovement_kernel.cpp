@@ -33,6 +33,14 @@ int main(int argc, char** argv) {
 
     // Configure Program and Start Program Execution on Device
 
+    // a single core is given two kernels to run.
+    // the first kernel is specified to run on the 0th data movement RISCV processor,
+    // and the second kernel on the 1st, so these can run in parallel?
+    // RESEARCH: what happens when you specify multiple kernels onto a single RISCV processor?
+    //           are they run sequentially? concurrently?
+    //           is this an ill-defined program?
+    //           is this a key to writing optimal programs?
+    //              ie, a core exhibits fine-grained multithreading to hide latency
     SetRuntimeArgs(program, void_dataflow_kernel_noc0_id, core, {});
     SetRuntimeArgs(program, void_dataflow_kernel_noc1_id, core, {});
     EnqueueProgram(cq, program, false);

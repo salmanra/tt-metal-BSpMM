@@ -6,6 +6,11 @@ runtime
 *.csv
 *.xlsx
 *.code-workspace
+
+# rahmy was here
+# exclude matrix data
+*.mtx
+
 /tt-perf*
 test_hlk_args_init_gen
 tt_build

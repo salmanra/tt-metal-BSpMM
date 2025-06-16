@@ -1,0 +1,11 @@
+This folder is for writing, building, and running new kernels.
+To write and build a new kernel, do the following:
+    1. add a subdirectory here. Make sure its name does not match any other dir being built
+        . just add "rahmy" to the end of the name
+    2. add a cpp file of the same name to the directory. This will be your host code
+    3. add a subdirectory named "kernels" to the newly named subdir. Place all your
+        kernel code in there (with no naming restrictions)
+    4. Update CMakeLists.txt at this level with a new entry into RAHMY_SRCS (see the file for examples)
+        . this should add one line of code in that file
+    5. build with $ ./build_metal.sh --build-programming-examples
+    6. run with $ ./build/programming_examples/rahmy/{name of subdir}

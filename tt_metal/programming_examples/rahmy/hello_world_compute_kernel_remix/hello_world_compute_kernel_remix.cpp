@@ -1,7 +1,3 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
-//
-// SPDX-License-Identifier: Apache-2.0
-
 #include <tt-metalium/host_api.hpp>
 #include <tt-metalium/device.hpp>
 
@@ -16,10 +12,11 @@ int main(int argc, char** argv) {
     IDevice* device = CreateDevice(device_id);
     CommandQueue& cq = device->command_queue();
     Program program = CreateProgram();
+    Program program2 = CreateProgram();
 
     // Configure and Create Void Kernel
-
     std::vector<uint32_t> compute_kernel_args = {};
+
     KernelHandle void_compute_kernel_id = CreateKernel(
         program,
         "tt_metal/programming_examples/rahmy/hello_world_compute_kernel_remix/kernels/void_compute_kernel.cpp",
@@ -29,17 +26,29 @@ int main(int argc, char** argv) {
             .fp32_dest_acc_en = false,
             .math_approx_mode = false,
             .compile_args = compute_kernel_args});
-
-    // Configure Program and Start Program Execution on Device
+    // what if we create a second compute kernel on the same core?
+    KernelHandle void_compute_kernel_id_2 = CreateKernel(
+        program2,
+        "tt_metal/programming_examples/rahmy/hello_world_compute_kernel_remix/kernels/void2.cpp",
+        core,
+        ComputeConfig{
+            .math_fidelity = MathFidelity::HiFi4,
+            .fp32_dest_acc_en = false,
+            .math_approx_mode = false,
+            .compile_args = compute_kernel_args});
 
     SetRuntimeArgs(program, void_compute_kernel_id, core, {});
-    EnqueueProgram(cq, program, false);
-    printf("Hello, Core {0, 0} on Device 0, I am sending you a compute kernel. Standby awaiting communication.\n");
+    SetRuntimeArgs(program2, void_compute_kernel_id_2, core, {});
 
-    // Wait Until Program Finishes, Print "Hello World!", and Close Device
+    printf("Hello, Core {0, 0} on Device 0 on Program 0, take this compute kernel.\n");
+    EnqueueProgram(cq, program, false);
+
+    printf("Hello, Core {0, 0} on Device 0 on Program 1, take this compute kernel.\n");
+    EnqueueProgram(cq, program2, false);
 
     Finish(cq);
-    printf("Thank you, Core {0, 0} on Device 0, for the completed task.\n");
+    printf("Thanks, Core {0, 0} on Device 0.\n");
+
     CloseDevice(device);
 
     return 0;

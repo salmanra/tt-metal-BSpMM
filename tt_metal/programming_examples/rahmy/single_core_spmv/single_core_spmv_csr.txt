@@ -1,0 +1,333 @@
+#include <tt-metalium/host_api.hpp>
+#include <tt-metalium/constants.hpp>
+#include <tt-metalium/util.hpp>
+#include <tt-metalium/bfloat16.hpp>
+#include <tt-metalium/test_tiles.hpp>
+#include <tt-metalium/command_queue.hpp>
+// #include <matmul_common/bmm_op.hpp> // later: create spmv_common
+#include <tt-metalium/tilize_untilize.hpp>
+#include <tt-metalium/device_impl.hpp>
+
+// Naive SpMV on CSR Matrix
+
+struct csr_matrix {
+    std::vector<bfloat16> vals;
+    std::vector<bfloat16> col_indices;
+    std::vector<bfloat16> rows;
+    uint32_t M;
+    uint32_t N;
+    uint32_t nnz;
+};
+
+struct csr_matvec_page {
+    /* Defines the unit of data to be sent to the FPU
+        "tilized" row
+        "tilized" values of x to dot with the row
+        row index, important for accumulating output values
+    */
+    bfloat16[TILE_WIDTH * TILE_HEIGHT] A_vals = {0};
+    bfloat16[TILE_WIDTH * TILE_HEIGHT] x_vals = {0};
+    uint32_t row; // if this makes things inconvenient, we'll remove. But it will become an array later
+}
+
+void csr_to_matvec_page(csr_matrix& csr, std::vector<csr_matvec_page> &tilized_csr, std::vector<bfloat16> &input_vector) {
+    int tile_size = TILE_WIDTH*TILE_HEIGHT;
+    for (int i = 0; i < csr.M; i++) {
+        int row_start = csr.rows[i];
+        int row_end = csr.rows[i+1];
+        int nnz_row = row_end - row_start;
+        int num_entries = (nnz_row + tile_size - 1) / (tile_size);
+        for (int j = 0; j < num_entries; j++){
+            csr_matvec_page page;
+            int num_to_copy = min(tile_size, num_entries - j*tile_size);
+            std::copy(csr.vals[row_start + j*tile_size], csr.vals[row_start + num_to_copy + j*tile_size], page.A_vals);
+
+            int count = 0;
+            for (int k = row_start + j*tile_size; k < row_start + num_to_copy + j*tile_size; k++){
+                page.x_vals[count++] = input_vector[csr.col_indices[k]];
+            }
+            page.row = i;
+            tilized_csr.push_back(page);
+        }
+    }
+}
+
+void sequential_spmv(
+    csr_matrix& A,
+    std::vector<bfloat16>& x,
+    std::vector<bfloat16>& output) {
+    int row, row_start, row_end;
+    for (row = 0; row < A.M; row++){
+        row_start = A.rows[row];
+        row_end = A.rows[row+1];
+        for (int iter = row_start; iter < row_end; iter++){
+            output[row] += A.vals[iter] * x[A.col_indices[iter]];
+        }
+    }
+}
+
+void spmv_single_core(
+    std::vector<csr_matvec_page> &tilized_csr,
+    std::vector<bfloat16>& output,
+    uint32_t M,
+    uint32_t N,
+    IDevice* device
+){
+
+    CommandQueue& cq = device->command_queue();
+    Program program{};
+    CoreRange core({0, 0}, {0, 0});
+
+    tt:DataFormat cb_data_format = tt::DataFormat::Float16_b;
+    MathFidelity math_fidelity = MathFidelity::HiFi4;
+
+    uint32_t single_tile_size = sizeof(bfloat16) * TILE_WIDTH * TILE_HEIGHT; // 2048 bytes
+
+
+    constexpr uint32_t single_page_size = sizeof(csr_matvec_page);
+    uint32_t dram_buffer_combined_size = single_page_size * tilized_csr.size();
+
+    // send tilized_csr off to a DRAM buffer
+    // ie, EnqueueWriteBuffer with tilized_csr.data() to a configured DRAM buffer
+    // configured how?
+
+    // configure and create DRAM buffers
+    tt_metal::InterleavedBufferConfig dram_input_combined_config {
+        .device = device,
+        .size = dram_buffer_combined_size,
+        .page_size = single_page_size,
+        .buffer_type = tt_metal::BufferType::DRAM
+    };
+
+    tt_metal::InterleavedBufferConfig dram_y_out_config {
+        .device = device,
+        .size = sizeof(bfloat16) * csr.M,
+        .page_size = single_tile_size,
+        .buffer_type = tt_metal::BufferType::DRAM
+    };
+
+    std::shared_ptr<tt::tt_metal::Buffer> src_dram_buffer = CreateBuffer(dram_input_combined_config);
+    std::shared_ptr<tt::tt_metal::Buffer> dst_dram_buffer = CreateBuffer(dram_y_out_config);
+    uint32_t src_addr = src_dram_buffer->address();
+    uint32_t dst_addr = dst_dram_buffer->address();
+
+    // configure and create L1 circular buffers
+    // TODO: lots of questions here about tiles versus pages
+    //       and about aligning tiles and pages
+    uint32_t src_cb_index = CBIndex::c_0;
+    uint32_t num_input_pages = 2; // double buffering input data?
+    CircularBufferConfig cb_src_config =
+        CircularBufferConfig(num_input_pages * single_page_size, {{src_cb_index, cb_data_format}})
+            .set_page_size(src_cb_index, single_page_size);
+    auto cb_src = tt_metal::CreateCircularBuffer(program, core, cb_src_config);
+
+    uint32_t dst_cb_index = CBIndex::c_16;
+    uint32_t num_output_pages = 2;
+    CircularBufferConfig cb_output_config =
+        CircularBufferConfig(num_output_pages * single_page_size, {{dst_cb_index, cb_data_format}})
+            .set_page_size(dst_cb_index, single_page_size);
+    auto cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
+
+
+    /*
+     * Compile time arguments
+     * TODO: figure out if we need these
+     */
+    bool src_is_dram = src_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    bool src1_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    std::vector<uint32_t> reader_compile_time_args = {(uint32_t)src0_is_dram, (uint32_t)src1_is_dram};
+
+    bool dst_is_dram = dst_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    std::vector<uint32_t> writer_compile_time_args = {(uint32_t)dst_is_dram};
+    // create kernels
+    // Ah, this is where tiles vs pages might come in.
+    // do the reader/writer kernels use page size of tile size as their unit of movement?
+    // Answer: Noc_async_read takes as input the number of bytes to transfer. Good!
+    //         However, the cb api operates at the level of tiles... so there will be
+    //          some weirdness to contend with there.
+    /* What do we want to happen?
+        We want the reader kernel to loop, grabbing csr_matvec_page amount of bytes from
+        DRAM and sending it to the CircularBuffer in each iteration.
+
+        We want the writer kernel to loop, waiting on the output CB, popping and writing
+        to the output DRAM buffer.
+
+        We want the compute kernel to wait on the input CB, pop, send the A_vals and X_vals
+        to the FPU for elt-wise mul, then again for reduce (all dims), then push to the output
+        circular buffer.
+
+        Everything else is details (nothing exists but details).
+    */
+
+    auto reader_id = tt_metal::CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/single_core_spmv/kernels/dataflow/reader_spmv_naive.cpp",
+        core,
+        tt_metal::DataMovementConfig{
+            .processor = DataMovementProcessor::RISCV_1,
+            .noc = NOC::RISCV_1_default,
+            .compile_args = reader_compile_time_args});
+
+    auto writer_id = tt_metal::CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/single_core_spmv/kernels/dataflow/writer_spmv_naive.cpp",
+        core,
+        tt_metal::DataMovementConfig{
+            .processor = DataMovementProcessor::RISCV_0,
+            .noc = NOC::RISCV_0_default,
+            .compile_args = writer_compile_time_args});
+
+    std::vector<uint32_t> compute_args = {
+        Mt,  // Mt
+        Kt,  // Kt
+        Nt   // Nt
+    };
+    auto spmv_single_core_kernel_id = tt_metal::CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/single_core_spmv/kernels/compute/spmv_naive.cpp",
+        core,
+        tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = compute_args});
+
+    /*
+     * Kernels - Runtime arguments
+     * TODO: write the kernels
+     */
+    tt_metal::SetRuntimeArgs(
+        program,
+        reader_id,
+        core,
+        {src_addr, Mt, Nt});
+
+    tt_metal::SetRuntimeArgs(program, writer_id, core, {dst_addr, Mt, Nt});
+
+    /* Launch program & read in output buffer result into the host vector */
+    EnqueueWriteBuffer(cq, src_dram_buffer, tilized_csr.data(), false);
+    EnqueueProgram(cq, program, false);
+    EnqueueReadBuffer(cq, dst_dram_buffer, output.data(), true);
+}
+
+
+int main(int argc, char** argv) {
+    bool pass = true;
+
+    if (getenv("TT_METAL_SLOW_DISPATCH_MODE") != nullptr) {
+        TT_THROW("Test not supported w/ slow dispatch, exiting");
+    }
+
+    try {
+        /* Silicon accelerator setup */
+        constexpr int device_id = 0;
+        IDevice* device = CreateDevice(device_id);
+
+        /* Create source data */
+        // TODO: read (or else create) a CSR matrix
+
+        constexpr uint32_t single_tile_size = 2 * 32 * 32; // half-precision * TILE_WIDTH * TILE_HEIGHT
+        /* input vectors with various ranges of values */
+        // TODO: read (or else create) a csr matrix
+        // we should be able to wget something from sparse tamu
+        csr_matrix csr;
+        uint32_t x_vec_DRAM_buffer_size = sizeof(bfloat16) * csr.N;
+        std::vector<bfloat16> x_vec = create_random_vector_of_bfloat16_native(x_vec_DRAM_buffer_size, 1, 12522);
+
+        /* Sequential SpMV running on CPU (Float)*/
+        std::vector<bfloat16> golden_vec(M, 0);
+        sequential_spmv(csr, src1_vec, golden_vec, M, N);
+
+        /* Input vector tilizing */
+            // the dense tilizing is more or less exactly what you did for dense SUMMA in MPI
+            // Nothing about the CSR matrix is ready for tilizing.
+            // You're going to let the FPU treat each 32x32 tile as a vector anyway.
+            // What you need to do is let each row from A.vals fit in its own tile,
+            // let each row of A.cols fit in its own tile,
+            //
+            // In single core dense matmul, efore enqueueing the program, the dram buffers for each matrix are
+            // enqueued and written (EnqueueWriteBuffer).
+            // Everything is in DRAM before any kernel begins execution.
+            //
+            // What's funny about my "CSR" impl is the great lengths it goes through
+            // to transform CSR into something the FPU can make sense of.
+            // I think that's the point, especially when we're limited to
+            // the kernel APIs. Remember this is the naive impl! Let it be
+            // terrible and slow and a memory hog!
+            //
+            // Excellent. How about let's put A and x in DRAM as they are, then let the
+            // core figure out how to multiply things as they are sent to it. Does this
+            // fit into the algorithm I laid out in the Google Doc?
+            // Maybe.
+            // Either the compute kernel or the reader kernel will have to slice
+            // into x and pad tiles with zeros.
+            // Let's do two impls: one where DRAM retains its CSR matrix,
+            // and another where the host retains the CSR matrix while
+            // sending tilized data to DRAM.
+            //
+            // That second one sounds easier! Let's do it.
+            //
+
+
+        /* Host-burdened Naive SpMV
+
+            Host reads CSR matrix A, dense vector x
+            For each row of A
+                fill vals of row into a tile (or multiple if necessary), padding with zeros
+                slice into x, fill vals of x into a tile (padding with zeros)
+                send to device
+
+            for each tile packed
+                receive output tile from device
+                increment into correct value of b
+            Done
+
+            Host doesn't need to store the crazy padded tiles it creates, but it does have to store
+            the tiling info so it can receive and increment into the right values of b.
+            ... wait is there even a streaming mode? Maybe not explicitly, but maybe implicitly
+            if we let the EnqueueWrites be nonblocking and let the reader kernels do fun things
+            with noc_async_read_tile. That seems kinda difficult right now.
+
+            Let's do this alg but write the entire tilized data to the device DRAM.
+
+        */
+
+        /* Naive SpMV
+            For each row of A
+                While not all elts of this row have been processed
+                    Fill a single tile with a tile_size subset of this row of A, padding with zeros if necessary
+                    Slice X by column values for the filled elements, fill those values of X into another tile
+                    Eltwise mul
+                    Reduce Add Dim=1
+                    Increment result across DRAM
+        */
+        std::vector<csr_matvec_page> tilized_csr;
+        csr_to_matvec_page(&csr, &tilized_csr, &x_vec);
+
+        /* Calling the SpMV host program. Read in result into a host vector */
+        uint32_t result_vec_DRAM_buffer_size = sizeof(bfloat16) * csr.M;
+        std::vector<bfloat16> result_vec(result_vec_DRAM_buffer_size / sizeof(bfloat16)) = {0};
+
+        spmv_single_core(tilized_csr, result_vec, M, N, device);
+
+        log_info(tt::LogVerif, "Output vector of size {}", result_vec.size());
+
+        float pearson = check_bfloat16_vector_pcc(golden_vec, result_vec);
+        log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);
+        TT_FATAL(pearson > 0.97, "PCC not high enough. Result PCC: {}, Expected PCC: 0.97", pearson);
+
+        pass &= CloseDevice(device);
+
+    } catch (const std::exception& e) {
+        tt::log_error(tt::LogTest, "Test failed with exception!");
+        tt::log_error(tt::LogTest, "{}", e.what());
+
+        throw;
+    }
+
+    if (pass) {
+        tt::log_info(tt::LogTest, "Test Passed");
+    } else {
+        TT_THROW("Test Failed");
+    }
+
+    TT_ASSERT(pass);
+
+    return 0;
+}

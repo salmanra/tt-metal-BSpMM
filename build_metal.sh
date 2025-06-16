@@ -322,6 +322,10 @@ if [ "$cxx_compiler_path" == "" ]; then
     cmake_args+=("-DCMAKE_TOOLCHAIN_FILE=${toolchain_path}")
 fi
 
+# Rahmy was here
+# export compile commands so we can get intellisense to be on board
+cmake_args+=("-DCMAKE_EXPORT_COMPILE_COMMANDS=ON")
+
 # Create and link the build directory
 mkdir -p $build_dir
 ln -nsf $build_dir build

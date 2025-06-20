@@ -1,0 +1,38 @@
+
+
+### BSR SpMM on Tenstorrent Wormhole Architecture
+
+
+I have the sequential, C++, CPU code for real this time.
+
+here's the psuedo code
+
+A-BSR matrix
+B-Dense matrix
+output-Dense matrix
+
+for each block row i of A
+    for each output tile (r,p) corresponding to that block row
+    	for each block "idx" of row i
+	    j = col index of idx
+	    src0_addr = beginning of block (i, j) of A
+	    src1_addr = beginning of block row j of B
+	    for as many tiles as fit into the C block dimension
+	    	matmul_tiles(src0_addr + r*C + cc, src1_addr + cc*B.W + p)
+	pack DST reg to output CB
+	writer kernel pops output CB and nocs to DRAM
+
+There is FORALL parallelism on the outermost loop.
+There is FORALL parallelism on the second outermost loop, but with a lot of the same input data.
+
+For now, split work to num block rows cores, and then let each core handle its stuff without sharing
+and without thinking too hard about reuse.
+
+
+--- ---
+Their dataflow-optimized example only works on grayskull???
+
+So, we should write our naive version. Then,
+    1) we should think about data reuse, how to outer-productize this on a core by core basis
+    2) we should think more generally about distributed block sparse algorithms, their existing impls,
+       how they work and finally how they might be implemented on tt

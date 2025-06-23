@@ -113,12 +113,5 @@ int main(int argc, char** argv) {
         "Expected = %d\n",
         pack_two_bfloat16_into_uint32(std::pair<bfloat16, bfloat16>(bfloat16(22.0f), bfloat16(22.0f))));
 
-    std::pair<bfloat16, bfloat16> unpacked = unpack_uint32_into_two_bfloat16(result_vec[0]);
-
-    float first_value = static_cast<float>(unpacked.first);
-    float second_value = static_cast<float>(unpacked.second);
-
-    printf("Result = %.1f, %.1f\n", first_value, second_value);  // Should print: 22.0, 22.0
-    
     CloseDevice(device);
 }

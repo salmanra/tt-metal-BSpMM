@@ -1,98 +1,134 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
-//
-// SPDX-License-Identifier: Apache-2.0
-
 #include <stdint.h>
 #include "dataflow_api.h"
 
-#include "debug/dprint.h"
+void kernel_main(){
+    // why are all the constants not compile time args?
 
-void kernel_main() {
-    // same arg indices as in reader_binary_diff_lenghts for compat
-    uint32_t src0_addr = get_arg_val<uint32_t>(0);
-    uint32_t src1_addr = get_arg_val<uint32_t>(1);
-    uint32_t Mt = get_arg_val<uint32_t>(2);
-    uint32_t Kt = get_arg_val<uint32_t>(3);
-    uint32_t Nt = get_arg_val<uint32_t>(4);
-    uint32_t MtKt = get_arg_val<uint32_t>(5);  // if 0
-    uint32_t KtNt = get_arg_val<uint32_t>(6);
-    uint32_t batch = get_arg_val<uint32_t>(7);
-    uint32_t bcast_B = get_arg_val<uint32_t>(8);  // if 1 we broadcast B to batch
-    uint32_t output_tile_start_id = get_arg_val<uint32_t>(9);
-    uint32_t num_output_tiles = get_arg_val<uint32_t>(10);
-    uint32_t MtNt = get_arg_val<uint32_t>(11);
+    // TODO: I guess we have to test this dataflow kernel. 
 
-    constexpr bool src0_is_dram = get_compile_time_arg_val(0) == 1;
-    constexpr bool src1_is_dram = get_compile_time_arg_val(1) == 1;
+    // in0 tensor args
+    uint32_t in0_tensor_addr = get_arg_val<uint32_t>(0);
+    uint32_t in0_tensor_start_tile_id = get_arg_val<uint32_t>(1);
+    uint32_t in0_tensor_stride_w = get_arg_val<uint32_t>(2);
+    uint32_t in0_tensor_stride_h = get_arg_val<uint32_t>(3);
+    // in0_next_block_stride is replaced with in0_block_num_tiles
 
-    // DPRINT << "Mt=" << Mt << " Kt=" << Kt << " Nt=" << Nt << " MtKt=" << MtKt << "KtNt=" << KtNt << ENDL();
-    // DPRINT << "src0=" << src0_addr << " src1=" << src1_addr << ENDL();
-    // DPRINT << "batch=" << batch << ENDL();
+    // in0 block args
+    uint32_t in0_block_w = get_arg_val<uint32_t>(4);
+    uint32_t in0_block_h = get_arg_val<uint32_t>(5);
+    uint32_t in0_block_num_tiles = get_arg_val<uint32_t>(6);
 
-    constexpr uint32_t cb_id_in0 = 0;
-    constexpr uint32_t cb_id_in1 = 1;
+    // in1 tensor args
+    uint32_t in1_tensor_addr = get_arg_val<uint32_t>(7);
+    uint32_t in1_tensor_start_tile_id = get_arg_val<uint32_t>(8);
+    uint32_t in1_tensor_stride_w = get_arg_val<uint32_t>(9);
+    uint32_t in1_tensor_stride_h = get_arg_val<uint32_t>(10);
+    // in1_next_block_stride is replaced with col indices obtained from NoC args    
 
-    constexpr uint32_t onetile = 1;
-    const uint32_t in0_tile_bytes = get_tile_size(cb_id_in0);
+    // in1 block args
+    uint32_t in1_block_w = get_arg_val<uint32_t>(11);
+    uint32_t in1_block_h = get_arg_val<uint32_t>(12);
+    uint32_t in1_block_num_tiles = get_arg_val<uint32_t>(13);
+
+    // in0/in1 common args
+    // num_blocks is determined by the runtime args, range of nonzero blocks in that row
+    uint32_t block_row_start = get_arg_val<uint32_t>(14);
+    uint32_t block_row_end = get_arg_val<uint32_t>(15);
+    uint32_t block_row_index = get_arg_val<uint32_t>(16);  // this is the row index in the sparse matrix
+    
+    uint32_t num_blocks = block_row_end - block_row_start;
+
+    // NoC Args
+    uint32_t NoC_Args_addr = get_arg_val<uint32_t>(17);
+
+    constexpr bool in0_is_dram = get_compile_time_arg_val(0) == 1;
+    constexpr bool in1_is_dram = get_compile_time_arg_val(1) == 1;
+    constexpr bool NoC_Args_is_dram = get_compile_time_arg_val(2) == 1;
+
+    const uint32_t cb_id_in0 = 0;
+    const uint32_t cb_id_in1 = 1;
+    const uint32_t cb_id_NoC_Args = 2;
+
+
+    // input data format will probably by bfloat16
+    const uint32_t in0_single_tile_size_bytes = get_tile_size(cb_id_in0);
     const DataFormat in0_data_format = get_dataformat(cb_id_in0);
-    const uint32_t in1_tile_bytes = get_tile_size(cb_id_in1);
+    const uint32_t in1_single_tile_size_bytes = get_tile_size(cb_id_in1);
     const DataFormat in1_data_format = get_dataformat(cb_id_in1);
+    // NoC Args dataformat will probably be uint32_t
+    const uint32_t NoC_Args_single_tile_size_bytes = get_tile_size(cb_id_NoC_Args);
+    const DataFormat NoC_Args_data_format = get_dataformat(cb_id_NoC_Args);
 
-    uint32_t itileA = output_tile_start_id / Nt * Kt;  // input0 row = output row * input0 width
 
-    // Keep track of end of output row and end of output batch
-    uint32_t outbatch = output_tile_start_id % MtNt;
-    uint32_t itileB_batch = output_tile_start_id % Nt;
-    uint32_t itileB = itileB_batch;  // input1 col = output col if we are bcasting
-    if (bcast_B == 0) {
-        itileB += output_tile_start_id / MtNt * KtNt;  // offset into correct batch if not bcasting
+    // The keys to the kingdom
+    uint32_t l1_write_addr_in0;
+    uint32_t l1_write_addr_in1;
+    uint32_t l1_write_addr_NoC_Args;
+
+    const InterleavedAddrGenFast<in0_is_dram> s0 = {
+        .bank_base_address = in0_tensor_addr, .page_size = in0_single_tile_size_bytes, .data_format = in0_data_format};
+    const InterleavedAddrGenFast<in1_is_dram> s1 = {
+        .bank_base_address = in1_tensor_addr, .page_size = in1_single_tile_size_bytes, .data_format = in1_data_format};
+    const InterleavedAddrGenFast<NoC_Args_is_dram> s2 = {
+        .bank_base_address = NoC_Args_addr, 
+        .page_size = NoC_Args_single_tile_size_bytes, 
+        .data_format = NoC_Args_data_format};
+
+    // NoC Args are read first, so that we can use them to read the in0 and in1 blocks.
+    // The reader kernel is both the producer and consumer of the NoC Args!
+    cb_reserve_back(cb_id_NoC_Args, 1); // assume col indices fit into one tile for now
+    l1_write_addr_NoC_Args = get_write_ptr(cb_id_NoC_Args);
+    noc_async_read_tile(0, s2, l1_write_addr_NoC_Args);
+    noc_async_read_barrier();
+    cb_push_back(cb_id_NoC_Args, 1);
+    
+    uint32_t* column_indices = (uint32_t*)l1_write_addr_NoC_Args;
+
+    // Now, iterate over the blocks in the row
+    // We could either:
+    //    1. NoC the entire col indices array to each core, and then read the blocks indexing with the indptr values
+    //    2. NoC just the col indices for each core's block row, and then read zero indexed 
+    for (uint32_t block = 0; block < num_blocks; block++) {
+        cb_reserve_back(cb_id_in0, in0_block_num_tiles);
+        cb_reserve_back(cb_id_in1, in1_block_num_tiles);
+
+        l1_write_addr_in0 = get_write_ptr(cb_id_in0);
+        l1_write_addr_in1 = get_write_ptr(cb_id_in1);
+
+        // Read in0 block
+        // block_row_start tells us which nonzero BLOCK we're in...
+        // we need to get the tile at which that block starts.
+        // Actually, that's where in0_tensor_start_tile_id comes in!
+        uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + block * in0_block_num_tiles;;
+        for (uint32_t h = 0; h < in0_block_h; h++) {
+            uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id;
+            for (uint32_t w = 0; w < in0_block_w; w++) {
+                noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
+                l1_write_addr_in0 += in0_single_tile_size_bytes;
+                in0_tensor_tile_id += in0_tensor_stride_w;
+            }
+            in0_tensor_row_start_tile_id += in0_tensor_stride_h;
+        }
+
+        // Read in1 block
+        uint32_t col_index = column_indices[block];
+        uint32_t in1_tensor_row_start_tile_id = in1_tensor_start_tile_id + col_index * in1_tensor_stride_h;
+        for (uint32_t h = 0; h < in1_block_h; h++) {
+            uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
+            for (uint32_t w = 0; w < in1_block_w; w++) {
+                noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
+                l1_write_addr_in1 += in1_single_tile_size_bytes;
+                in1_tensor_tile_id += in1_tensor_stride_w;
+            }
+            in1_tensor_row_start_tile_id += in1_tensor_stride_h;
+        }
+
+        noc_async_read_barrier();
+
+        cb_push_back(cb_id_in0, in0_block_num_tiles);
+        cb_push_back(cb_id_in1, in1_block_num_tiles);
     }
 
-    const InterleavedAddrGenFast<src0_is_dram> s0 = {
-        .bank_base_address = src0_addr, .page_size = in0_tile_bytes, .data_format = in0_data_format};
 
-    const InterleavedAddrGenFast<src1_is_dram> s1 = {
-        .bank_base_address = src1_addr, .page_size = in1_tile_bytes, .data_format = in1_data_format};
 
-    for (uint32_t n = 0; n < num_output_tiles; n++) {
-        // this loop will take on a sparse grin...
-        for (uint32_t kt = 0; kt < Kt; kt++) {
-            {  // Read A's tile at (mt, kt)
-                cb_reserve_back(cb_id_in0, onetile);
-                uint32_t l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-                noc_async_read_tile(itileA, s0, l1_write_addr_in0);
-                noc_async_read_barrier();
-                cb_push_back(cb_id_in0, onetile);
-            }
-
-            {  // Read B's tile at (kt, nt)
-                cb_reserve_back(cb_id_in1, onetile);
-                uint32_t l1_write_addr_in1 = get_write_ptr(cb_id_in1);
-                noc_async_read_tile(itileB, s1, l1_write_addr_in1);
-                noc_async_read_barrier();
-                cb_push_back(cb_id_in1, onetile);
-            }
-            // DPRINT << "Pushed itileA=" << itileA << " itileB=" << itileB << ENDL();
-
-            itileA += 1;   // A is MK
-            itileB += Nt;  // B is KN, so to get k++ we stride by Nt
-        }  // Kt loop
-        outbatch += 1;
-        itileB_batch += 1;
-        itileB -= KtNt;  // revert B to previous state before the K loop (to avoid multiplies)
-        itileB += 1;     // Move to next B col
-
-        if (itileB_batch == Nt) {
-            itileB_batch = 0;
-            itileB -= Nt;  // Go back to first column in batch
-            if (outbatch == MtNt) {
-                if (bcast_B == 0) {
-                    itileB += KtNt;  // Move B to start of next batch
-                }
-                outbatch = 0;
-            }
-        } else {
-            itileA -= Kt;  // resets tileA to kt=0, keep the same mt
-        }
-    }  // batch loop
 }

@@ -28,6 +28,11 @@ There is FORALL parallelism on the second outermost loop, but with a lot of the 
 For now, split work to num block rows cores, and then let each core handle its stuff without sharing
 and without thinking too hard about reuse.
 
+June 23
+- reader kernel. Have to determine the correct tile IDs for the NoCing. 
+	We need to make explicit the relationship between tile size and block size 
+	so we can correctly index into the data tensors.
+
 
 --- ---
 Their dataflow-optimized example only works on grayskull???

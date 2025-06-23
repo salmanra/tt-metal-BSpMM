@@ -9,14 +9,15 @@
 #include <cassert>
 #include <random>
 #include <cmath>
-#include <omp.h>
+#include <chrono>
+// #include <omp.h>
 
 #define RAND true
 #define NO_RAND false
 #define TILE_SIZE 32
 
 // TODO: if we wanted, we could put this in a namespace,
-//        then we could define gemm() and spmm() to be 
+//        then we could define gemm() and spmm() to be
 //        non-member functions in the namespace.
 
 template <typename T>
@@ -32,8 +33,9 @@ public:
         data.resize(rows * cols);
         if (random)
             std::generate(data.begin(), data.end(), []() { return static_cast<T>(rand()) / static_cast<T>(RAND_MAX); });
-        else 
+        else {
             std::fill(data.begin(), data.end(), 0);
+        }
     }
 
     dense_matrix(int rows, int cols) : H(rows), W(cols) {
@@ -48,7 +50,7 @@ public:
 
     // Constructor from a flat vector with no size check
     dense_matrix(const dense_matrix<T> &other) : data(other.data), H(other.H), W(other.W) {}
-    
+
     // Assignment operator
     dense_matrix<T>& operator=(const dense_matrix<T> &other) {
         if (this != &other) {
@@ -142,12 +144,23 @@ public: // everything is public for now
 public:
     bsr_matrix() : H(0), W(0), nblocks(0), R(0), C(0) {}
 
-    bsr_matrix(std::vector<T> data, 
-               std::vector<int> indptr,
-               std::vector<int> indices,
-               size_t rows, size_t cols, size_t block_rows, size_t block_cols, size_t num_blocks) 
-        : data(std::move(data)), indptr(std::move(indptr)), indices(std::move(indices)), 
-          H(rows), W(cols), R(block_rows), C(block_cols), nblocks(num_blocks) {
+    bsr_matrix(
+        std::vector<T> data,
+        std::vector<int> indptr,
+        std::vector<int> indices,
+        size_t rows,
+        size_t cols,
+        size_t block_rows,
+        size_t block_cols,
+        size_t num_blocks) :
+        data(std::move(data)),
+        indptr(std::move(indptr)),
+        indices(std::move(indices)),
+        H(rows),
+        W(cols),
+        R(block_rows),
+        C(block_cols),
+        nblocks(num_blocks) {
         assert(H * W >= nblocks * R * C);
         assert(R > 0);
         assert(C > 0);
@@ -156,7 +169,7 @@ public:
         assert(H >= R);
         assert(W >= C);
     }
-    
+
     bsr_matrix(int rows, int cols, size_t block_rows, size_t block_cols, size_t num_blocks, bool random = false) {
         H = rows;
         W = cols;
@@ -171,7 +184,6 @@ public:
         assert(W % C == 0);
         assert(H >= R);
         assert(W >= C);
-        
 
         size_t blocked_matrix_height = H / R;
         size_t blocked_matrix_width = W / C;
@@ -184,7 +196,9 @@ public:
         std::vector<int> block_indices(blocked_matrix_height * blocked_matrix_width);
         std::fill(block_indices.begin(), block_indices.begin() + nblocks, 1);
         std::fill(block_indices.begin() + nblocks, block_indices.end(), 0);
-        std::random_shuffle(block_indices.begin(), block_indices.end());
+
+        unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+        shuffle(block_indices.begin(), block_indices.end(), std::default_random_engine(seed));
 
         for (size_t i = 0; i < block_indices.size(); i++) {
             if (block_indices[i] == 1) {
@@ -217,47 +231,48 @@ public:
     }
 
         dense_matrix<bfloat16> spmm_bfloat16(dense_matrix<bfloat16> &B) {
-        assert(W == B.H); 
-        dense_matrix<bfloat16> output(H, B.W);
-        
-        // FORALL parallelism on the block rows
-        for (size_t i = 0; i < indptr.size() - 1; i++) { // runtime args
-            for (size_t r = 0; r < R; r += TILE_SIZE) { // comptime args
-                for (size_t p = 0; p < B.W; p += TILE_SIZE) { // comptime args
-                    std::vector<float> output_tile(TILE_SIZE * TILE_SIZE, 0); // DST register
-                    for (size_t idx = indptr[i]; idx < indptr[i + 1]; idx++) { // reading raw data from a CB
-                        size_t j = indices[idx];                               // reading raw data from a CB
-                        auto iter_start = data.begin() + idx * R * C;     // src0_addr, determined from args
-                        auto iter_B_start = B.data.begin() + j * C * B.W; // src1_addr, determined from args
-                        for (size_t c = 0; c < C; c += TILE_SIZE) { // comptime args
-                            // begin matmul_tiles API call
-                            for (size_t rr = r; rr < std::min(r + TILE_SIZE, R); rr++) {
-                                for (size_t pp = p; pp < std::min(p + TILE_SIZE, B.W); pp++) {
-                                    float sum = 0;
-                                    for (size_t cc = c; cc < std::min(C, c + TILE_SIZE); cc++) {
-                                        bfloat16 a_val = *(iter_start + rr * C + cc);
-                                        bfloat16 b_val = *(iter_B_start + cc * B.W + pp);
-                                        sum += a_val.to_float() * b_val.to_float();
+            assert(W == B.H);
+            dense_matrix<bfloat16> output(H, B.W);
+
+            // FORALL parallelism on the block rows
+            for (size_t i = 0; i < indptr.size() - 1; i++) {                        // runtime args
+                for (size_t r = 0; r < R; r += TILE_SIZE) {                         // comptime args
+                    for (size_t p = 0; p < B.W; p += TILE_SIZE) {                   // comptime args
+                        std::vector<float> output_tile(TILE_SIZE * TILE_SIZE, 0);   // DST register
+                        for (size_t idx = indptr[i]; idx < indptr[i + 1]; idx++) {  // reading raw data from a CB
+                            size_t j = indices[idx];                                // reading raw data from a CB
+                            auto iter_start = data.begin() + idx * R * C;           // src0_addr, determined from args
+                            auto iter_B_start = B.data.begin() + j * C * B.W;       // src1_addr, determined from args
+                            for (size_t c = 0; c < C; c += TILE_SIZE) {             // comptime args
+                                // begin matmul_tiles API call
+                                for (size_t rr = r; rr < std::min(r + TILE_SIZE, R); rr++) {
+                                    for (size_t pp = p; pp < std::min(p + TILE_SIZE, B.W); pp++) {
+                                        float sum = 0;
+                                        for (size_t cc = c; cc < std::min(C, c + TILE_SIZE); cc++) {
+                                            bfloat16 a_val = *(iter_start + rr * C + cc);
+                                            bfloat16 b_val = *(iter_B_start + cc * B.W + pp);
+                                            sum += a_val.to_float() * b_val.to_float();
+                                        }
+                                        output_tile[(rr - r) * TILE_SIZE + pp - p] += sum;
                                     }
-                                    output_tile[(rr - r) * TILE_SIZE + pp - p] += sum;
                                 }
+                                // end matmul_tiles API call
                             }
-                            // end matmul_tiles API call
                         }
-                    }
-                    // write tile to DRAM starting at tile i*R + r, p (output is dense, no more blocks)
-                    // On TT:
-                    // 1. pack DST reg to output CB
-                    // 2. writer kernel pops from output CB
-                    // 3. writer kernel NoC's to DRAM
-                    for (size_t rr = r; rr < std::min(R, r + TILE_SIZE); rr++) {
-                        for (size_t pp = p; pp < std::min(B.W, p + TILE_SIZE); pp++) {
-                            *(output.data.begin() + (i * R + rr) * output.W + pp) = bfloat16(output_tile[(rr - r) * TILE_SIZE + pp - p]);
+                        // write tile to DRAM starting at tile i*R + r, p (output is dense, no more blocks)
+                        // On TT:
+                        // 1. pack DST reg to output CB
+                        // 2. writer kernel pops from output CB
+                        // 3. writer kernel NoC's to DRAM
+                        for (size_t rr = r; rr < std::min(R, r + TILE_SIZE); rr++) {
+                            for (size_t pp = p; pp < std::min(B.W, p + TILE_SIZE); pp++) {
+                                *(output.data.begin() + (i * R + rr) * output.W + pp) =
+                                    bfloat16(output_tile[(rr - r) * TILE_SIZE + pp - p]);
+                            }
                         }
                     }
                 }
             }
-        }
         return output;
     }
 
@@ -267,7 +282,7 @@ public:
         for (size_t i = 0; i < indptr.size() - 1; i++) {
             for (size_t idx = indptr[i]; idx < indptr[i + 1]; idx++) {
                 size_t j = indices[idx];
-                auto iter_start = data.begin() + idx * R * C;    
+                auto iter_start = data.begin() + idx * R * C;
                 auto iter_B_start = B.data.begin() + j * C * B.W;
                 for (size_t r = 0; r < R; r++) {
                     for (size_t p = 0; p < B.W; p++) {
@@ -278,7 +293,7 @@ public:
                             sum += a_val * b_val;
                         }
                         *(output.data.begin() + (i * R + r) * output.W + p) += sum;
-                    }   
+                    }
                 }
             }
         }
@@ -292,7 +307,7 @@ public:
         for (size_t i = 0; i < indptr.size() - 1; i++) {
             for (size_t idx = indptr[i]; idx < indptr[i + 1]; idx++) {
                 size_t j = indices[idx];
-                auto iter_start = data.begin() + idx * R * C;    
+                auto iter_start = data.begin() + idx * R * C;
                 auto iter_B_start = B.data.begin() + j * C * B.W;
                 for (size_t r = 0; r < R; r++) {
                     for (size_t p = 0; p < B.W; p++) {
@@ -304,17 +319,15 @@ public:
                             sum += a_val * b_val;
                         }
                         *(output.data.begin() + (i * R + r) * output.W + p) += sum;
-                    }   
+                    }
                 }
             }
         }
         return output;
     }
-    
 
-    
     dense_matrix<T> tiled_spmm_CPU(dense_matrix<T> &B) {
-        assert(W == B.H); 
+        assert(W == B.H);
         dense_matrix<T> output(H, B.W);
         // FORALL parallelism on the block rows
         for (size_t i = 0; i < indptr.size() - 1; i++) { // host
@@ -326,11 +339,11 @@ public:
                 // R --> M, Mt <-- R / TILE_SIZE
                 // C --> K, Kt <-- C / TILE_SIZE
                 // QUIRK: Kt = Ct, BUT KtNt = KtNt. Kt is used to index into A (of shape RxC)
-                //     while KtNt is used to index into B (of shape CxN, or KxN) 
+                //     while KtNt is used to index into B (of shape CxN, or KxN)
                 // B.W --> N, Nt <-- B.W / TILE_SIZE
                 auto iter_start = data.begin() + idx * R * C;     // src0_addr
                 auto iter_B_start = B.data.begin() + j * C * B.W; // src1_addr
-                for (size_t r = 0; r < R; r += TILE_SIZE) { 
+                for (size_t r = 0; r < R; r += TILE_SIZE) {
                     for (size_t p = 0; p < B.W; p += TILE_SIZE) {
                         for (size_t rr = r; rr < std::min(R, r + TILE_SIZE); rr++) {
                             for (size_t pp = p; pp < std::min(B.W, p + TILE_SIZE); pp++) {
@@ -362,15 +375,15 @@ public:
         Some Tenstorrent terminology:
         - tile: a contiguous block of 2048 bytes, usually 32x32 elements of a bfloat16 matrix.
                 The APIs into the FPU and SFPU operate on tiles. The NoC architecture is optmized
-                to send pages of sizes between 1-4MB, so the tile size is strategically set 
-                to benefit from both the compute engines and the dataflow architecture. 
-        - comptime args: the JIT compile time args to compute and dataflow kernels. 
-                         These can be set at the host's compile time or the host's runtime. 
-        
+                to send pages of sizes between 1-4MB, so the tile size is strategically set
+                to benefit from both the compute engines and the dataflow architecture.
+        - comptime args: the JIT compile time args to compute and dataflow kernels.
+                         These can be set at the host's compile time or the host's runtime.
+
         */
-        assert(W == B.H); 
+        assert(W == B.H);
         dense_matrix<T> output(H, B.W);
-        
+
         // FORALL parallelism on the block rows
         for (size_t i = 0; i < indptr.size() - 1; i++) { // runtime args
             for (size_t r = 0; r < R; r += TILE_SIZE) { // comptime args
@@ -453,4 +466,4 @@ public:
 
 };
 
-#endif // MATRIX_HPP
+#endif  // MATRIX_HPP

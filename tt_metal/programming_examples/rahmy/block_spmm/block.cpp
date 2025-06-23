@@ -9,10 +9,11 @@
 #include <tt-metalium/device.hpp>
 #include <tt-metalium/command_queue.hpp>
 #include <tt-metalium/tt_metal.hpp>
-#include <matmul_common/bmm_op.hpp>
+// #include <matmul_common/bmm_op.hpp>
 #include <tt-metalium/tilize_untilize.hpp>
 
 #include "bsr_matrix.hpp"
+#include "bmm_op.hpp"
 
 using namespace tt::constants;
 using namespace std;
@@ -20,7 +21,7 @@ using namespace tt;
 using namespace tt::tt_metal;
 
 void golden_bsr_spmm(bsr_matrix<bfloat16>& bsr, dense_matrix<bfloat16>& B, dense_matrix<bfloat16>& output) {
-    output = bsr.spmm(B);
+    output = bsr.spmm_bfloat16(B);
 }
 
 void bsr_spmm_multicore_reuse() {
@@ -47,9 +48,9 @@ int main(int argc, char** argv) {
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
-        
+
         dense_matrix<bfloat16> expected = bsr_bfloat16.to_dense().gemm_bfloat16(dense_bfloat16);
-        dense_matrix<bfloat16> result = bsr_bfloat16.tiled_spmm(dense_bfloat16);
+        dense_matrix<bfloat16> result = bsr_bfloat16.spmm_bfloat16(dense_bfloat16);
 
         float pearson = check_bfloat16_vector_pcc(expected.data, result.data);
         log_info(tt::LogVerif, "BSR vs Golden -- PCC = {}", pearson);

@@ -41,11 +41,19 @@ int main(int argc, char** argv) {
 
         // matmul params setup
 
-        // TODO: Commence basic testing
-        bsr_matrix<bfloat16> bsr(2048, 2048, 128, 128, 3, RAND);
-        dense_matrix<bfloat16> dense(2048, 16, RAND);
-        dense_matrix<bfloat16> expected = bsr.to_dense().gemm(dense);
-        dense_matrix<bfloat16> result = bsr.tiled_spmm(dense);
+        // TODO: Commence basic testing on bfloat16's
+        bsr_matrix<float> bsr(2048, 2048, 128, 128, 3, RAND);
+        dense_matrix<float> dense(2048, 16, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        
+        dense_matrix<bfloat16> expected = bsr_bfloat16.to_dense().gemm_bfloat16(dense_bfloat16);
+        dense_matrix<bfloat16> result = bsr_bfloat16.tiled_spmm(dense_bfloat16);
+
+        float pearson = check_bfloat16_vector_pcc(expected.data, result.data);
+        log_info(tt::LogVerif, "BSR vs Golden -- PCC = {}", pearson);
+        TT_FATAL(pearson > 0.99, "PCC not high enough. Result PCC: {}, Expected PCC: 0.99", pearson);
 
         // create (or read) source data
 

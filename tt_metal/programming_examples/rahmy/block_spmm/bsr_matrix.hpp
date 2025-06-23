@@ -41,6 +41,38 @@ public:
         std::fill(data.begin(), data.end(), 0);
     }
 
+    // Constructor from a flat vector
+    dense_matrix(const std::vector<T> &data, int rows, int cols) : data(data), H(rows), W(cols) {
+        assert(data.size() == rows * cols);
+    }
+
+    // Constructor from a flat vector with no size check
+    dense_matrix(const dense_matrix<T> &other) : data(other.data), H(other.H), W(other.W) {}
+    
+    // Assignment operator
+    dense_matrix<T>& operator=(const dense_matrix<T> &other) {
+        if (this != &other) {
+            data = other.data;
+            H = other.H;
+            W = other.W;
+        }
+        return *this;
+    }
+
+    // Move constructor
+    dense_matrix(dense_matrix<T> &&other) noexcept : data(std::move(other.data)), H(other.H), W(other.W) {
+        other.H = 0;
+        other.W = 0;
+    }
+
+    // Move to bfloat16
+    dense_matrix<bfloat16> bfloat16_cast() {
+        std::vector<bfloat16> bfloat16_data(data.size());
+        for (size_t i = 0; i < data.size(); i++) {
+            bfloat16_data[i] = bfloat16(data[i]);
+        }
+        return dense_matrix<bfloat16>(bfloat16_data, H, W);
+    }
 
     void print() {
         std::cout << "Dense Matrix:" << std::endl;
@@ -67,6 +99,20 @@ public:
         return result;
     }
 
+    dense_matrix<bfloat16> gemm_bfloat16(const dense_matrix<bfloat16> &other) {
+        assert(W == other.H);
+        dense_matrix<bfloat16> result(H, other.W);
+        for (size_t i = 0; i < H; ++i) {
+            for (size_t j = 0; j < other.W; ++j) {
+                float sum = 0;
+                for (size_t k = 0; k < W; ++k) {
+                    sum += data[i * W + k].to_float() * other.data[k * other.W + j].to_float();
+                }
+                result.data[i * other.W + j] = bfloat16(sum);
+            }
+        }
+        return result;
+    }
     bool all_close(const dense_matrix<T> &other, T tol = 1e-3) {
         assert(H == other.H && W == other.W);
         for (size_t i = 0; i < H; ++i) {
@@ -95,6 +141,21 @@ public: // everything is public for now
 
 public:
     bsr_matrix() : H(0), W(0), nblocks(0), R(0), C(0) {}
+
+    bsr_matrix(std::vector<T> data, 
+               std::vector<int> indptr,
+               std::vector<int> indices,
+               size_t rows, size_t cols, size_t block_rows, size_t block_cols, size_t num_blocks) 
+        : data(std::move(data)), indptr(std::move(indptr)), indices(std::move(indices)), 
+          H(rows), W(cols), R(block_rows), C(block_cols), nblocks(num_blocks) {
+        assert(H * W >= nblocks * R * C);
+        assert(R > 0);
+        assert(C > 0);
+        assert(H % R == 0);
+        assert(W % C == 0);
+        assert(H >= R);
+        assert(W >= C);
+    }
     
     bsr_matrix(int rows, int cols, size_t block_rows, size_t block_cols, size_t num_blocks, bool random = false) {
         H = rows;
@@ -146,7 +207,60 @@ public:
         indptr.resize(blocked_matrix_height + 1);
     }
 
-    // TODO: find out if this arithmetic works for bfloat16
+    // Moves inptr, indices, and data to the new bsr_matrix
+    bsr_matrix<bfloat16> bfloat16_cast() {
+        std::vector<bfloat16> bfloat16_data(data.size());
+        for (size_t i = 0; i < data.size(); i++) {
+            bfloat16_data[i] = bfloat16(data[i]);
+        }
+        return bsr_matrix<bfloat16>(bfloat16_data, indptr, indices, H, W, R, C, nblocks);
+    }
+
+        dense_matrix<bfloat16> spmm_bfloat16(dense_matrix<bfloat16> &B) {
+        assert(W == B.H); 
+        dense_matrix<bfloat16> output(H, B.W);
+        
+        // FORALL parallelism on the block rows
+        for (size_t i = 0; i < indptr.size() - 1; i++) { // runtime args
+            for (size_t r = 0; r < R; r += TILE_SIZE) { // comptime args
+                for (size_t p = 0; p < B.W; p += TILE_SIZE) { // comptime args
+                    std::vector<float> output_tile(TILE_SIZE * TILE_SIZE, 0); // DST register
+                    for (size_t idx = indptr[i]; idx < indptr[i + 1]; idx++) { // reading raw data from a CB
+                        size_t j = indices[idx];                               // reading raw data from a CB
+                        auto iter_start = data.begin() + idx * R * C;     // src0_addr, determined from args
+                        auto iter_B_start = B.data.begin() + j * C * B.W; // src1_addr, determined from args
+                        for (size_t c = 0; c < C; c += TILE_SIZE) { // comptime args
+                            // begin matmul_tiles API call
+                            for (size_t rr = r; rr < std::min(r + TILE_SIZE, R); rr++) {
+                                for (size_t pp = p; pp < std::min(p + TILE_SIZE, B.W); pp++) {
+                                    float sum = 0;
+                                    for (size_t cc = c; cc < std::min(C, c + TILE_SIZE); cc++) {
+                                        bfloat16 a_val = *(iter_start + rr * C + cc);
+                                        bfloat16 b_val = *(iter_B_start + cc * B.W + pp);
+                                        sum += a_val.to_float() * b_val.to_float();
+                                    }
+                                    output_tile[(rr - r) * TILE_SIZE + pp - p] += sum;
+                                }
+                            }
+                            // end matmul_tiles API call
+                        }
+                    }
+                    // write tile to DRAM starting at tile i*R + r, p (output is dense, no more blocks)
+                    // On TT:
+                    // 1. pack DST reg to output CB
+                    // 2. writer kernel pops from output CB
+                    // 3. writer kernel NoC's to DRAM
+                    for (size_t rr = r; rr < std::min(R, r + TILE_SIZE); rr++) {
+                        for (size_t pp = p; pp < std::min(B.W, p + TILE_SIZE); pp++) {
+                            *(output.data.begin() + (i * R + rr) * output.W + pp) = bfloat16(output_tile[(rr - r) * TILE_SIZE + pp - p]);
+                        }
+                    }
+                }
+            }
+        }
+        return output;
+    }
+
     dense_matrix<T> spmm(dense_matrix<T> &B) {
         assert(W == B.H);
         dense_matrix<T> output(H, B.W);

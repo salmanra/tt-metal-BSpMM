@@ -92,7 +92,7 @@ void matmul_multicore_reuse(
     // NOTE: Only supports matmuls where output is blocks of 16 x 16 tiles (ie. multiples of 16*32 x 16*32)
     // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])2
     uint32_t in0_block_w = 2;
-    `
+
         // uint32_t out_subblock_h = 4;
         // uint32_t out_subblock_w = 2;
         // uint32_t per_core_M = 16;

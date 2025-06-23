@@ -1,13 +1,13 @@
 ### A look at *matmul_multicore_reuse*
 
-First, see how we hard code the inner dimension block width in tiles. Instead of letting the block sizes of the input matrices to equal the number of tiles assigned to a single core for each matrix, we cut the block width to 2, allowing ```bmm_op_utils.hpp``` to fit the optimal subblock size according the one of 20 preset sizes (which are hardware-optmized). This means that the input matrices are subdivided four times. In units of tiles, we compute across cores (per_core_M, per_core_N), across blocks within a core (per_core_M, 2) and (2, per_core_N), across subblocks within a block (out_subblock_h, out_subblock_w), and across tiles within a subblock (1, 1). In the unoptimized matmul example, input matrices were subdivided only twice: once across cores, and once across tiles within a core.
+First, see how we hard code the inner dimension block width in tiles. Instead of letting the block sizes of the input matrices to equal the number of tiles assigned to a single core for each matrix, we cut the block width to 2, allowing ```bmm_op_utils.hpp``` to fit the optimal subblock size according the one of 20 preset sizes (which are hardware-optmized). This means that the input matrices are subdivided four times. In units of tiles, we compute across cores (per_core_M, Kt) and (Kt, per_core_N), across blocks within a core (per_core_M, 2) and (2, per_core_N), across subblocks within a block (out_subblock_h, 2) and (2, out_subblock_w), and across tiles within a subblock (1, 1). In the unoptimized matmul example, input matrices were subdivided only twice: once across cores, and once across tiles within a core.
 ```C++
    // NOTE: Only supports matmuls where output is blocks of 16 x 16 tiles (ie. multiples of 16*32 x 16*32)
    // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])2
    uint32_t in0_block_w = 2;
 ```
 
-Let's look at the compile-time arguments to the compute kernel. Remember that compile-time arguments can be thought of as common across cores, and that most TT-Metal programs are designed for the compute kernel to be core-agnostic, letting the dataflow kernels to handle the indexing logic unique to each core (This core-agnostic property will NOT hold for sparse operations).
+Let's look at the compile-time arguments to the compute kernel. Compile-time arguments can be thought of as common across cores, and  most TT-Metal programs are designed for the compute kernel to be core-agnostic, letting the dataflow kernels to handle the indexing logic unique to each core (This core-agnostic property will NOT hold for sparse operations).
 
 ```C++
     uint32_t in0_block_w = get_compile_time_arg_val(0);              // inner block size in tiles

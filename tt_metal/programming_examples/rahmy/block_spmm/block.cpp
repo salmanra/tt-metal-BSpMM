@@ -12,14 +12,15 @@
 #include <matmul_common/bmm_op.hpp>
 #include <tt-metalium/tilize_untilize.hpp>
 
+#include "bsr_matrix.hpp"
+
 using namespace tt::constants;
 using namespace std;
 using namespace tt;
 using namespace tt::tt_metal;
 
-void golden_bsr_spmm() {
-
-
+void golden_bsr_spmm(bsr_matrix<bfloat16>& bsr, dense_matrix<bfloat16>& B, dense_matrix<bfloat16>& output) {
+    output = bsr.spmm(B);
 }
 
 void bsr_spmm_multicore_reuse() {
@@ -37,8 +38,14 @@ int main(int argc, char** argv) {
         constexpr int device_id = 0;
         IDevice* device = CreateDevice(device_id);
 
+
         // matmul params setup
 
+        // TODO: Commence basic testing
+        bsr_matrix<bfloat16> bsr(2048, 2048, 128, 128, 3, RAND);
+        dense_matrix<bfloat16> dense(2048, 16, RAND);
+        dense_matrix<bfloat16> expected = bsr.to_dense().gemm(dense);
+        dense_matrix<bfloat16> result = bsr.tiled_spmm(dense);
 
         // create (or read) source data
 

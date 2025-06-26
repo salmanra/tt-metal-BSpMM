@@ -1,6 +1,5 @@
-// filepath: /bcsr_spmv/include/matrix.hpp
-#ifndef MATRIX_HPP
-#define MATRIX_HPP
+#ifndef BSR_MATRIX_HPP
+#define BSR_MATRIX_HPP
 
 #include <iostream>
 #include <vector>
@@ -466,4 +465,4 @@ public:
 
 };
 
-#endif  // MATRIX_HPP
+#endif  // BSR_MATRIX_HPP

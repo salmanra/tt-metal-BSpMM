@@ -93,13 +93,13 @@ void matmul_multicore_reuse(
     // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])2
     uint32_t in0_block_w = 2;
 
-        // uint32_t out_subblock_h = 4;
-        // uint32_t out_subblock_w = 2;
-        // uint32_t per_core_M = 16;
-        // uint32_t per_core_N = 16;
+    // uint32_t out_subblock_h = 4;
+    // uint32_t out_subblock_w = 2;
+    // uint32_t per_core_M = 16;
+    // uint32_t per_core_N = 16;
 
-        // Get large matmul params
-        auto matmul_params = bmm_op_utils::get_large_matmul_params(Mt, Nt, num_cores_y, num_cores_x, in0_block_w);
+    // Get large matmul params
+    auto matmul_params = bmm_op_utils::get_large_matmul_params(Mt, Nt, num_cores_y, num_cores_x, in0_block_w);
     uint32_t per_core_M = std::get<0>(matmul_params);
     uint32_t per_core_N = std::get<1>(matmul_params);
     uint32_t out_subblock_h = std::get<2>(matmul_params);

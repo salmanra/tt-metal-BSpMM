@@ -4,7 +4,7 @@
 void kernel_main(){
     // why are all the constants not compile time args?
 
-    // TODO: I guess we have to test this dataflow kernel. 
+    // TODO: test this dataflow kernel.
 
     // in0 tensor args
     uint32_t in0_tensor_addr = get_arg_val<uint32_t>(0);
@@ -23,7 +23,7 @@ void kernel_main(){
     uint32_t in1_tensor_start_tile_id = get_arg_val<uint32_t>(8);
     uint32_t in1_tensor_stride_w = get_arg_val<uint32_t>(9);
     uint32_t in1_tensor_stride_h = get_arg_val<uint32_t>(10);
-    // in1_next_block_stride is replaced with col indices obtained from NoC args    
+    // in1_next_block_stride is replaced with col indices obtained from NoC args
 
     // in1 block args
     uint32_t in1_block_w = get_arg_val<uint32_t>(11);
@@ -35,7 +35,7 @@ void kernel_main(){
     uint32_t block_row_start = get_arg_val<uint32_t>(14);
     uint32_t block_row_end = get_arg_val<uint32_t>(15);
     uint32_t block_row_index = get_arg_val<uint32_t>(16);  // this is the row index in the sparse matrix
-    
+
     uint32_t num_blocks = block_row_end - block_row_start;
 
     // NoC Args
@@ -70,8 +70,8 @@ void kernel_main(){
     const InterleavedAddrGenFast<in1_is_dram> s1 = {
         .bank_base_address = in1_tensor_addr, .page_size = in1_single_tile_size_bytes, .data_format = in1_data_format};
     const InterleavedAddrGenFast<NoC_Args_is_dram> s2 = {
-        .bank_base_address = NoC_Args_addr, 
-        .page_size = NoC_Args_single_tile_size_bytes, 
+        .bank_base_address = NoC_Args_addr,
+        .page_size = NoC_Args_single_tile_size_bytes,
         .data_format = NoC_Args_data_format};
 
     // NoC Args are read first, so that we can use them to read the in0 and in1 blocks.
@@ -81,13 +81,13 @@ void kernel_main(){
     noc_async_read_tile(0, s2, l1_write_addr_NoC_Args);
     noc_async_read_barrier();
     cb_push_back(cb_id_NoC_Args, 1);
-    
+
     uint32_t* column_indices = (uint32_t*)l1_write_addr_NoC_Args;
 
     // Now, iterate over the blocks in the row
     // We could either:
     //    1. NoC the entire col indices array to each core, and then read the blocks indexing with the indptr values
-    //    2. NoC just the col indices for each core's block row, and then read zero indexed 
+    //    2. NoC just the col indices for each core's block row, and then read zero indexed
     for (uint32_t block = 0; block < num_blocks; block++) {
         cb_reserve_back(cb_id_in0, in0_block_num_tiles);
         cb_reserve_back(cb_id_in1, in1_block_num_tiles);

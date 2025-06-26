@@ -82,6 +82,8 @@ auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_co
 
 This ends the side note on Circular Buffers.
 
+#### Reloading Partial Results
+
 The intermediate buffer fills with partial results until all the subblocks of the two input blocks have been read and matmul-ed together. The compute kernel then pops the CBs containing the input blocks and waits on the reader kernel to NoC new blocks. Once the next input blocks are NoC'ed, the compute kernel can begin accumulating into the partial results from the earlier blocks. Before resuming the computation of an output subblock, the kernel must read the partial results of that subblock from the intermediate buffer to the DST register.
 ```C++
 if (enable_reload) {

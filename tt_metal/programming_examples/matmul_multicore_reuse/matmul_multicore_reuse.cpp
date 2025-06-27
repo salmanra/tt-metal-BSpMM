@@ -77,6 +77,7 @@ void matmul_multicore_reuse(
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
 
+
     /*
      * EXtracting Matrix dimensions from input/output vectors
      */
@@ -88,6 +89,15 @@ void matmul_multicore_reuse(
     uint32_t KtNt = Kt * Nt;
     uint32_t MtKt = Mt * Kt;
     uint32_t MtNt = Mt * Nt;
+
+    log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
+    log_info(
+        tt::LogVerif,
+        "Mt= {} -- Nt= {} -- num_cores_x= {} -- num_cores_y= {} --",
+        Mt,
+        Nt,
+        num_cores_x,
+        num_cores_y);
 
     // NOTE: Only supports matmuls where output is blocks of 16 x 16 tiles (ie. multiples of 16*32 x 16*32)
     // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])2
@@ -172,6 +182,15 @@ void matmul_multicore_reuse(
     TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
     CoreRangeSet all_cores(
         tt::tt_metal::num_cores_to_corerangeset(num_blocks_x * num_blocks_y, compute_with_storage_grid_size, true));
+
+    log_info(tt::LogVerif, " -- Metalium Grid Sizing AFTER --");
+    log_info(
+        tt::LogVerif,
+        "Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} --",
+        Mt,
+        Nt,
+        num_blocks_x,
+        num_blocks_y);
 
     //////////////////////////////////////////////////
     /*

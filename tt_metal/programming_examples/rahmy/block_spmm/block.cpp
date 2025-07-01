@@ -104,7 +104,7 @@ void bsr_spmm_multicore_reuse(
 
     uint32_t Rt = R / TILE_HEIGHT;
     uint32_t Ct = C / TILE_WIDTH;
-
+    
 
 
     uint32_t in0_block_w = 2;
@@ -162,7 +162,7 @@ void bsr_spmm_multicore_reuse(
     // auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     // uint32_t num_cores_x = compute_with_storage_grid_size.x;
     // uint32_t num_cores_y = compute_with_storage_grid_size.y;
-    //
+    // 
     // NAIVE: these should adapt to per core workload later
     uint32_t num_blocks_y = Mt / per_core_M;
     uint32_t num_blocks_x = Nt / per_core_N;
@@ -193,6 +193,11 @@ void bsr_spmm_multicore_reuse(
     uint32_t dram_buffer_C_size =
         single_tile_size * Mt * Nt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 
+    // TODO: investigate whether this byte-wise size spec breaks things down the line
+    // In fact let's pad this to fill a tile at least
+    uint32_t dram_buffer_D_size =
+        sizeof(int) * nnz_blocks; // num_tiles in col_indices array -> sizeof(int) * nnz_blocks
+
     tt_metal::InterleavedBufferConfig dram_config_A{
         .device = device,
         .size = dram_buffer_A_size,
@@ -211,12 +216,21 @@ void bsr_spmm_multicore_reuse(
         .page_size = single_tile_size,
         .buffer_type = tt_metal::BufferType::DRAM};
 
+
+    tt_metal::InterleavedBufferConfig dram_config_D{
+        .device = device,
+        .size = dram_buffer_D_size,
+        .page_size = single_tile_size,
+        .buffer_type = tt_metal::BufferType::DRAM};
+
     auto src0_dram_buffer = CreateBuffer(dram_config_A);
     auto src1_dram_buffer = CreateBuffer(dram_config_B);
     auto dst_dram_buffer = CreateBuffer(dram_config_C);
+    auto column_indices_dram_buffer = CreateBuffer(dram_config_D);
     uint32_t src0_addr = src0_dram_buffer->address();
     uint32_t src1_addr = src1_dram_buffer->address();
     uint32_t dst_addr = dst_dram_buffer->address();
+    uint32_t column_indices_addr = column_indices_dram_buffer->address();
 
     /*
      * Config of Circular Buffer in the device L1
@@ -249,6 +263,8 @@ void bsr_spmm_multicore_reuse(
      */
     bool src0_is_dram = src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool src1_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    // TODO: NoC just the col indices for each core's block row. This will have to be partly specified at runtime?
+    bool Noc_args_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     std::vector<uint32_t> reader_compile_time_args = {(uint32_t)src0_is_dram, (uint32_t)src1_is_dram};
 
     bool dst_is_dram = dst_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
@@ -285,7 +301,6 @@ void bsr_spmm_multicore_reuse(
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = {}});
 
 
-     // TODO: all the runtime args :)
     uint32_t num_blocks_read = 0;
     for (int output_idx_y = 0; output_idx_y < num_blocks_y; output_idx_y++) {
         for (int output_idx_x = 0; output_idx_x < num_blocks_x; output_idx_x++) {
@@ -349,6 +364,12 @@ void bsr_spmm_multicore_reuse(
         }
     }
 
+
+    // TODO: enqueue col indices DRAM buffer
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
+    EnqueueProgram(cq, program, false);
+    EnqueueReadBuffer(cq, dst_dram_buffer, output.data.data(), true);
 }
 
 int main(int argc, char** argv) {

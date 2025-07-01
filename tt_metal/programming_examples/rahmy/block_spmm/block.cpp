@@ -237,7 +237,8 @@ void bsr_spmm_multicore_reuse(
      * input tiles count is = 2 because it's single tile process, and double-buffer
      */
 
-     // NAIVE: for this first, naive impl, keep all the CBs the same size, the maximum size
+    // TODO: make CB for column indices
+    // NAIVE: for this first, naive impl, keep all the CBs the same size, the maximum size
     uint32_t src0_cb_index = CBIndex::c_0;  // 0
     CircularBufferConfig cb_src0_config = CircularBufferConfig(in0_CB_size, {{src0_cb_index, cb_data_format}})
                                               .set_page_size(src0_cb_index, single_tile_size);
@@ -248,14 +249,22 @@ void bsr_spmm_multicore_reuse(
                                               .set_page_size(src1_cb_index, single_tile_size);
     auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src1_config);
 
+    
+    
     uint32_t output_cb_index = tt::CBIndex::c_16;
-    uint32_t interm0_cb_index = 24;
+    uint32_t interm0_cb_index = tt::CBIndex::c_24;
     std::map<uint8_t, tt::DataFormat> output_cb_data_format_spec{
         {output_cb_index, cb_data_format}, {interm0_cb_index, cb_data_format}};
-    CircularBufferConfig cb_output_config = CircularBufferConfig(out_CB_size, output_cb_data_format_spec)
-                                                .set_page_size(output_cb_index, single_tile_size)
-                                                .set_page_size(interm0_cb_index, single_tile_size);
-    auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_config);
+        CircularBufferConfig cb_output_config = CircularBufferConfig(out_CB_size, output_cb_data_format_spec)
+        .set_page_size(output_cb_index, single_tile_size)
+        .set_page_size(interm0_cb_index, single_tile_size);
+        auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_config);
+        
+    uint32_t column_indices_cb_index = CBIndex::c_2;  // 2
+    CircularBufferConfig cb_column_indices_config = CircularBufferConfig(
+        dram_buffer_D_size, {{column_indices_cb_index, tt::DataFormat::Int32}})
+                                                .set_page_size(column_indices_cb_index, single_tile_size);
+    auto cb_column_indices = tt_metal::CreateCircularBuffer(program, all_cores, cb_column_indices_config);
 
      // NAIVE: create kernel objects
      /*
@@ -264,8 +273,8 @@ void bsr_spmm_multicore_reuse(
     bool src0_is_dram = src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool src1_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     // TODO: NoC just the col indices for each core's block row. This will have to be partly specified at runtime?
-    bool Noc_args_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
-    std::vector<uint32_t> reader_compile_time_args = {(uint32_t)src0_is_dram, (uint32_t)src1_is_dram};
+    bool Noc_args_is_dram = column_indices_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    std::vector<uint32_t> reader_compile_time_args = {(uint32_t)src0_is_dram, (uint32_t)src1_is_dram, (uint32_t)Noc_args_is_dram};
 
     bool dst_is_dram = dst_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     // std::vector<uint32_t> writer_compile_time_args = {(std::uint32_t) output_cb_index, (uint32_t)dst_is_dram};
@@ -368,6 +377,7 @@ void bsr_spmm_multicore_reuse(
     // TODO: enqueue col indices DRAM buffer
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
     EnqueueProgram(cq, program, false);
     EnqueueReadBuffer(cq, dst_dram_buffer, output.data.data(), true);
 }

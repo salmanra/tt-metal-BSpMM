@@ -36,10 +36,11 @@ void test_sequential_bsr_spmm() {
 }
 
 void bsr_spmm_multicore_reuse(
-    std::bsr_bfloat16<bfloat16>& a,
-    std::dense_matrix<bfloat16>& b,
-    std::dense_matrix<bfloat16>& output,
+    bsr_matrix<bfloat16>& a,
+    dense_matrix<bfloat16>& b,
+    dense_matrix<bfloat16>& output,
     bool bcast_batch,
+    uint32_t nnz_blocks,
     uint32_t M,
     uint32_t N,
     uint32_t K,
@@ -101,6 +102,10 @@ void bsr_spmm_multicore_reuse(
     uint32_t Kt = K / TILE_WIDTH;
     uint32_t Nt = N / TILE_WIDTH;
 
+    uint32_t Rt = R / TILE_HEIGHT;
+    uint32_t Ct = C / TILE_WIDTH;
+
+
 
     uint32_t in0_block_w = 2;
 
@@ -157,7 +162,8 @@ void bsr_spmm_multicore_reuse(
     // auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     // uint32_t num_cores_x = compute_with_storage_grid_size.x;
     // uint32_t num_cores_y = compute_with_storage_grid_size.y;
-
+    //
+    // NAIVE: these should adapt to per core workload later
     uint32_t num_blocks_y = Mt / per_core_M;
     uint32_t num_blocks_x = Nt / per_core_N;
     uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
@@ -180,20 +186,168 @@ void bsr_spmm_multicore_reuse(
      * Writing data from input vectors to source buffers
      */
 
-     // TODO: correct DRAM buffer sizing (dense matrices are the same as old example, bsr is different)
+    uint32_t dram_buffer_A_size =
+        single_tile_size * Rt * Ct * nnz_blocks;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
+    uint32_t dram_buffer_B_size =
+        single_tile_size * Nt * Kt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
+    uint32_t dram_buffer_C_size =
+        single_tile_size * Mt * Nt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 
+    tt_metal::InterleavedBufferConfig dram_config_A{
+        .device = device,
+        .size = dram_buffer_A_size,
+        .page_size = single_tile_size,
+        .buffer_type = tt_metal::BufferType::DRAM};
 
-         /*
+    tt_metal::InterleavedBufferConfig dram_config_B{
+        .device = device,
+        .size = dram_buffer_B_size,
+        .page_size = single_tile_size,
+        .buffer_type = tt_metal::BufferType::DRAM};
+
+    tt_metal::InterleavedBufferConfig dram_config_C{
+        .device = device,
+        .size = dram_buffer_C_size,
+        .page_size = single_tile_size,
+        .buffer_type = tt_metal::BufferType::DRAM};
+
+    auto src0_dram_buffer = CreateBuffer(dram_config_A);
+    auto src1_dram_buffer = CreateBuffer(dram_config_B);
+    auto dst_dram_buffer = CreateBuffer(dram_config_C);
+    uint32_t src0_addr = src0_dram_buffer->address();
+    uint32_t src1_addr = src1_dram_buffer->address();
+    uint32_t dst_addr = dst_dram_buffer->address();
+
+    /*
      * Config of Circular Buffer in the device L1
      * input tiles count is = 2 because it's single tile process, and double-buffer
      */
 
-     // TODO: for this first, naive impl, keep all the CBs the same size, the maximum size
+     // NAIVE: for this first, naive impl, keep all the CBs the same size, the maximum size
+    uint32_t src0_cb_index = CBIndex::c_0;  // 0
+    CircularBufferConfig cb_src0_config = CircularBufferConfig(in0_CB_size, {{src0_cb_index, cb_data_format}})
+                                              .set_page_size(src0_cb_index, single_tile_size);
+    auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src0_config);
 
+    uint32_t src1_cb_index = CBIndex::c_1;  // 1
+    CircularBufferConfig cb_src1_config = CircularBufferConfig(in1_CB_size, {{src1_cb_index, cb_data_format}})
+                                              .set_page_size(src1_cb_index, single_tile_size);
+    auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src1_config);
 
-     // TODO: create kernel objects
+    uint32_t output_cb_index = tt::CBIndex::c_16;
+    uint32_t interm0_cb_index = 24;
+    std::map<uint8_t, tt::DataFormat> output_cb_data_format_spec{
+        {output_cb_index, cb_data_format}, {interm0_cb_index, cb_data_format}};
+    CircularBufferConfig cb_output_config = CircularBufferConfig(out_CB_size, output_cb_data_format_spec)
+                                                .set_page_size(output_cb_index, single_tile_size)
+                                                .set_page_size(interm0_cb_index, single_tile_size);
+    auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_config);
+
+     // NAIVE: create kernel objects
+     /*
+     * Compile time arguments
+     */
+    bool src0_is_dram = src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    bool src1_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    std::vector<uint32_t> reader_compile_time_args = {(uint32_t)src0_is_dram, (uint32_t)src1_is_dram};
+
+    bool dst_is_dram = dst_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    // std::vector<uint32_t> writer_compile_time_args = {(std::uint32_t) output_cb_index, (uint32_t)dst_is_dram};
+    std::vector<uint32_t> writer_compile_time_args = {(uint32_t)dst_is_dram};
+
+    /*
+     * Create Kernels (Reader, Writer, Compute)
+     */
+    // Create reader and writer kernels per core
+    auto reader_id = tt_metal::CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_block.cpp",
+        all_cores,
+        tt_metal::DataMovementConfig{
+            .processor = DataMovementProcessor::RISCV_1,
+            .noc = NOC::RISCV_1_default,
+            .compile_args = reader_compile_time_args});
+
+    auto writer_id = tt_metal::CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/writer_block.cpp",
+        all_cores,
+        tt_metal::DataMovementConfig{
+            .processor = DataMovementProcessor::RISCV_0,
+            .noc = NOC::RISCV_0_default,
+            .compile_args = writer_compile_time_args});
+
+    // Create compute kernel
+    auto mm_kernel_id = tt_metal::CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm.cpp",
+        all_cores,
+        tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = {}});
+
 
      // TODO: all the runtime args :)
+    uint32_t num_blocks_read = 0;
+    for (int output_idx_y = 0; output_idx_y < num_blocks_y; output_idx_y++) {
+        for (int output_idx_x = 0; output_idx_x < num_blocks_x; output_idx_x++) {
+            // TODO: what am I letting be naive, and what am I thinking really hard about here?
+            int core_idx_x = num_blocks_read % num_cores_x;
+            int core_idx_y = num_blocks_read / num_cores_x;
+            CoreCoord core = {(std::size_t)core_idx_x, (std::size_t)core_idx_y};
+
+            // Write runtime args to device
+            std::vector<uint32_t> mm_reader_args = {
+                (std::uint32_t)src0_dram_buffer->address(),     // in0_tensor_addr
+                (std::uint32_t)Kt * per_core_M * output_idx_y,  // in0_tensor_start_tile_id
+                (std::uint32_t)1,                               // in0_tensor_stride_w
+                (std::uint32_t)Kt,                              // in0_tensor_stride_h
+                (std::uint32_t)in0_block_w,                     // in0_tensor_next_block_stride
+
+                (std::uint32_t)in0_block_w,               // in0_block_w
+                (std::uint32_t)per_core_M,                // in0_block_h
+                (std::uint32_t)in0_block_w * per_core_M,  // in0_block_num_tiles
+
+                (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
+                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id
+                (std::uint32_t)1,                            // in1_tensor_stride_w
+                (std::uint32_t)Nt,                           // in1_tensor_stride_h
+                (std::uint32_t)in0_block_w * Nt,             // in1_tensor_next_block_stride
+
+                (std::uint32_t)per_core_N,                // in1_block_w
+                (std::uint32_t)in0_block_w,               // in1_block_h
+                (std::uint32_t)per_core_N * in0_block_w,  // in1_block_num_tiles
+
+                (std::uint32_t)Kt / in0_block_w,  // num_blocks
+
+                (std::uint32_t)Mt * Kt,     // MtKt
+                (std::uint32_t)Kt * Nt,     // KtNt
+                (std::uint32_t)B,           // batch
+                (std::uint32_t)bcast_batch  // bcast_B
+            };
+
+            std::vector<uint32_t> writer_args = {
+                (std::uint32_t)dst_dram_buffer->address(),                                  // out_buffer_addr
+                (std::uint32_t)output_idx_x * per_core_N + output_idx_y * per_core_M * Nt,  // out_tensor_start_tile_id
+                (std::uint32_t)1,                                                           // out_tensor_stride_w
+                (std::uint32_t)Nt,                                                          // out_tensor_stride_h
+                (std::uint32_t)out_subblock_w,       // out_tensor_next_subblock_stride_w
+                (std::uint32_t)out_subblock_h * Nt,  // out_tensor_next_subblock_stride_h
+
+                (std::uint32_t)out_subblock_w,                     // out_subblock_w
+                (std::uint32_t)out_subblock_h,                     // out_subblock_h
+                (std::uint32_t)(out_subblock_w * out_subblock_h),  // out_subblocks_w * out_subblocks_h
+                (std::uint32_t)(per_core_N / out_subblock_w),      // out_num_subblocks_w
+                (std::uint32_t)(per_core_M / out_subblock_h),      // out_num_subblocks_h
+
+                (std::uint32_t)Mt * Nt,  // MtNt
+                (std::uint32_t)B         // batch
+            };
+
+            tt_metal::SetRuntimeArgs(program, reader_id, core, mm_reader_args);
+            tt_metal::SetRuntimeArgs(program, writer_id, core, writer_args);
+
+            num_blocks_read++;
+        }
+    }
 
 }
 
@@ -225,6 +379,10 @@ int main(int argc, char** argv) {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
+        // initialize output_data
+        dense_matrix<bfloat16> output(M, N);
+
+
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
 
@@ -236,7 +394,7 @@ int main(int argc, char** argv) {
         tilize(dense_bfloat16.data, K, N);
 
         // run bsr_spmm_multicore_reuse
-        bsr_spmm_multicore_reuse(bsr_bfloat16, dense_bfloat16, false, M, N, K, R, C, 1, device);
+        bsr_spmm_multicore_reuse(bsr_bfloat16, dense_bfloat16, output, false, nblocks, M, N, K, R, C, 1, device);
 
         // untile output data
 

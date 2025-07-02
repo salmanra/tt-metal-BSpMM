@@ -94,6 +94,9 @@ void bsr_spmm_multicore_reuse(
     uint32_t single_tile_size = detail::TileSize(cb_data_format);
     // uint32_t single_tile_size = 2 * 1024;
 
+    tt::DataFormat col_indices_data_format = tt::DataFormat::Int32;
+    uint32_t col_indices_single_tile_size = detail::TileSize(col_indices_data_format);
+
     auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
@@ -220,7 +223,7 @@ void bsr_spmm_multicore_reuse(
     tt_metal::InterleavedBufferConfig dram_config_D{
         .device = device,
         .size = dram_buffer_D_size,
-        .page_size = single_tile_size,
+        .page_size = col_indices_single_tile_size,
         .buffer_type = tt_metal::BufferType::DRAM};
 
     auto src0_dram_buffer = CreateBuffer(dram_config_A);
@@ -263,7 +266,7 @@ void bsr_spmm_multicore_reuse(
     uint32_t column_indices_cb_index = CBIndex::c_2;  // 2
     CircularBufferConfig cb_column_indices_config = CircularBufferConfig(
         dram_buffer_D_size, {{column_indices_cb_index, tt::DataFormat::Int32}})
-                                                .set_page_size(column_indices_cb_index, single_tile_size);
+                                                .set_page_size(column_indices_cb_index, col_indices_single_tile_size);
     auto cb_column_indices = tt_metal::CreateCircularBuffer(program, all_cores, cb_column_indices_config);
 
      // NAIVE: create kernel objects

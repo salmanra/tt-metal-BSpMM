@@ -6,6 +6,8 @@
 
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
+#include "debug/dprint.h"  // required in all kernels using DPRINT
+
 
 namespace NAMESPACE {
 void MAIN {

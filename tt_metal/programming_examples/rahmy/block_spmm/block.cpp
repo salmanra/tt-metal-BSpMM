@@ -20,6 +20,16 @@ using namespace std;
 using namespace tt;
 using namespace tt::tt_metal;
 
+uint32_t _get_maximum_block_dim_with_NoC_args(int32_t block_dim, int32_t in0_block_w, int32_t num_tiles_in_NoC_args) {
+    int32_t num_available_tiles_in_SRAM = 400; // as provided by TT code. roughly: SRAM size in bytes divided by tile size in bytes
+    num_available_tiles_in_SRAM -= num_tiles_in_NoC_args;
+    int32_t other_dim = (num_available_tiles_in_SRAM - 2 * in0_block_w * block_dim) / (2 * in0_block_w + block_dim);
+    if (other_dim > 0) {
+        return other_dim;
+    }
+    return 0;
+}
+
 void test_sequential_bsr_spmm() {
     bsr_matrix<float> bsr(2048, 2048, 128, 128, 3, RAND);
     dense_matrix<float> dense(2048, 16, RAND);
@@ -110,14 +120,27 @@ void bsr_spmm_multicore_reuse(
     
 
 
-    uint32_t in0_block_w = 2;
 
     // Get large matmul params
-    auto matmul_params = bmm_op_utils::get_large_matmul_params(Mt, Nt, num_cores_y, num_cores_x, in0_block_w);
-    uint32_t per_core_M = std::get<0>(matmul_params);
-    uint32_t per_core_N = std::get<1>(matmul_params);
-    uint32_t out_subblock_h = std::get<2>(matmul_params);
-    uint32_t out_subblock_w = std::get<3>(matmul_params);
+    // 
+    // auto matmul_params = bmm_op_utils::get_large_matmul_params(Mt, Nt, num_cores_y, num_cores_x, in0_block_w);
+    // uint32_t per_core_M = std::get<0>(matmul_params);
+    // uint32_t per_core_N = std::get<1>(matmul_params);
+    // uint32_t out_subblock_h = std::get<2>(matmul_params);
+    // uint32_t out_subblock_w = std::get<3>(matmul_params);
+    //
+    // NAIVE: these should adapt to per core workload later. So we have to understand the util function and why it works!
+    //          short idea: let the tt block size be the nz block size, then take the largest of the 20 subblock choices which fits. 
+    //          what breaks when in0_block_w = 2??
+    uint32_t per_core_M = Rt;
+    uint32_t in0_block_w = Ct;
+
+    int32_t num_tiles_for_col_indices = (col_indices_single_tile_size - 1 + sizeof(int) * nnz_blocks) / col_indices_single_tile_size;
+    uint32_t per_core_N = _get_maximum_block_dim_with_NoC_args(per_core_M, in0_block_w, num_tiles_for_col_indices);
+    
+    // TODO: pick the largest subblock size that fits
+    uint32_t out_subblock_h = 1;
+    uint32_t out_subblock_w = 1;
 
     log_info(tt::LogVerif, " -- Metalium Core Sizing --");
     log_info(
@@ -144,7 +167,7 @@ void bsr_spmm_multicore_reuse(
 
     // Compute kernel compile time args
     // TODO: make this a variable runtime arg
-    uint32_t num_blocks = (Kt / in0_block_w);
+
 
     uint32_t in0_num_subblocks = (per_core_M / out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
@@ -157,7 +180,6 @@ void bsr_spmm_multicore_reuse(
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
 
 
-    // TODO: compute kernel runtime args
 
     /*
      * Multi-Core prep
@@ -166,8 +188,9 @@ void bsr_spmm_multicore_reuse(
     // uint32_t num_cores_x = compute_with_storage_grid_size.x;
     // uint32_t num_cores_y = compute_with_storage_grid_size.y;
     // 
-    // NAIVE: these should adapt to per core workload later
-    uint32_t num_blocks_y = Mt / per_core_M;
+    // NAIVE: these should adapt to per core workload later. 
+    // uint32_t num_blocks_y = Mt / per_core_M;
+    uint32_t num_blocks_y = M / R; // block_matrix_height, how many blocks tall the input matrix is. 
     uint32_t num_blocks_x = Nt / per_core_N;
     uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
     TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
@@ -177,7 +200,7 @@ void bsr_spmm_multicore_reuse(
     log_info(tt::LogVerif, " -- Metalium Grid Sizing AFTER --");
     log_info(
         tt::LogVerif,
-        "Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} --",
+        " -- Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} --",
         Mt,
         Nt,
         num_blocks_x,
@@ -196,7 +219,6 @@ void bsr_spmm_multicore_reuse(
     uint32_t dram_buffer_C_size =
         single_tile_size * Mt * Nt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 
-    // TODO: investigate whether this byte-wise size spec breaks things down the line
     // In fact let's pad this to fill a tile at least
     uint32_t dram_buffer_D_size =
         sizeof(int) * nnz_blocks; // 
@@ -240,7 +262,6 @@ void bsr_spmm_multicore_reuse(
      * input tiles count is = 2 because it's single tile process, and double-buffer
      */
 
-    // TODO: make CB for column indices
     // NAIVE: for this first, naive impl, keep all the CBs the same size, the maximum size
     uint32_t src0_cb_index = CBIndex::c_0;  // 0
     CircularBufferConfig cb_src0_config = CircularBufferConfig(in0_CB_size, {{src0_cb_index, cb_data_format}})
@@ -269,18 +290,15 @@ void bsr_spmm_multicore_reuse(
                                                 .set_page_size(column_indices_cb_index, col_indices_single_tile_size);
     auto cb_column_indices = tt_metal::CreateCircularBuffer(program, all_cores, cb_column_indices_config);
 
-     // NAIVE: create kernel objects
      /*
      * Compile time arguments
      */
     bool src0_is_dram = src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool src1_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
-    // TODO: NoC just the col indices for each core's block row. This will have to be partly specified at runtime?
     bool Noc_args_is_dram = column_indices_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     std::vector<uint32_t> reader_compile_time_args = {(uint32_t)src0_is_dram, (uint32_t)src1_is_dram, (uint32_t)Noc_args_is_dram};
 
     bool dst_is_dram = dst_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
-    // std::vector<uint32_t> writer_compile_time_args = {(std::uint32_t) output_cb_index, (uint32_t)dst_is_dram};
     std::vector<uint32_t> writer_compile_time_args = {(uint32_t)dst_is_dram};
 
     /*
@@ -312,43 +330,42 @@ void bsr_spmm_multicore_reuse(
         all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = {}});
 
-
+    uint32_t num_nnz_blocks_read = 0;
     uint32_t num_blocks_read = 0;
     for (int output_idx_y = 0; output_idx_y < num_blocks_y; output_idx_y++) {
         for (int output_idx_x = 0; output_idx_x < num_blocks_x; output_idx_x++) {
-            // TODO: what am I letting be naive, and what am I thinking really hard about here?
+            // TODO: test and reason
+            // TODO: the row index is not quite right... it has some more involved translation... 
             int core_idx_x = num_blocks_read % num_cores_x;
             int core_idx_y = num_blocks_read / num_cores_x;
             CoreCoord core = {(std::size_t)core_idx_x, (std::size_t)core_idx_y};
 
+            uint32_t num_blocks = a.indptr[core_idx_y + 1] - a.indptr[core_idx_y];
             // Write runtime args to device
             std::vector<uint32_t> mm_reader_args = {
                 (std::uint32_t)src0_dram_buffer->address(),     // in0_tensor_addr
-                (std::uint32_t)Kt * per_core_M * output_idx_y,  // in0_tensor_start_tile_id
+                (std::uint32_t)num_nnz_blocks_read * Rt * Ct,  // in0_tensor_start_tile_id TODO
                 (std::uint32_t)1,                               // in0_tensor_stride_w
-                (std::uint32_t)Kt,                              // in0_tensor_stride_h
-                (std::uint32_t)in0_block_w,                     // in0_tensor_next_block_stride
+                (std::uint32_t)Ct,                              // in0_tensor_stride_h
 
                 (std::uint32_t)in0_block_w,               // in0_block_w
                 (std::uint32_t)per_core_M,                // in0_block_h
                 (std::uint32_t)in0_block_w * per_core_M,  // in0_block_num_tiles
 
                 (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
-                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id
+                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id TODO
                 (std::uint32_t)1,                            // in1_tensor_stride_w
                 (std::uint32_t)Nt,                           // in1_tensor_stride_h
-                (std::uint32_t)in0_block_w * Nt,             // in1_tensor_next_block_stride
 
                 (std::uint32_t)per_core_N,                // in1_block_w
                 (std::uint32_t)in0_block_w,               // in1_block_h
                 (std::uint32_t)per_core_N * in0_block_w,  // in1_block_num_tiles
+                
+                (std::uint32_t) a.indptr[core_idx_y],    // col indices start of row
+                (std::uint32_t) a.indptr[core_idx_y + 1],// col indices end of row
+                (std::uint32_t) core_idx_y, // row index into bsr matrix
 
-                (std::uint32_t)Kt / in0_block_w,  // num_blocks
-
-                (std::uint32_t)Mt * Kt,     // MtKt
-                (std::uint32_t)Kt * Nt,     // KtNt
-                (std::uint32_t)B,           // batch
-                (std::uint32_t)bcast_batch  // bcast_B
+                (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
             };
 
             std::vector<uint32_t> writer_args = {
@@ -369,19 +386,42 @@ void bsr_spmm_multicore_reuse(
                 (std::uint32_t)B         // batch
             };
 
+            std::vector<uint32_t> compute_args = {
+                (std::uint32_t)in0_block_w,
+                (std::uint32_t)in0_num_subblocks,
+                (std::uint32_t)in0_block_num_tiles,
+                (std::uint32_t)in0_subblock_num_tiles,
+                (std::uint32_t)in1_num_subblocks,
+                (std::uint32_t)in1_per_core_w,
+                (std::uint32_t)num_blocks, // num_blocks
+                (std::uint32_t)out_subblock_h,
+                (std::uint32_t)out_subblock_w,
+                (std::uint32_t)out_subblock_num_tiles,
+                (std::uint32_t)B
+            };
+
             tt_metal::SetRuntimeArgs(program, reader_id, core, mm_reader_args);
             tt_metal::SetRuntimeArgs(program, writer_id, core, writer_args);
-
+            tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_args);
             num_blocks_read++;
+            if (num_blocks > 0)
+                num_nnz_blocks_read++;
         }
     }
 
+    log_info(tt::LogVerif, " -- Runtime Args set --");
 
     // TODO: enqueue col indices DRAM buffer
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
-    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
+
+    log_info(tt::LogVerif, " -- All data moved to DRAM --");
+
     EnqueueProgram(cq, program, false);
+
+    log_info(tt::LogVerif, " -- Program enqueued --");
+
     EnqueueReadBuffer(cq, dst_dram_buffer, output.data.data(), true);
 }
 
@@ -405,6 +445,7 @@ int main(int argc, char** argv) {
         uint32_t R = 128;
         uint32_t C = 128;
         uint32_t nblocks = 7;
+        uint32_t block_matrix_height = M / R;
 
         uint32_t Rt = R / TILE_HEIGHT;
         uint32_t Ct = C / TILE_WIDTH;

@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
+#include "debug/dprint.h"  // required in all kernels using DPRINT
+
 
 // TODO: decide whether this kernel needs any changes
 void kernel_main() {

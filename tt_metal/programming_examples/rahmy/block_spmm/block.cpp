@@ -200,7 +200,7 @@ void bsr_spmm_multicore_reuse(
     // In fact let's pad this to fill a tile at least
     uint32_t dram_buffer_D_size =
         sizeof(int) * nnz_blocks; // 
-    dram_buffer_D_size = (col_indices_single_tile_size - 1 + dram_buffer_D_size) / (col_indices_single_tile_size);
+    dram_buffer_D_size = col_indices_single_tile_size * ((col_indices_single_tile_size - 1 + dram_buffer_D_size) / (col_indices_single_tile_size));
     tt_metal::InterleavedBufferConfig dram_config_A{
         .device = device,
         .size = dram_buffer_A_size,

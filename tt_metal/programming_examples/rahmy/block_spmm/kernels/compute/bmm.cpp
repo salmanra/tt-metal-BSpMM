@@ -39,6 +39,8 @@ void MAIN {
     uint32_t batch = get_arg_val<uint32_t>(11);                   // batch dim
 
     mm_init();
+    //DPRINT_MATH(DPRINT << "Math core on the case" << ENDL());
+
 
     for (uint32_t b = 0; b < batch; b++) {
         bool spill = num_blocks > 1;
@@ -80,7 +82,7 @@ void MAIN {
                                     tt::CBIndex::c_1,
                                     in0_index,
                                     in1_index,
-                                    dst_index,
+                                    dst_index, // DST register
                                     false /* transpose */);
                                 in1_index_inner_dim_offset += in1_per_core_w;
                             }
@@ -124,5 +126,8 @@ void MAIN {
             cb_pop_front(tt::CBIndex::c_1, in1_block_num_tiles);
         }
     }
+
+    //DPRINT_MATH(DPRINT << "Math core all done" << ENDL());
+
 }
 }  // namespace NAMESPACE

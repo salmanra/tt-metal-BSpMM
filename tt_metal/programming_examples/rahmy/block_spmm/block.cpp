@@ -411,7 +411,6 @@ void bsr_spmm_multicore_reuse(
 
     log_info(tt::LogVerif, " -- Runtime Args set --");
 
-    // TODO: enqueue col indices DRAM buffer
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
     EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
@@ -451,6 +450,11 @@ int main(int argc, char** argv) {
         uint32_t Ct = C / TILE_WIDTH;
 
         // create (or read) source data
+        // TODO: fix a nz pattern for the sake of debugging
+        //      nz diagonal
+        //      all nz on one row
+        //      all nz on one column
+        // TODO: fix the nz values. 
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 

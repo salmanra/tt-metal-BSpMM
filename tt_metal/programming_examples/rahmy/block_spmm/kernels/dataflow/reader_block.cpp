@@ -41,7 +41,7 @@ void kernel_main(){
     // NoC Args
     uint32_t NoC_Args_addr = get_arg_val<uint32_t>(17);
 
-    DPRINT_DATA1(DPRINT << "Runtime args obtained. NNZ blocks to read: " << num_blocks << ENDL());
+    //DPRINT_DATA1(DPRINT << "Runtime args obtained. NNZ blocks to read: " << num_blocks << ENDL());
 
 
     constexpr bool in0_is_dram = get_compile_time_arg_val(0) == 1;
@@ -104,7 +104,7 @@ void kernel_main(){
         // block_row_start tells us which nonzero BLOCK we're in...
         // we need to get the tile at which that block starts.
         // Actually, that's where in0_tensor_start_tile_id comes in!
-        uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + block * in0_block_num_tiles;;
+        uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + block * in0_block_num_tiles;
         for (uint32_t h = 0; h < in0_block_h; h++) {
             uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id;
             for (uint32_t w = 0; w < in0_block_w; w++) {
@@ -135,7 +135,7 @@ void kernel_main(){
         cb_push_back(cb_id_in0, in0_block_num_tiles);
         cb_push_back(cb_id_in1, in1_block_num_tiles);
 
-        DPRINT_DATA1(DPRINT << "block " << block << " read" << ENDL());
+        //DPRINT_DATA1(DPRINT << "block " << block << " read" << ENDL());
 
     }
 

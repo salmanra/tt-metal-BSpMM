@@ -31,6 +31,9 @@ void kernel_main() {
 
     constexpr uint32_t cb_id_out0 = 16;
 
+    //DPRINT_DATA0(DPRINT << "Writer core on the case" << ENDL());
+
+
     // single-tile
     const uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
     const DataFormat data_format = get_dataformat(cb_id_out0);
@@ -74,4 +77,6 @@ void kernel_main() {
         }
         out_tensor_start_tile_id += MtNt;
     }
+    ////DPRINT_DATA0(DPRINT << "Writer core done" << ENDL());
+
 }

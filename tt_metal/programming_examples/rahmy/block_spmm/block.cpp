@@ -436,6 +436,7 @@ int main(int argc, char** argv) {
         constexpr int device_id = 0;
         IDevice* device = CreateDevice(device_id);
 
+
         // matmul params setup
         uint32_t M = 2048;
         uint32_t N = 2048;

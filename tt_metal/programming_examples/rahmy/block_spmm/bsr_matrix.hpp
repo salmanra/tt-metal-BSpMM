@@ -259,55 +259,6 @@ public:
         }
     }
 
-    bsr_matrix(size_t rows, size_t cols, size_t block_rows, size_t block_cols, size_t num_blocks, int fill_type = FILL_ROW) :
-        H(rows), W(cols), R(block_rows), C(block_cols), nblocks(num_blocks) {
-        assert(H * W >= nblocks * R * C);
-        assert(R > 0);
-        assert(C > 0);
-        assert(H % R == 0);
-        assert(W % C == 0);
-        assert(H >= R);
-        assert(W >= C);
-
-        size_t blocked_matrix_height = H / R;
-        size_t blocked_matrix_width = W / C;
-
-        indptr.resize(blocked_matrix_height + 1);
-        indices.reserve(nblocks);
-        data.reserve(nblocks * R * C);
-        std::fill(indptr.begin(), indptr.end(), 0);
-
-        // TODO: test this b
-        // if Fill_row, fill the matrix with blocks in a row-wise manner
-        // if Fill_col, fill the matrix with blocks in a column-wise manner
-        if (fill_type == FILL_ROW) {
-            for (size_t i = 0; i < blocked_matrix_height; i++) {
-                for (size_t j = 0; j < blocked_matrix_width; j++) {
-                    if (i * blocked_matrix_width + j < nblocks) {
-                        indptr[i + 1]++;
-                        indices.push_back(j);
-                        for (size_t k = 0; k < R * C; k++) {
-                            data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
-                        }
-                    }
-                }
-            }
-        } else if (fill_type == FILL_COL) {
-            for (size_t j = 0; j < blocked_matrix_width; j++) {
-                for (size_t i = 0; i < blocked_matrix_height; i++) {
-                    if (i * blocked_matrix_width + j < nblocks) {
-                        indptr[i + 1]++;
-                        indices.push_back(i);
-                        for (size_t k = 0; k < R * C; k++) {
-                            data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
-                        }
-                    }
-                }
-            }
-        } else {
-            throw std::invalid_argument("Invalid fill type");
-        }
-    }
 
     bsr_matrix(
         std::vector<T> data,

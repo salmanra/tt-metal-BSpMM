@@ -487,18 +487,37 @@ int main(int argc, char** argv) {
 
         log_info(tt::LogVerif, "Output vector of size {}", output.data.size());
 
-        //
-        // let's print the first few elts of each vec
-        for (int i = 0; i < 10; i++){
-            std::cout << golden.data[i] << ' ';
-        }
-        std::cout << std::endl;
+        // uhh we know exactly what this mini example output should look like. 
+        int false_pos = 0;
+        int false_neg = 0;
+        int total_bad = 0;
+        int nnz_gold = 0;
+        int nnz_out = 0;
+        for (int i = 0; i < M; i++){
+            for (int j = 0; j < N; j++) {
+                if (std::abs(output.data[i*N + j].to_float() - golden.data[i*N + j].to_float()) > 1e-4)
+                    total_bad++;
+                if (i >= M/2 && std::abs(output.data[i*N + j].to_float() - 0.0f) > 1e-4)
+                    false_pos++;
+                else if (i < M/2 && std::abs(output.data[i*N + j].to_float() - 0.0f) < 1e-4)
+                    false_neg++;
 
-        for (int i = 0; i < 10; i++){
-            std::cout << output.data[i] << ' ';
+                if (std::abs(output.data[i*N + j].to_float() - 0.0f) > 1e-4)
+                    nnz_out++;
+                if (std::abs(golden.data[i*N + j].to_float() - 0.0f) > 1e-4)
+                    nnz_gold++;
+            }
         }
-        std::cout << std::endl;
 
+        // count nonzero elements in golden
+        log_info(tt::LogVerif, " -- False Positive Count={} -- False Negative Count={} -- Total bad={}", 
+            false_pos,
+            false_neg,
+            total_bad);
+
+        log_info(tt::LogVerif, " -- NNZ elts golden={} -- NNZ elts output={}", 
+            nnz_gold,
+            nnz_out);
 
         float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
         log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);

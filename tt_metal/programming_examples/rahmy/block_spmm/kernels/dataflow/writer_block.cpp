@@ -33,7 +33,6 @@ void kernel_main() {
 
     constexpr uint32_t cb_id_out0 = 16;
 
-    // TODO: kernel should only wait on cb if it is actually receiving something.
     if (nonzero == 0){
         DPRINT_DATA1(DPRINT << "Writer core has no work to do" << ENDL());
         return;

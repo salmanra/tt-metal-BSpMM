@@ -13,6 +13,8 @@
 
 #define RAND true
 #define NO_RAND false
+#define FILL_ROW 1
+#define FILL_COL 2
 #define TILE_SIZE 32
 
 // TODO: if we wanted, we could put this in a namespace,
@@ -33,13 +35,18 @@ public:
         if (random)
             std::generate(data.begin(), data.end(), []() { return static_cast<T>(rand()) / static_cast<T>(RAND_MAX); });
         else {
-            std::fill(data.begin(), data.end(), 0);
+            std::fill(data.begin(), data.end(), 1);
         }
     }
 
     dense_matrix(int rows, int cols) : H(rows), W(cols) {
         data.resize(rows * cols);
         std::fill(data.begin(), data.end(), 0);
+    }
+
+    dense_matrix(int rows, int cols, T val) : H(rows), W(cols) {
+        data.resize(rows * cols);
+        std::fill(data.begin(), data.end(), val);
     }
 
     // Constructor from a flat vector
@@ -142,6 +149,115 @@ public: // everything is public for now
 
 public:
     bsr_matrix() : H(0), W(0), nblocks(0), R(0), C(0) {}
+    bsr_matrix(size_t rows, size_t cols, size_t block_rows, size_t block_cols, size_t num_blocks, int fill_type = FILL_ROW, bool random = RAND) :
+        H(rows), W(cols), R(block_rows), C(block_cols), nblocks(num_blocks) {
+        assert(H * W >= nblocks * R * C);
+        assert(R > 0);
+        assert(C > 0);
+        assert(H % R == 0);
+        assert(W % C == 0);
+        assert(H >= R);
+        assert(W >= C);
+
+        size_t blocked_matrix_height = H / R;
+        size_t blocked_matrix_width = W / C;
+
+        indptr.resize(blocked_matrix_height + 1);
+        indices.reserve(nblocks);
+        data.reserve(nblocks * R * C);
+        std::fill(indptr.begin(), indptr.end(), 0);
+        // if Fill_row, fill the matrix with blocks in a row-wise manner
+        // if Fill_col, fill the matrix with blocks in a column-wise manner
+        if (fill_type == FILL_ROW) {
+            for (size_t i = 0; i < blocked_matrix_height; i++) {
+                for (size_t j = 0; j < blocked_matrix_width; j++) {
+                    if (i * blocked_matrix_width + j < nblocks) {
+                        indptr[i + 1]++;
+                        indices.push_back(j);
+                        for (size_t k = 0; k < R * C; k++) {
+                            if (random) {
+                                data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                            } else {
+                                data.push_back(1);
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (fill_type == FILL_COL) {
+            for (size_t j = 0; j < blocked_matrix_width; j++) {
+                for (size_t i = 0; i < blocked_matrix_height; i++) {
+                    if (i * blocked_matrix_width + j < nblocks) {
+                        indptr[i + 1]++;
+                        indices.push_back(i);
+                        for (size_t k = 0; k < R * C; k++) {
+                            if (random) {
+                                data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                            } else {
+                                data.push_back(1);
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            throw std::invalid_argument("Invalid fill type");
+        }
+                for (size_t i = 1; i < indptr.size(); i++) {
+            indptr[i] += indptr[i - 1];
+        }
+        indptr.resize(blocked_matrix_height + 1);
+    }
+
+    bsr_matrix(size_t rows, size_t cols, size_t block_rows, size_t block_cols, size_t num_blocks, int fill_type = FILL_ROW) :
+        H(rows), W(cols), R(block_rows), C(block_cols), nblocks(num_blocks) {
+        assert(H * W >= nblocks * R * C);
+        assert(R > 0);
+        assert(C > 0);
+        assert(H % R == 0);
+        assert(W % C == 0);
+        assert(H >= R);
+        assert(W >= C);
+
+        size_t blocked_matrix_height = H / R;
+        size_t blocked_matrix_width = W / C;
+
+        indptr.resize(blocked_matrix_height + 1);
+        indices.reserve(nblocks);
+        data.reserve(nblocks * R * C);
+        std::fill(indptr.begin(), indptr.end(), 0);
+
+        // TODO: test this b
+        // if Fill_row, fill the matrix with blocks in a row-wise manner
+        // if Fill_col, fill the matrix with blocks in a column-wise manner
+        if (fill_type == FILL_ROW) {
+            for (size_t i = 0; i < blocked_matrix_height; i++) {
+                for (size_t j = 0; j < blocked_matrix_width; j++) {
+                    if (i * blocked_matrix_width + j < nblocks) {
+                        indptr[i + 1]++;
+                        indices.push_back(j);
+                        for (size_t k = 0; k < R * C; k++) {
+                            data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                        }
+                    }
+                }
+            }
+        } else if (fill_type == FILL_COL) {
+            for (size_t j = 0; j < blocked_matrix_width; j++) {
+                for (size_t i = 0; i < blocked_matrix_height; i++) {
+                    if (i * blocked_matrix_width + j < nblocks) {
+                        indptr[i + 1]++;
+                        indices.push_back(i);
+                        for (size_t k = 0; k < R * C; k++) {
+                            data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                        }
+                    }
+                }
+            }
+        } else {
+            throw std::invalid_argument("Invalid fill type");
+        }
+    }
 
     bsr_matrix(
         std::vector<T> data,
@@ -462,6 +578,37 @@ public:
         std::cout << std::endl;
     }
 
+    void pretty_print() {
+                std::cout << "BSR Matrix:" << std::endl;
+        std::cout << "Size: " << H << " x " << W << std::endl;
+        std::cout << "Block Size: " << R << " x " << C << std::endl;
+        std::cout << "Number of blocks: " << nblocks << std::endl;
+        std::cout << "Indptr:" << std::endl;
+        for (size_t i = 0; i < indptr.size(); ++i) {
+            std::cout << indptr[i] << " ";
+        }
+        std::cout << std::endl;
+        std::cout << "Indices:" << std::endl;
+        for (size_t i = 0; i < indices.size(); ++i) {
+            std::cout << indices[i] << " ";
+        }
+        std::cout << std::endl;
+        std::cout << "Data:" << std::endl;
+        for (size_t i = 0; i < H / R; i++) {
+            for (size_t j = 0; j < W / C; j++) {
+                char nz = '_';
+                for (size_t idx = indptr[i]; idx < indptr[i + 1]; idx++) {
+                    if (indices[idx] == j) {
+                        nz = '*';
+                        break;
+                    }
+                }
+                std::cout << nz << " ";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+    }
 
 };
 

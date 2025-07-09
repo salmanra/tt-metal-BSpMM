@@ -310,8 +310,8 @@ void bsr_spmm_multicore_reuse(
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_block.cpp",
         all_cores,
         tt_metal::DataMovementConfig{
-            .processor = DataMovementProcessor::RISCV_1,
-            .noc = NOC::RISCV_1_default,
+            .processor = DataMovementProcessor::RISCV_0,
+            .noc = NOC::RISCV_0_default,
             .compile_args = reader_compile_time_args});
 
     auto writer_id = tt_metal::CreateKernel(
@@ -319,8 +319,8 @@ void bsr_spmm_multicore_reuse(
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/writer_block.cpp",
         all_cores,
         tt_metal::DataMovementConfig{
-            .processor = DataMovementProcessor::RISCV_0,
-            .noc = NOC::RISCV_0_default,
+            .processor = DataMovementProcessor::RISCV_1,
+            .noc = NOC::RISCV_1_default,
             .compile_args = writer_compile_time_args});
 
     // Create compute kernel
@@ -455,8 +455,10 @@ int main(int argc, char** argv) {
         //      all nz on one row
         //      all nz on one column
         // TODO: fix the nz values. 
-        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
-        dense_matrix<float> dense(K, N, RAND);
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
+        dense_matrix<float> dense(K, N, NO_RAND);
+
+        bsr.pretty_print();
 
         // initialize output_data
         dense_matrix<bfloat16> output(M, N);
@@ -473,7 +475,7 @@ int main(int argc, char** argv) {
         tilize(dense_bfloat16.data, K, N);
 
         // run bsr_spmm_multicore_reuse
-        bsr_spmm_multicore_reuse(bsr_bfloat16, dense_bfloat16, output, false, nblocks, M, N, K, R, C, 1, device);
+        // bsr_spmm_multicore_reuse(bsr_bfloat16, dense_bfloat16, output, false, nblocks, M, N, K, R, C, 1, device);
 
         // untile output data
 

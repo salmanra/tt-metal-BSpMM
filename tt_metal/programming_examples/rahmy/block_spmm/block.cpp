@@ -464,7 +464,6 @@ int main(int argc, char** argv) {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
         dense_matrix<float> dense(K, N, 1.0f);
 
-        bsr.pretty_print();
 
         // initialize output_data
         dense_matrix<bfloat16> output(M, N);
@@ -472,9 +471,6 @@ int main(int argc, char** argv) {
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
-
-        dense.print();
-        bsr_bfloat16.pretty_print();
 
         // run golden bsr_spmm
         dense_matrix<bfloat16> golden = bsr_bfloat16.spmm_bfloat16(dense_bfloat16);
@@ -493,10 +489,6 @@ int main(int argc, char** argv) {
 
         //
         // let's print the first few elts of each vec
-        for (int i = 0; i < golden.data.size(); i++){
-            if (std::abs(golden.data[i] - output.data[i]) > 1e-4)
-                std::cout << "too far stupid\n";
-        }
         for (int i = 0; i < 10; i++){
             std::cout << golden.data[i] << ' ';
         }

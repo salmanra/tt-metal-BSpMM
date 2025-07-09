@@ -462,17 +462,35 @@ int main(int argc, char** argv) {
         //      all nz on one row
         //      all nz on one column
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
-        dense_matrix<float> dense(K, N, 1.0f);
+        dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+        for (int i = 0; i < K; i++){
+            for (int j = 0; j < N; j++) {
+                if (i != j)
+                    dense.data[i*N + j] = 0.0f;
+            }
+        }
 
 
         // initialize output_data
-        dense_matrix<bfloat16> output(M, N);
+        dense_matrix<float> tmp(M, N);
+        dense_matrix<bfloat16> output = tmp.bfloat16_cast();
+
+        for (int i = 0; i < M; i++){
+            for (int j = 0; j < N; j++) {
+                if (i != j)
+                    output.data[i*N + j] = bfloat16(0.0f);
+            }
+        }
+        // so the last two blocks are being overwritten 
+
+        // how to say... what the helly? IN CHINESE
+        // ... what am i doing again?
 
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
 
-        // run golden bsr_spmm
+        // run golden bsr_  
         dense_matrix<bfloat16> golden = bsr_bfloat16.spmm_bfloat16(dense_bfloat16);
 
         // tilize input data
@@ -489,7 +507,7 @@ int main(int argc, char** argv) {
 
         // let's write the output vector to a file
 
-        local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm";
+        std::string local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm";
         std::string output_file = local_path + "/output.txt";
         std::ofstream out(output_file);
         if (!out.is_open()) {

@@ -35,7 +35,7 @@ public:
         if (random)
             std::generate(data.begin(), data.end(), []() { return static_cast<T>(rand()) / static_cast<T>(RAND_MAX); });
         else {
-            data = {1};
+            std::fill(data.begin(), data.end(), 1);
         }
     }
 
@@ -179,7 +179,7 @@ public:
                             if (random) {
                                 data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
                             } else {
-                                data.push_back(1);
+                                data.push_back(k);
                             }
                         }
                     }

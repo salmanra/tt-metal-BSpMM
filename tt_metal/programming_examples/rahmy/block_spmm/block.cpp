@@ -490,7 +490,27 @@ int main(int argc, char** argv) {
         // let's write the output vector to a file
 
         local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm";
-        
+        std::string output_file = local_path + "/output.txt";
+        std::ofstream out(output_file);
+        if (!out.is_open()) {
+            TT_THROW("Failed to open output file: {}", output_file);
+        }
+        for (size_t i = 0; i < output.data.size(); i++) {
+            out << output.data[i].to_float() << "\n";
+        }
+        out.close();
+
+        log_info(tt::LogVerif, "Output written to {}", output_file);
+        // let's write the golden vector to a file
+        std::string golden_file = local_path + "/golden.txt";
+        std::ofstream golden_out(golden_file);
+        if (!golden_out.is_open()) {
+            TT_THROW("Failed to open golden file: {}", golden_file);
+        }
+        for (size_t i = 0; i < golden.data.size(); i++) {
+            golden_out << golden.data[i].to_float() << "\n";
+        }
+        golden_out.close(); 
 
 
         // uhh we know exactly what this mini example output should look like. 

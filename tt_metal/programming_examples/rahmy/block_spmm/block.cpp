@@ -251,8 +251,11 @@ void bsr_spmm_multicore_reuse(
     auto column_indices_dram_buffer = CreateBuffer(dram_config_D);
     uint32_t src0_addr = src0_dram_buffer->address();
     uint32_t src1_addr = src1_dram_buffer->address();
-    uint32_t dst_addr = dst_dram_buffer->address();
+    uint32_t dst_addr = dst_dram_buffer->address(); //TODO: can we memset this b? i don't think so but it's always worth a shot... 
     uint32_t column_indices_addr = column_indices_dram_buffer->address();
+
+    // logically we want this but the cpu can't directly manage device memory like this
+    // memset((void *)dst_addr, 0, sizeof(bfloat16) * M * N);
 
     /*
      * Config of Circular Buffer in the device L1

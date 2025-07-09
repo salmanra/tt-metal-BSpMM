@@ -33,7 +33,10 @@ void kernel_main() {
 
     constexpr uint32_t cb_id_out0 = 16;
 
-    // TODO: kernel should only wait on cb if it is actually receiving something.
+    // DRAM initialization technique:
+    // 1. Cores cooperate to write zeros to the entire region of DRAM. 
+    //      The zeros still have to come from somewhere! Maybe I can provide a global tile 
+    // 2. Cores dealing with nonzero output go about their business. 
     if (nonzero == 0){
         DPRINT_DATA1(DPRINT << "Writer core is writing zeros like a numbskull" << ENDL());
         // on gang. This ain't it. 
@@ -55,6 +58,7 @@ void kernel_main() {
             for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
                 uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
 
+                // nonzero
                 cb_wait_front(cb_id_out0, out_subblock_tile_count);
                 uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
 
@@ -65,7 +69,7 @@ void kernel_main() {
                         l1_read_addr += single_tile_size_bytes;
 
                         out_tensor_tile_id += out_tensor_stride_w;
-                    DPRINT_DATA1(DPRINT << "Wrote a tile" << ENDL());
+                        DPRINT_DATA1(DPRINT << "Wrote a tile" << ENDL());
 
                     }
                     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;

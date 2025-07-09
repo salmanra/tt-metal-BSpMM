@@ -1,13 +1,13 @@
 if [ "$2" = "print" ]; then
-    export TT_METAL_DPRINT_CORES=all
+    export TT_METAL_DPRINT_CORES=worker
 fi
 
 if [ "$2" = "watcher" ]; then
-    
+
     export TT_METAL_WATCHER=20        # the number of seconds between Watcher updates (longer is less invasive)
     export TT_METAL_WATCHER_APPEND=1   # optional: append to the end of the existing log file (vs creating a new file)
     export TT_METAL_WATCHER_DUMP_ALL=0 # optional: dump all state including unsafe state
-    
+
     # TODO: what's the minimal set of things to disable which allows watcher to run?
     export TT_METAL_WATCHER_DISABLE_ASSERT=1
     export TT_METAL_WATCHER_DISABLE_PAUSE=1
@@ -32,4 +32,3 @@ example_name="$1"
 executable_name="./build/programming_examples/rahmy/$example_name"
 
 ./$executable_name
-

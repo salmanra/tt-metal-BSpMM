@@ -35,7 +35,7 @@ public:
         if (random)
             std::generate(data.begin(), data.end(), []() { return static_cast<T>(rand()) / static_cast<T>(RAND_MAX); });
         else {
-            std::fill(data.begin(), data.end(), 1);
+            data = {1};
         }
     }
 
@@ -90,6 +90,7 @@ public:
             }
             std::cout << std::endl;
         }
+
     }
 
     dense_matrix<T> gemm(const dense_matrix<T> &other) {

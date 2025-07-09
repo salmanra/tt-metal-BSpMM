@@ -41,16 +41,16 @@ void kernel_main(){
     // NoC Args
     uint32_t NoC_Args_addr = get_arg_val<uint32_t>(17);
 
-    //DPRINT_DATA1(DPRINT << "Runtime args obtained. NNZ blocks to read: " << num_blocks << ENDL());
+    ////DPRINT_DATA0(DPRINT << "Runtime args obtained. NNZ blocks to read: " << num_blocks << ENDL());
 
 
     constexpr bool in0_is_dram = get_compile_time_arg_val(0) == 1;
     constexpr bool in1_is_dram = get_compile_time_arg_val(1) == 1;
     constexpr bool NoC_Args_is_dram = get_compile_time_arg_val(2) == 1;
 
-    const uint32_t cb_id_in0 = 0;
-    const uint32_t cb_id_in1 = 1;
-    const uint32_t cb_id_NoC_Args = 2;
+    const uint32_t cb_id_in0 = tt::CBIndex::c_0;
+    const uint32_t cb_id_in1 = tt::CBIndex::c_1;
+    const uint32_t cb_id_NoC_Args = tt::CBIndex::c_2;
 
 
     // input data format will probably by bfloat16
@@ -81,7 +81,7 @@ void kernel_main(){
     // The reader kernel is both the producer and consumer of the NoC Args!
     cb_reserve_back(cb_id_NoC_Args, 1); // assume col indices fit into one tile for now
     l1_write_addr_NoC_Args = get_write_ptr(cb_id_NoC_Args);
-    noc_async_read_tile(0, s2, l1_write_addr_NoC_Args); 
+    noc_async_read_tile(0, s2, l1_write_addr_NoC_Args);
     noc_async_read_barrier();
     cb_push_back(cb_id_NoC_Args, 1);
 
@@ -117,8 +117,12 @@ void kernel_main(){
 
 
         // Read in1 block
-        uint32_t col_index = column_indices[block];
-        uint32_t in1_tensor_row_start_tile_id = in1_tensor_start_tile_id + col_index * in1_tensor_stride_h;
+        // We should start however many columns deep the corresponding output block is.
+        // Ah. The terms are confusing.
+        // --- "column_indices" gets us the column indices of the BSR matrix, which are the row indices of the dense matrix
+        // --- "in1_tensor_start_tile_id" will be the top of a column, and bsr_col_index gets us the row in the dense matrix
+        uint32_t bsr_col_index = column_indices[block];
+        uint32_t in1_tensor_row_start_tile_id = in1_tensor_start_tile_id + bsr_col_index * in1_tensor_stride_h;
         for (uint32_t h = 0; h < in1_block_h; h++) {
             uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
             for (uint32_t w = 0; w < in1_block_w; w++) {
@@ -132,10 +136,12 @@ void kernel_main(){
 
         noc_async_read_barrier();
 
+        // I want this to print before announcing to the compute kernel
+        //DPRINT_DATA0(DPRINT << "block " << block << ", " << column_indices[block] << " read" << ENDL());
+
         cb_push_back(cb_id_in0, in0_block_num_tiles);
         cb_push_back(cb_id_in1, in1_block_num_tiles);
 
-        //DPRINT_DATA1(DPRINT << "block " << block << " read" << ENDL());
 
     }
 

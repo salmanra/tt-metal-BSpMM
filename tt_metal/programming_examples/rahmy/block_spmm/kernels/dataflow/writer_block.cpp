@@ -27,12 +27,17 @@ void kernel_main() {
     uint32_t MtNt = get_arg_val<uint32_t>(11);  // if 0
     uint32_t batch = get_arg_val<uint32_t>(12);
 
+    uint32_t nonzero = get_arg_val<uint32_t>(13);
+
     constexpr bool out_is_dram = get_compile_time_arg_val(0) == 1;
 
     constexpr uint32_t cb_id_out0 = 16;
 
-    //DPRINT_DATA0(DPRINT << "Writer core on the case" << ENDL());
-
+    // TODO: kernel should only wait on cb if it is actually receiving something.
+    if (nonzero == 0){
+        DPRINT_DATA1(DPRINT << "Writer core has no work to do" << ENDL());
+        return;
+    }
 
     // single-tile
     const uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
@@ -70,6 +75,8 @@ void kernel_main() {
                                             // have to use noc_async_write_barrier() at
                                             // least once at the end of data movement kernel
                                             // to make sure all writes are done.
+                DPRINT_DATA1(DPRINT << "Wrote something" << ENDL());
+
                 cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }
@@ -77,6 +84,6 @@ void kernel_main() {
         }
         out_tensor_start_tile_id += MtNt;
     }
-    ////DPRINT_DATA0(DPRINT << "Writer core done" << ENDL());
+    DPRINT_DATA1(DPRINT << "Writer core done" << ENDL());
 
 }

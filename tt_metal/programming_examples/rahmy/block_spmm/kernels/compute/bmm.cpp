@@ -39,7 +39,7 @@ void MAIN {
     uint32_t batch = get_arg_val<uint32_t>(11);                   // batch dim
 
     mm_init();
-    //DPRINT_MATH(DPRINT << "Math core on the case" << ENDL());
+    //DPRINT_MATH(DPRINT << "Math core waiting on " << num_blocks << " blocks." << ENDL());
 
 
     for (uint32_t b = 0; b < batch; b++) {
@@ -52,6 +52,9 @@ void MAIN {
 
             cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
             cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
+
+            //DPRINT_MATH(DPRINT << "Math core recieved " << block + 1 << " blocks so far." << ENDL());
+
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
                 int in1_index_subblock_offset = 0;
@@ -127,7 +130,7 @@ void MAIN {
         }
     }
 
-    //DPRINT_MATH(DPRINT << "Math core all done" << ENDL());
+    ////DPRINT_MATH(DPRINT << "Math core received " << num_blocks << " blocks." << ENDL());
 
 }
 }  // namespace NAMESPACE

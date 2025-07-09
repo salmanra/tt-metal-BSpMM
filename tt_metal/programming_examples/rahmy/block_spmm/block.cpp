@@ -117,12 +117,12 @@ void bsr_spmm_multicore_reuse(
 
     uint32_t Rt = R / TILE_HEIGHT;
     uint32_t Ct = C / TILE_WIDTH;
-    
+
 
 
 
     // Get large matmul params
-    // 
+    //
     // auto matmul_params = bmm_op_utils::get_large_matmul_params(Mt, Nt, num_cores_y, num_cores_x, in0_block_w);
     // uint32_t per_core_M = std::get<0>(matmul_params);
     // uint32_t per_core_N = std::get<1>(matmul_params);
@@ -130,16 +130,17 @@ void bsr_spmm_multicore_reuse(
     // uint32_t out_subblock_w = std::get<3>(matmul_params);
     //
     // NAIVE: these should adapt to per core workload later. So we have to understand the util function and why it works!
-    //          short idea: let the tt block size be the nz block size, then take the largest of the 20 subblock choices which fits. 
+    //          short idea: let the tt block size be the nz block size, then take the largest of the 20 subblock choices which fits.
     //          what breaks when in0_block_w = 2??
     uint32_t per_core_M = Rt;
     uint32_t in0_block_w = Ct;
 
     int32_t num_tiles_for_col_indices = (col_indices_single_tile_size - 1 + sizeof(int) * nnz_blocks) / col_indices_single_tile_size;
     uint32_t per_core_N = _get_maximum_block_dim_with_NoC_args(per_core_M, in0_block_w, num_tiles_for_col_indices);
-    
+    per_core_N = std::min(per_core_N, Ct); // TODO: this is a bit contrived and will always be Ct. idk what to do about it tho
+
     // TODO: pick the largest subblock size that fits
-    uint32_t out_subblock_h = 1;
+    uint32_t out_subblock_h = 2;
     uint32_t out_subblock_w = 1;
 
     log_info(tt::LogVerif, " -- Metalium Core Sizing --");
@@ -165,10 +166,6 @@ void bsr_spmm_multicore_reuse(
     uint32_t out_CB_tiles = out_block_tiles;  // No double buffer
     uint32_t out_CB_size = out_CB_tiles * single_tile_size;
 
-    // Compute kernel compile time args
-    // TODO: make this a variable runtime arg
-
-
     uint32_t in0_num_subblocks = (per_core_M / out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
     uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w;
@@ -179,32 +176,32 @@ void bsr_spmm_multicore_reuse(
 
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
 
-
-
     /*
      * Multi-Core prep
      */
     // auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     // uint32_t num_cores_x = compute_with_storage_grid_size.x;
     // uint32_t num_cores_y = compute_with_storage_grid_size.y;
-    // 
-    // NAIVE: these should adapt to per core workload later. 
+    //
+    // NAIVE: these should adapt to per core workload later.
     // uint32_t num_blocks_y = Mt / per_core_M;
-    uint32_t num_blocks_y = M / R; // block_matrix_height, how many blocks tall the input matrix is. 
+    uint32_t num_blocks_y = M / R; // block_matrix_height, how many blocks tall the input matrix is.
     uint32_t num_blocks_x = Nt / per_core_N;
     uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
     TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
     CoreRangeSet all_cores(
         tt::tt_metal::num_cores_to_corerangeset(num_blocks_x * num_blocks_y, compute_with_storage_grid_size, true));
 
-    log_info(tt::LogVerif, " -- Metalium Grid Sizing AFTER --");
+    log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
     log_info(
         tt::LogVerif,
-        " -- Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} --",
+        " -- Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} -- num_cores_x={} -- num_cores_y={} --",
         Mt,
         Nt,
         num_blocks_x,
-        num_blocks_y);
+        num_blocks_y,
+        num_cores_x,
+        num_cores_y);
 
     //////////////////////////////////////////////////
     /*
@@ -221,7 +218,7 @@ void bsr_spmm_multicore_reuse(
 
     // In fact let's pad this to fill a tile at least
     uint32_t dram_buffer_D_size =
-        sizeof(int) * nnz_blocks; // 
+        sizeof(int) * nnz_blocks; //
     dram_buffer_D_size = col_indices_single_tile_size * ((col_indices_single_tile_size - 1 + dram_buffer_D_size) / (col_indices_single_tile_size));
     tt_metal::InterleavedBufferConfig dram_config_A{
         .device = device,
@@ -273,8 +270,8 @@ void bsr_spmm_multicore_reuse(
                                               .set_page_size(src1_cb_index, single_tile_size);
     auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src1_config);
 
-    
-    
+
+
     uint32_t output_cb_index = tt::CBIndex::c_16;
     uint32_t interm0_cb_index = tt::CBIndex::c_24;
     std::map<uint8_t, tt::DataFormat> output_cb_data_format_spec{
@@ -283,7 +280,7 @@ void bsr_spmm_multicore_reuse(
         .set_page_size(output_cb_index, single_tile_size)
         .set_page_size(interm0_cb_index, single_tile_size);
         auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_config);
-        
+
     uint32_t column_indices_cb_index = CBIndex::c_2;  // 2
     CircularBufferConfig cb_column_indices_config = CircularBufferConfig(
         dram_buffer_D_size, {{column_indices_cb_index, tt::DataFormat::Int32}})
@@ -335,16 +332,17 @@ void bsr_spmm_multicore_reuse(
     for (int output_idx_y = 0; output_idx_y < num_blocks_y; output_idx_y++) {
         for (int output_idx_x = 0; output_idx_x < num_blocks_x; output_idx_x++) {
             // TODO: test and reason
-            // TODO: the row index is not quite right... it has some more involved translation... 
             int core_idx_x = num_blocks_read % num_cores_x;
             int core_idx_y = num_blocks_read / num_cores_x;
             CoreCoord core = {(std::size_t)core_idx_x, (std::size_t)core_idx_y};
 
-            uint32_t num_blocks = a.indptr[core_idx_y + 1] - a.indptr[core_idx_y];
+            // What is the translation between core index and output tiles?
+
+            uint32_t num_blocks = a.indptr[output_idx_y + 1] - a.indptr[output_idx_y];
             // Write runtime args to device
             std::vector<uint32_t> mm_reader_args = {
                 (std::uint32_t)src0_dram_buffer->address(),     // in0_tensor_addr
-                (std::uint32_t)num_nnz_blocks_read * Rt * Ct,  // in0_tensor_start_tile_id TODO
+                (std::uint32_t)output_idx_y * Rt * Ct,          // in0_tensor_start_tile_id
                 (std::uint32_t)1,                               // in0_tensor_stride_w
                 (std::uint32_t)Ct,                              // in0_tensor_stride_h
 
@@ -353,17 +351,17 @@ void bsr_spmm_multicore_reuse(
                 (std::uint32_t)in0_block_w * per_core_M,  // in0_block_num_tiles
 
                 (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
-                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id TODO
+                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id TODO almost certainly wrong
                 (std::uint32_t)1,                            // in1_tensor_stride_w
                 (std::uint32_t)Nt,                           // in1_tensor_stride_h
 
                 (std::uint32_t)per_core_N,                // in1_block_w
                 (std::uint32_t)in0_block_w,               // in1_block_h
                 (std::uint32_t)per_core_N * in0_block_w,  // in1_block_num_tiles
-                
-                (std::uint32_t) a.indptr[core_idx_y],    // col indices start of row
-                (std::uint32_t) a.indptr[core_idx_y + 1],// col indices end of row
-                (std::uint32_t) core_idx_y, // row index into bsr matrix
+
+                (std::uint32_t) a.indptr[output_idx_y],    // col indices start of row
+                (std::uint32_t) a.indptr[output_idx_y + 1],// col indices end of row
+                (std::uint32_t) output_idx_y, // row index into bsr matrix
 
                 (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
             };
@@ -383,15 +381,17 @@ void bsr_spmm_multicore_reuse(
                 (std::uint32_t)(per_core_M / out_subblock_h),      // out_num_subblocks_h
 
                 (std::uint32_t)Mt * Nt,  // MtNt
-                (std::uint32_t)B         // batch
+                (std::uint32_t)B,        // batch
+                (std::uint32_t)1*(num_blocks != 0) // nonzero, tells writer whether it has work to do
             };
 
             std::vector<uint32_t> compute_args = {
                 (std::uint32_t)in0_block_w,
                 (std::uint32_t)in0_num_subblocks,
-                (std::uint32_t)in0_block_num_tiles,
+                (std::uint32_t)in0_block_w * per_core_M, // in0_block_num_tiles
                 (std::uint32_t)in0_subblock_num_tiles,
                 (std::uint32_t)in1_num_subblocks,
+                (std::uint32_t)in1_block_num_tiles,
                 (std::uint32_t)in1_per_core_w,
                 (std::uint32_t)num_blocks, // num_blocks
                 (std::uint32_t)out_subblock_h,
@@ -410,6 +410,10 @@ void bsr_spmm_multicore_reuse(
     }
 
     log_info(tt::LogVerif, " -- Runtime Args set --");
+    log_info(
+        tt::LogVerif,
+        " -- nnz blocks read= {}",
+        num_nnz_blocks_read);
 
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
@@ -422,6 +426,8 @@ void bsr_spmm_multicore_reuse(
     log_info(tt::LogVerif, " -- Program enqueued --");
 
     EnqueueReadBuffer(cq, dst_dram_buffer, output.data.data(), true);
+
+    Finish(cq);
 }
 
 int main(int argc, char** argv) {
@@ -438,13 +444,13 @@ int main(int argc, char** argv) {
 
 
         // matmul params setup
-        uint32_t M = 2048;
-        uint32_t N = 2048;
-        uint32_t K = 2048;
+        uint32_t M = 128;
+        uint32_t N = 128;
+        uint32_t K = 128;
         // block params setup
-        uint32_t R = 128;
-        uint32_t C = 128;
-        uint32_t nblocks = 7;
+        uint32_t R = 64;
+        uint32_t C = 64;
+        uint32_t nblocks = 1;
         uint32_t block_matrix_height = M / R;
 
         uint32_t Rt = R / TILE_HEIGHT;
@@ -455,9 +461,8 @@ int main(int argc, char** argv) {
         //      nz diagonal
         //      all nz on one row
         //      all nz on one column
-        // TODO: fix the nz values. 
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
-        dense_matrix<float> dense(K, N, NO_RAND);
+        dense_matrix<float> dense(K, N, 1.0f);
 
         bsr.pretty_print();
 
@@ -468,6 +473,9 @@ int main(int argc, char** argv) {
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
 
+        dense.print();
+        bsr_bfloat16.pretty_print();
+
         // run golden bsr_spmm
         dense_matrix<bfloat16> golden = bsr_bfloat16.spmm_bfloat16(dense_bfloat16);
 
@@ -476,9 +484,35 @@ int main(int argc, char** argv) {
         tilize(dense_bfloat16.data, K, N);
 
         // run bsr_spmm_multicore_reuse
-        // bsr_spmm_multicore_reuse(bsr_bfloat16, dense_bfloat16, output, false, nblocks, M, N, K, R, C, 1, device);
+        bsr_spmm_multicore_reuse(bsr_bfloat16, dense_bfloat16, output, false, nblocks, M, N, K, R, C, 1, device);
 
         // untile output data
+        untilize(output.data, M, N);
+
+        log_info(tt::LogVerif, "Output vector of size {}", output.data.size());
+
+        //
+        // let's print the first few elts of each vec
+        for (int i = 0; i < golden.data.size(); i++){
+            if (std::abs(golden.data[i] - output.data[i]) > 1e-4)
+                std::cout << "too far stupid\n";
+        }
+        for (int i = 0; i < 10; i++){
+            std::cout << golden.data[i] << ' ';
+        }
+        std::cout << std::endl;
+
+        for (int i = 0; i < 10; i++){
+            std::cout << output.data[i] << ' ';
+        }
+        std::cout << std::endl;
+
+
+        float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
+        log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);
+        TT_FATAL(pearson > 0.99, "PCC not high enough. Result PCC: {}, Expected PCC: 0.99", pearson);
+
+
 
         // check all close
 

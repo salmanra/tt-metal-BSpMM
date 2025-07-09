@@ -33,6 +33,7 @@ void kernel_main() {
 
     constexpr uint32_t cb_id_out0 = 16;
 
+    // TODO: kernel should only wait on cb if it is actually receiving something.
     if (nonzero == 0){
         DPRINT_DATA1(DPRINT << "Writer core has no work to do" << ENDL());
         return;
@@ -74,7 +75,7 @@ void kernel_main() {
                                             // have to use noc_async_write_barrier() at
                                             // least once at the end of data movement kernel
                                             // to make sure all writes are done.
-                DPRINT_DATA1(DPRINT << "Wrote something" << ENDL());
+                DPRINT_DATA1(DPRINT << "Wrote a subblock" << ENDL());
 
                 cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;

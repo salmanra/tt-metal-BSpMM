@@ -487,6 +487,12 @@ int main(int argc, char** argv) {
 
         log_info(tt::LogVerif, "Output vector of size {}", output.data.size());
 
+        // let's write the output vector to a file
+
+        local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm";
+        
+
+
         // uhh we know exactly what this mini example output should look like. 
         int false_pos = 0;
         int false_neg = 0;

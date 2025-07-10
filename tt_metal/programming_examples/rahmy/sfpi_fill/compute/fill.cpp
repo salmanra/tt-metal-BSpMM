@@ -9,20 +9,16 @@
 #include "compute_kernel_api/eltwise_unary/eltwise_unary.h"
 #include "compute_kernel_api/eltwise_unary/sfpu_split_includes.h"
 
+// void fill_tile(uint32_t val) {
+//     // assume each call writes 8x16 elts of DST reg. 
+//     // so eight times for a tile?
 
-// only want this to run on math core
-#ifdef TRISC_MATH
-#define ITERATIONS (8)
-inline void fill_zeros()
-{
-    // SFPU microcode
-    for (int d = 0; d < ITERATIONS; d++)
-    {
-        sfpi::vFloat zeros = 0.0f;
-        sfpi::dst_reg[0] = zeros;
-        sfpi::dst_reg++;
-    }
-}
+//     for (int i = 0; i < 8; ++i) {
+//         ckernel::sfpu::calculate_fill<false, ITERATIONS>(val);
+//     }
+// }
+
+// TODO: most of this is copied garbage... just keep reading and start testing.
 
 namespace NAMESPACE {
 void MAIN {
@@ -36,7 +32,9 @@ void MAIN {
             acquire_dst();
 
             // custom llk here, when it returns the DST reg should have the tile to be packed
-            MATH();
+            // TODO: how many tiles does a single call with 8 iterations fill? 
+            // eh... cause it could be 8x32 or 8x16. the latter make more sense but is less satisfying. Let's see. 
+            calculate_fill<false, 64>(0);
             pack_tile(0, tt::CBIndex::c_16);
 
             release_dst();

@@ -70,21 +70,49 @@ int main(int argc, char** argv) {
          num_output_tiles_per_core_group_2] =
             split_work_to_cores(compute_with_storage_grid_size, num_output_tiles_total);
 
-    // TODO: keep going
-
     // Configure and Create Void Kernel
+    // Wait the compute kernels all do the same work. It's the writer kernel that will write some variable number of tiles to the DRAM buffer.
 
     std::vector<uint32_t> compute_kernel_args = {};
-    KernelHandle void_compute_kernel_id = CreateKernel(
+    KernelHandle compute_kernel_id = CreateKernel(
         program,
-        "tt_metal/programming_examples/rahmy/hello_world_compute_kernel_remix/kernels/void_compute_kernel.cpp",
-        core,
+        "tt_metal/programming_examples/rahmy/sfpi_fill/compute/fill.cpp",
+        all_cores,
         ComputeConfig{
             .math_fidelity = MathFidelity::HiFi4,
             .fp32_dest_acc_en = false,
             .math_approx_mode = false,
             .compile_args = compute_kernel_args});
+    
 
+
+    std::vector<uint32_t> writer_kernel_args_group_1 = {num_output_tiles_per_core_group_1}
+    KernelHandle writer_kernel_id_group_1 = CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/sfpi_fill/dataflow/write_fill.cpp",
+        core_group_1,
+        ComputeConfig{
+            .math_fidelity = MathFidelity::HiFi4,
+            .fp32_dest_acc_en = false,
+            .math_approx_mode = false,
+            .compile_args = writer_kernel_args_group_1});
+
+    if (!core_group_2.ranges().empty()) {
+        // Configure and Create Reader Kernel
+        std::vector<uint32_t> writer_kernel_args_group_2 = {num_output_tiles_per_core_group_2};
+
+        KernelHandle writer_kernel_id_group_2 = CreateKernel(
+            program,
+            "tt_metal/programming_examples/rahmy/sfpi_fill/dataflow/write_fill.cpp",
+            core_group_2,
+            ComputeConfig{
+                .math_fidelity = MathFidelity::HiFi4,
+                .fp32_dest_acc_en = false,
+                .math_approx_mode = false,
+                .compile_args = writer_kernel_args_group_2});
+
+        //SetRuntimeArgs(program, reader_kernel_id, core_group_2, {});
+    }
     // Configure Program and Start Program Execution on Device
 
     SetRuntimeArgs(program, void_compute_kernel_id, core, {});

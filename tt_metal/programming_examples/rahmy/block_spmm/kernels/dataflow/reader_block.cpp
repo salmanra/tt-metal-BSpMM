@@ -106,7 +106,7 @@ void kernel_main(){
         // Actually, that's where in0_tensor_start_tile_id comes in!
         uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + block * in0_block_num_tiles;
         for (uint32_t h = 0; h < in0_block_h; h++) {
-            uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id;
+            uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id; // here... ah see line 115, it's no problem. 
             for (uint32_t w = 0; w < in0_block_w; w++) {
                 noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
                 l1_write_addr_in0 += in0_single_tile_size_bytes;

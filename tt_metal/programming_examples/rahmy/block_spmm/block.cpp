@@ -140,7 +140,7 @@ void bsr_spmm_multicore_reuse(
     per_core_N = std::min(per_core_N, Ct); // TODO: this is a bit contrived and will always be Ct. idk what to do about it tho
 
     // TODO: pick the largest subblock size that fits
-    uint32_t out_subblock_h = 2;
+    uint32_t out_subblock_h = 1;
     uint32_t out_subblock_w = 1;
 
     log_info(tt::LogVerif, " -- Metalium Core Sizing --");
@@ -355,7 +355,7 @@ void bsr_spmm_multicore_reuse(
                 (std::uint32_t)in0_block_w * per_core_M,  // in0_block_num_tiles
 
                 (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
-                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id TODO almost certainly wrong
+                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id
                 (std::uint32_t)1,                            // in1_tensor_stride_w
                 (std::uint32_t)Nt,                           // in1_tensor_stride_h
 
@@ -479,12 +479,12 @@ int main(int argc, char** argv) {
         dense_matrix<float> tmp(M, N);
         dense_matrix<bfloat16> output = tmp.bfloat16_cast();
 
-        for (int i = 0; i < M; i++){
-            for (int j = 0; j < N; j++) {
-                if (i != j)
-                    output.data[i*N + j] = bfloat16(0.0f);
-            }
-        }
+        // for (int i = 0; i < M; i++){
+        //     for (int j = 0; j < N; j++) {
+        //         if (i != j)
+        //             output.data[i*N + j] = bfloat16(0.0f);
+        //     }
+        // }
         // so the last two blocks are being overwritten 
 
 
@@ -546,9 +546,9 @@ int main(int argc, char** argv) {
                 else if (i < M/2 && std::abs(output.data[i*N + j].to_float() - 0.0f) < 1e-4)
                     false_neg++;
 
-                if (std::abs(output.data[i*N + j].to_float() - 0.0f) > 1e-4)
+                if (std::abs(output.data[i*N + j].to_float() - 0.0f) > 1e-5)
                     nnz_out++;
-                if (std::abs(golden.data[i*N + j].to_float() - 0.0f) > 1e-4)
+                if (std::abs(golden.data[i*N + j].to_float() - 0.0f) > 1e-5)
                     nnz_gold++;
             }
         }

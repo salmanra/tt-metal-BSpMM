@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <cstring>
 #include "dataflow_api.h"
 #include "debug/dprint.h"  // required in all kernels using DPRINT
 
 
-// TODO: decide whether this kernel needs any changes
 void kernel_main() {
     // out tensor args
     uint32_t out_tensor_addr = get_arg_val<uint32_t>(0);
@@ -28,25 +28,37 @@ void kernel_main() {
     uint32_t batch = get_arg_val<uint32_t>(12);
 
     uint32_t nonzero = get_arg_val<uint32_t>(13);
+    bool zero_output = nonzero == 0;
 
     constexpr bool out_is_dram = get_compile_time_arg_val(0) == 1;
 
     constexpr uint32_t cb_id_out0 = 16;
 
+    // single-tile
+    const uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
+    uint32_t l1_read_addr_increment = single_tile_size_bytes ? 0 : zero_output;
+    const DataFormat data_format = get_dataformat(cb_id_out0);
+
     // DRAM initialization technique:
     // 1. Cores cooperate to write zeros to the entire region of DRAM. 
     //      The zeros still have to come from somewhere! Maybe I can provide a global tile 
     // 2. Cores dealing with nonzero output go about their business. 
-    if (nonzero == 0){
+    if (zero_output){
         DPRINT_DATA1(DPRINT << "Writer core is writing zeros like a numbskull" << ENDL());
         // on gang. This ain't it. 
         // TODO: learn more and come back. See the google doc july 9
-        return;
+        // now we can memset our CB with zeros and get nocing. 
+        // we're still writing to a single output block
+        // now just 
+        // we can memset the 
+        uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
+        memset((void *)l1_read_addr, 0, single_tile_size_bytes);
+
+        // now the rest of the kernel can write to output normally, 
+        // and if it's writing zeros, just never increment the l1_read_addr and never wait on the cb
     }
 
-    // single-tile
-    const uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
-    const DataFormat data_format = get_dataformat(cb_id_out0);
+
 
     const InterleavedAddrGenFast<out_is_dram> s = {
         .bank_base_address = out_tensor_addr, .page_size = single_tile_size_bytes, .data_format = data_format};
@@ -60,14 +72,15 @@ void kernel_main() {
                 uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
 
                 // nonzero
-                cb_wait_front(cb_id_out0, out_subblock_tile_count);
+                if (!zero_output)
+                    cb_wait_front(cb_id_out0, out_subblock_tile_count);
                 uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
 
                 for (uint32_t h = 0; h < out_subblock_h; h++) {
                     uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
                     for (uint32_t w = 0; w < out_subblock_w; w++) {
                         noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
-                        l1_read_addr += single_tile_size_bytes;
+                        l1_read_addr += l1_read_addr_increment;
 
                         out_tensor_tile_id += out_tensor_stride_w;
                         DPRINT_DATA1(DPRINT << "Wrote a tile" << ENDL());
@@ -83,8 +96,8 @@ void kernel_main() {
                                             // have to use noc_async_write_barrier() at
                                             // least once at the end of data movement kernel
                                             // to make sure all writes are done.
-
-                cb_pop_front(cb_id_out0, out_subblock_tile_count);
+                if (!zero_output)
+                    cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }
             out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;

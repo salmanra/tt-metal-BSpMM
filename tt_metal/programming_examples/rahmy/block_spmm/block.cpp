@@ -140,7 +140,7 @@ void bsr_spmm_multicore_reuse(
     per_core_N = std::min(per_core_N, Ct); // TODO: this is a bit contrived and will always be Ct. idk what to do about it tho
 
     // TODO: pick the largest subblock size that fits
-    uint32_t out_subblock_h = 1;
+    uint32_t out_subblock_h = 1; // TODO: figure out the correctness issue here.
     uint32_t out_subblock_w = 1;
 
     log_info(tt::LogVerif, " -- Metalium Core Sizing --");

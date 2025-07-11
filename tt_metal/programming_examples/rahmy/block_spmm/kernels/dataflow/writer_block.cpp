@@ -41,6 +41,7 @@ void kernel_main() {
         DPRINT_DATA1(DPRINT << "Writer core is writing zeros like a numbskull" << ENDL());
         // on gang. This ain't it. 
         // TODO: learn more and come back. See the google doc july 9
+        return;
     }
 
     // single-tile

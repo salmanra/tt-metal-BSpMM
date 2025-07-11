@@ -33,29 +33,31 @@ SFPI program for initializing a DRAM buffer with zeros
 using namespace tt;
 using namespace tt::tt_metal;
 
-int main(int argc, char** argv) {
-    // Initialize Program and Device
-
-    int device_id = 0;
-    IDevice* device = CreateDevice(device_id);
-    CommandQueue& cq = device->command_queue();
-    Program program = CreateProgram();
+void init_dram_multicore(vector<bfloat16>& output, IDevice* device, uint32_t M, uint32_t N) {
 
     auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
 
-    // DRAM buffer is some dense matrix, so we can 
-    uint32_t M = 1024;  // Rows
-    uint32_t N = 1024;  // Columns
 
     uint32_t dram_buffer_size = M * N * 2;  // Size in bytes (bfloat16)
     uint32_t dram_buffer_size_in_tiles = dram_buffer_size / detail::TileSize(tt::DataFormat::Float16_b);
+    
     tt::DataFormat cb_data_format = tt::DataFormat::Float16_b;
     uint32_t single_tile_size = detail::TileSize(cb_data_format);
-
-        // From tt_metal/common/constants.hpp
+        
+    // From tt_metal/common/constants.hpp
     auto num_output_tiles_total = (M * N) / TILE_HW;
+
+    tt_metal::InterleavedBufferConfig dram_buffer_config = {
+        .data_format = cb_data_format,
+        .size = dram_buffer_size,
+        .single_tile_size = single_tile_size,
+        .buffer_type = tt_metal::BufferType::DRAM
+    };
+
+    auto dst_dram_buffer = CreateBuffer(dram_buffer_config);
+    uint32_t dst_addr = dst_dram_buffer->address(); 
 
     /*
      * Use a helper function to deduce the splits needed to co-operatively do
@@ -115,15 +117,88 @@ int main(int argc, char** argv) {
     }
     // Configure Program and Start Program Execution on Device
 
-    SetRuntimeArgs(program, void_compute_kernel_id, core, {});
-    EnqueueProgram(cq, program, false);
-    printf("Hello, Core {0, 0} on Device 0, I am sending you a compute kernel. Standby awaiting communication.\n");
-
-    // Wait Until Program Finishes, Print "Hello World!", and Close Device
+    SetRuntimeArgs(program, void_compute_kernel_id, all_cores, {});
+    EnqueueProgram(cq, program, true);
+    EnqueueReadBuffer(cq, )
 
     Finish(cq);
-    printf("Thank you, Core {0, 0} on Device 0, for the completed task.\n");
     CloseDevice(device);
+}
+
+
+void init_dram_single_tensix(vector<bfloat16>& output, IDevice* device) {
+    CommandQueue& cq = device->command_queue();
+    Program program = CreateProgram();
+
+    tt::DataFormat data_format = tt::DataFormat::Float16_b;
+    uint32_t single_tile_size = detail::TileSize(data_format);
+
+    // Create DRAM buffer
+    uint32_t dram_buffer_size = output.size() * sizeof(bfloat16);
+    tt_metal::InterleavedBufferConfig dram_config{
+        .device = device,
+        .size = dram_buffer_size,
+        .page_size = detail::TileSize(data_format),
+        .buffer_type = tt_metal::BufferType::DRAM};
+
+    auto dram_buffer = CreateBuffer(dram_config);
+    uint32_t dram_addr = dram_buffer->address();
+
+    // config CB for filling. Just needs to be a single tile of bfloat16
+    uint32_t fill_cb_index = tt::CBIndex::c_24; // interm index bc idk
+    uint32_t fill_cb_size = single_tile_size; // one tile!
+    CircularBufferConfig fill_cb_config = CircularBufferConfig(fill_cb_size, {{fill_cb_index, data_format}})
+                                              .set_page_size(fill_cb_index, single_tile_size);
+    auto cb_fill = tt_metal::CreateCircularBuffer(program, {0, 0}, fill_cb_config);
+
+    // Fill the DRAM buffer with zeros using SFPU
+    
+    auto fill_kernel_id = CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/sfpi_fill/compute/fill.cpp",
+        CoreRangeSet{CoreCoord{0, 0}},
+        ComputeConfig{.math_fidelity = MathFidelity::HiFi4, .compile_args = {output.size()}});
+
+    // rt arg probably need a start adress and a number of tiles
+    SetRuntimeArgs(program, fill_kernel_id, CoreRangeSet{CoreCoord{0, 0}}, {dram_addr});
+    EnqueueProgram(cq, program, true);
+    EnqueueReadBuffer(cq)
+    Finish(cq);
+
+}
+
+int main(int argc, char** argv) {
+    // Initialize Program and Device
+
+    bool pass = true;
+    int device_id = 0;
+    IDevice* device = CreateDevice(device_id);
+
+
+    // DRAM buffer is some dense matrix, so we can 
+    uint32_t M = 2048;  // Rows
+    uint32_t N = 2048;  // Columns
+
+    // output vec, init with zeros. If DRAM buffer is not initialized, then this vec will be overwritten with garbage values. 
+    std::vector<bfloat16> output(M * N, bfloat16(0.0f)); 
+    std::vector<bfloat16> golden(M * N, bfloat16(0.0f)); 
+
+    init_dram_single_tensix(output, device):
+
+    float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
+    log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);
+    TT_FATAL(pearson > 0.99, "PCC not high enough. Result PCC: {}, Expected PCC: 0.99", pearson);
+
+    pass &= CloseDevice(device);
+
+    if (pass) {
+        tt::log_info(tt::LogTest, "Test Passed");
+    }
+    else {
+        TT_THROW("Test Failed");
+    }
+
+    TT_ASSERT(pass);
 
     return 0;
 }

@@ -487,9 +487,6 @@ int main(int argc, char** argv) {
         }
         // so the last two blocks are being overwritten 
 
-        // how to say... what the helly? IN CHINESE
-        // ... what am i doing again?
-
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -509,8 +506,7 @@ int main(int argc, char** argv) {
 
         log_info(tt::LogVerif, "Output vector of size {}", output.data.size());
 
-        // let's write the output vector to a file
-
+        // let's write the output vectors to a file
         std::string local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm";
         std::string output_file = local_path + "/output.txt";
         std::ofstream out(output_file);
@@ -570,9 +566,6 @@ int main(int argc, char** argv) {
         float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
         log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);
         TT_FATAL(pearson > 0.99, "PCC not high enough. Result PCC: {}, Expected PCC: 0.99", pearson);
-
-
-
         // check all close
 
         // close device and check for errors

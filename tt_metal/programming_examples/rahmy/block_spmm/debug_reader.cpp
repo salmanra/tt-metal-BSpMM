@@ -15,6 +15,15 @@
 #include "bsr_matrix.hpp"
 #include "bmm_op.hpp"
 
+// TODO:
+/*
+1. set up a BSR matrix
+2. use your reader kernel to bring it to a CB
+3. use your writer kernel to immediately move it from the CB to DRAM
+4. read from dram
+5. check for correctness.
+*/
+
 using namespace tt::constants;
 using namespace std;
 using namespace tt;
@@ -447,9 +456,9 @@ int main(int argc, char** argv) {
 
 
         // matmul params setup
-        uint32_t M = 64;
-        uint32_t N = 64;
-        uint32_t K = 64;
+        uint32_t M = 128;
+        uint32_t N = 128;
+        uint32_t K = 128;
         // block params setup
         uint32_t R = 64;
         uint32_t C = 64;

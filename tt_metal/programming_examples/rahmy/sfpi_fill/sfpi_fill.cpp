@@ -155,11 +155,11 @@ void init_dram_single_tensix(std::vector<bfloat16>& output, IDevice* device, uin
 
     // Fill the DRAM buffer with zeros using SFPU
     
-    auto fill_kernel_id = CreateKernel(
-        program,
-        "tt_metal/programming_examples/rahmy/sfpi_fill/compute/fill.cpp",
-        CoreRangeSet{CoreCoord{0, 0}},
-        ComputeConfig{.math_fidelity = MathFidelity::HiFi4, .compile_args = {}});
+    // auto fill_kernel_id = CreateKernel(
+    //     program,
+    //     "tt_metal/programming_examples/rahmy/sfpi_fill/compute/fill.cpp",
+    //     CoreRangeSet{CoreCoord{0, 0}},
+    //     ComputeConfig{.math_fidelity = MathFidelity::HiFi4, .compile_args = {}});
 
     // comptime args: num tiles 
     // runtime args: start addr

@@ -27,7 +27,7 @@ void kernel_main() {
         .data_format = data_format};
 
     // cb_wait_front a single tile
-    cb_wait_front(cb_id_out0, ublock_size_tiles);
+    // cb_wait_front(cb_id_out0, ublock_size_tiles);
     uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
 
     uint32_t* data = (uint32_t*)l1_read_addr;

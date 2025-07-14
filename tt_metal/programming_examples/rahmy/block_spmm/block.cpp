@@ -45,6 +45,11 @@ void test_sequential_bsr_spmm() {
     TT_FATAL(pearson > 0.99, "PCC not high enough. Result PCC: {}, Expected PCC: 0.99", pearson);
 }
 
+void test_multicore_bsr_spmm() {
+    // uhh we could write a bunch of tests. Let's do this in our machine's programming environment.
+    // how did marty set things up in his code?
+}
+
 void bsr_spmm_multicore_reuse(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -530,37 +535,36 @@ int main(int argc, char** argv) {
         golden_out.close();
 
 
-        // uhh we know exactly what this mini example output should look like.
-        int false_pos = 0;
-        int false_neg = 0;
-        int total_bad = 0;
-        int nnz_gold = 0;
-        int nnz_out = 0;
-        for (int i = 0; i < M; i++){
-            for (int j = 0; j < N; j++) {
-                if (std::abs(output.data[i*N + j].to_float() - golden.data[i*N + j].to_float()) > 1e-4)
-                    total_bad++;
-                if (i >= M/2 && std::abs(output.data[i*N + j].to_float() - 0.0f) > 1e-4)
-                    false_pos++;
-                else if (i < M/2 && std::abs(output.data[i*N + j].to_float() - 0.0f) < 1e-4)
-                    false_neg++;
+        // int false_pos = 0;
+        // int false_neg = 0;
+        // int total_bad = 0;
+        // int nnz_gold = 0;
+        // int nnz_out = 0;
+        // for (int i = 0; i < M; i++){
+        //     for (int j = 0; j < N; j++) {
+        //         if (std::abs(output.data[i*N + j].to_float() - golden.data[i*N + j].to_float()) > 1e-4)
+        //             total_bad++;
+        //         if (i >= M/2 && std::abs(output.data[i*N + j].to_float() - 0.0f) > 1e-4)
+        //             false_pos++;
+        //         else if (i < M/2 && std::abs(output.data[i*N + j].to_float() - 0.0f) < 1e-4)
+        //             false_neg++;
 
-                if (std::abs(output.data[i*N + j].to_float() - 0.0f) > 1e-5)
-                    nnz_out++;
-                if (std::abs(golden.data[i*N + j].to_float() - 0.0f) > 1e-5)
-                    nnz_gold++;
-            }
-        }
+        //         if (std::abs(output.data[i*N + j].to_float() - 0.0f) > 1e-5)
+        //             nnz_out++;
+        //         if (std::abs(golden.data[i*N + j].to_float() - 0.0f) > 1e-5)
+        //             nnz_gold++;
+        //     }
+        // }
 
-        // count nonzero elements in golden
-        log_info(tt::LogVerif, " -- False Positive Count={} -- False Negative Count={} -- Total bad={}",
-            false_pos,
-            false_neg,
-            total_bad);
+        // // count nonzero elements in golden
+        // log_info(tt::LogVerif, " -- False Positive Count={} -- False Negative Count={} -- Total bad={}",
+        //     false_pos,
+        //     false_neg,
+        //     total_bad);
 
-        log_info(tt::LogVerif, " -- NNZ elts golden={} -- NNZ elts output={}",
-            nnz_gold,
-            nnz_out);
+        // log_info(tt::LogVerif, " -- NNZ elts golden={} -- NNZ elts output={}",
+        //     nnz_gold,
+        //     nnz_out);
 
         float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
         log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);

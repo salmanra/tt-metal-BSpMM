@@ -133,6 +133,19 @@ public:
         }
         return true;
     }
+
+    bool all_close_bfloat16(const dense_matrix<bfloat16> &other, float tol = 1e-5) {
+        assert(H == other.H && W == other.W);
+        for (size_t i = 0; i < H; ++i) {
+            for (size_t j = 0; j < W; ++j) {
+
+                if (std::abs(data[i * W + j].to_float() - other.data[i * W + j].to_float()) > tol) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
 };
 
 template <typename T>
@@ -190,12 +203,12 @@ public:
                 for (size_t i = 0; i < blocked_matrix_height; i++) {
                     if (i * blocked_matrix_width + j < nblocks) {
                         indptr[i + 1]++;
-                        indices.push_back(i);
+                        indices.push_back(j);
                         for (size_t k = 0; k < R * C; k++) {
                             if (random) {
                                 data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
                             } else {
-                                data.push_back(1);
+                                data.push_back(k);
                             }
                         }
                     }
@@ -204,7 +217,7 @@ public:
         } else {
             throw std::invalid_argument("Invalid fill type");
         }
-                for (size_t i = 1; i < indptr.size(); i++) {
+        for (size_t i = 1; i < indptr.size(); i++) {
             indptr[i] += indptr[i - 1];
         }
         indptr.resize(blocked_matrix_height + 1);

@@ -21,6 +21,12 @@ using namespace std;
 using namespace tt;
 using namespace tt::tt_metal;
 
+struct TestResult {
+    std::string test_name;
+    float pearson;
+    bool all_close;
+};
+
 uint32_t _get_maximum_block_dim_with_NoC_args(int32_t block_dim, int32_t in0_block_w, int32_t num_tiles_in_NoC_args) {
     int32_t num_available_tiles_in_SRAM = 400; // as provided by TT code. roughly: SRAM size in bytes divided by tile size in bytes
     num_available_tiles_in_SRAM -= num_tiles_in_NoC_args;
@@ -94,7 +100,7 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
     uint32_t nblocks = 2;
     uint32_t block_matrix_height = M / R;
 
-    // all nz on one row
+    // all nz on one col
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, NO_RAND);
     dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
     for (int i = 0; i < K; i++){
@@ -107,6 +113,61 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
     return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks_col");
+}
+
+
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_row_simplified() {
+    // matmul params setup
+    uint32_t M = 32;
+    uint32_t N = 32;
+    uint32_t K = 64;
+    // block params setup
+    uint32_t R = 32;
+    uint32_t C = 32;
+    uint32_t nblocks = 2;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one col
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
+    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    for (int i = 0; i < K; i++){
+        for (int j = 0; j < N; j++) {
+            if (i != j)
+                dense.data[i*N + j] = 0.0f;
+        }
+    }
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks_row_simplified");
+}
+
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_col_simplified() {
+    // matmul params setup
+    uint32_t M = 64;
+    uint32_t N = 32;
+    uint32_t K = 32;
+    // block params setup
+    uint32_t R = 32;
+    uint32_t C = 32;
+    uint32_t nblocks = 2;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one col
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, NO_RAND);
+    dense_matrix<float> dense(K, N, 1.0f); // ID matrix
+    for (int i = 0; i < K; i++){
+        for (int j = 0; j < N; j++) {
+            if (i != j)
+                dense.data[i*N + j] = 0.0f;
+        }
+    }
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+
+    bsr_bfloat16.pretty_print();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks_col_simplified");
 }
 
 
@@ -365,7 +426,7 @@ void bsr_spmm_multicore_reuse(
         all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = {}});
 
-    uint32_t num_nnz_blocks_read = 0;
+    uint32_t num_nnz_output_blocks = 0;
     uint32_t num_blocks_read = 0;
     for (int output_idx_y = 0; output_idx_y < num_blocks_y; output_idx_y++) {
         for (int output_idx_x = 0; output_idx_x < num_blocks_x; output_idx_x++) {
@@ -443,7 +504,7 @@ void bsr_spmm_multicore_reuse(
             tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_args);
             num_blocks_read++;
             if (num_blocks > 0)
-                num_nnz_blocks_read++;
+                num_nnz_output_blocks++;
         }
     }
 
@@ -451,8 +512,8 @@ void bsr_spmm_multicore_reuse(
         log_info(tt::LogVerif, " -- Runtime Args set --");
         log_info(
             tt::LogVerif,
-            " -- nnz blocks read= {}",
-            num_nnz_blocks_read);
+            " -- nnz output blocks= {}",
+            num_nnz_output_blocks);
     }
 
 
@@ -474,7 +535,7 @@ void bsr_spmm_multicore_reuse(
 
 }
 
-std::pair<std::string, float> run_test(
+TestResult run_test(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
     std::string test_name,
@@ -524,12 +585,10 @@ std::pair<std::string, float> run_test(
     // run bsr_spmm_multicore_reuse
     bsr_spmm_multicore_reuse(a, b, output, false, nblocks, M, N, K, R, C, 1, device, verbose);
 
-    // untile output data
-    untilize(output.data, M, N);
-
-    float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
 
     if (emit_output) {
+
+        // it makes 1000x more sense to print the tilized result. That's what these are!... bruh moment
         // let's write the output vectors to a file
         std::string local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm/" + test_name;
 
@@ -540,6 +599,7 @@ std::pair<std::string, float> run_test(
         if (!out.is_open()) {
             TT_THROW("Failed to open output file: {}", output_file);
         }
+        untilize(output.data, M, N);
         for (size_t i = 0; i < output.data.size(); i++) {
             out << output.data[i].to_float() << "\n";
         }
@@ -552,45 +612,67 @@ std::pair<std::string, float> run_test(
         if (!golden_out.is_open()) {
             TT_THROW("Failed to open golden file: {}", golden_file);
         }
+
         for (size_t i = 0; i < golden.data.size(); i++) {
             golden_out << golden.data[i].to_float() << "\n";
         }
         golden_out.close();
+
+
+        // print bsr matrix. should i tilize?
+        std::string bsr_file = local_path + "/bsr.txt";
+        std::ofstream bsr_out(bsr_file);
+        if (!bsr_out.is_open()) {
+            TT_THROW("Failed to open bsr file: {}", bsr_file);
+        }
+        untilize(a.data, R, C);
+        for (size_t i = 0; i < a.data.size(); i++) {
+            bsr_out << a.data[i].to_float() << "\n";
+        }
+        bsr_out.close();
     }
+
+    // untile output data
+    if (!emit_output)
+        untilize(output.data, M, N);
+
+    float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
+
+    bool all_close = golden.all_close_bfloat16(output);
 
     CloseDevice(device);
 
-    return std::make_pair(test_name, pearson);
-
+    return TestResult{test_name, pearson, all_close};
 }
 
 void add_and_run_test(
-        vector<std::pair<std::string, float>> &results,
         std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*function_ptr)(),
+        vector<TestResult> &results,
         bool verbose = false,
         bool emit_output = false) {
     auto [a, b, test_name] = function_ptr();
     results.push_back(run_test(a, b, test_name, verbose, emit_output));
 }
 
-bool print_and_assess_results(std::vector<std::pair<std::string, float>> &test_results){
-    bool pass = true;
+bool print_and_assess_results(std::vector<TestResult> &test_results){
+    bool all_pass = true;
     char buf[12];
     uint32_t count = 0;
     for (auto &p : test_results) {
-        if (p.second <= 0.99){
+        bool pass = true;
+        if (!p.all_close){
+            all_pass = false;
             pass = false;
         }
-        std::string result = p.second > 0.99 ? "✅ PASS " : "❌ FAIL ";
-        sprintf(buf, "w/ PCC=%.2f", p.second);
+        std::string result = pass ? "✅ PASS " : "❌ FAIL ";
+        sprintf(buf, "w/ PCC=%.2f", p.pearson);
         result += std::string(buf);
-
-        std::cout << "Test #" << count << ": " << result << ' ';
-        std::cout << p.first << std::endl;
+        result += p.pearson > 0.99 ? " ✅ TRUE ": " ❌ FLSE ";
+        std::cout << "Test #" << count << ": " << result << " " << count << ' ' << p.test_name << std::endl;
         count++;
     }
 
-    return pass;
+    return all_pass;
 }
 void test_suite(){
     /*
@@ -598,21 +680,26 @@ void test_suite(){
     2. call run_test(test_func(), verbose, emit_output) for each test, adding to the vector
     3. iter over vector and pretty print passes and fails to the console
     */
-    std::vector<std::pair<std::string, float>> test_results;
+    std::vector<TestResult> test_results;
 
     // growing list of tests
     // TODO: make a static registry of tests so you can then run tests from the command line by their test number in the registry 
-    add_and_run_test(test_results, test_basic);
-    add_and_run_test(test_results, test_2_blocks);
-    add_and_run_test(test_results, test_2_blocks_col);
+    add_and_run_test(test_basic, test_results);
+    add_and_run_test(test_2_blocks, test_results);
+    add_and_run_test(test_2_blocks_col, test_results);
+    add_and_run_test(test_2_blocks_col_simplified, test_results, true, true);
+    add_and_run_test(test_2_blocks_row_simplified, test_results);
 
     bool pass = print_and_assess_results(test_results);
     std::string result = pass ? "✅✅✅ PASS ✅✅✅" : "❌❌❌ FAIL ❌❌❌";
 
     std::cout << "----------------------------" << std::endl;
-    std::cout << "Test suite result: " << result << std::endl;
+    std::cout << result << std::endl;
 
-
+    /*
+    For later, 
+    can we add tests at runtime, ie not having to rebuild this function each time we add a test?
+    */
 }
 
 int main(int argc, char** argv) {

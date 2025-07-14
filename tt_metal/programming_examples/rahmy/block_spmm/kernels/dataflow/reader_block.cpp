@@ -104,7 +104,8 @@ void kernel_main(){
         // block_row_start tells us which nonzero BLOCK we're in...
         // we need to get the tile at which that block starts.
         // Actually, that's where in0_tensor_start_tile_id comes in!
-        uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + block * in0_block_num_tiles;
+        uint32_t num_blocks_in = block - block_row_start;
+        uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles;
         for (uint32_t h = 0; h < in0_block_h; h++) {
             uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id; // here... ah see line 115, it's no problem. 
             for (uint32_t w = 0; w < in0_block_w; w++) {

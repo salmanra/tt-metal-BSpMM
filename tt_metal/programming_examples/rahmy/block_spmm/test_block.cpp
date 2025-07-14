@@ -83,6 +83,32 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
     return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks");
 }
 
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_col() {
+    // matmul params setup
+    uint32_t M = 128;
+    uint32_t N = 128;
+    uint32_t K = 128;
+    // block params setup
+    uint32_t R = 64;
+    uint32_t C = 64;
+    uint32_t nblocks = 2;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one row
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, NO_RAND);
+    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    for (int i = 0; i < K; i++){
+        for (int j = 0; j < N; j++) {
+            if (i != j)
+                dense.data[i*N + j] = 0.0f;
+        }
+    }
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks_col");
+}
+
 
 // TODO: put this in its own file somewhere and include it.
 void bsr_spmm_multicore_reuse(
@@ -547,6 +573,25 @@ void add_and_run_test(
     results.push_back(run_test(a, b, test_name, verbose, emit_output));
 }
 
+bool print_and_assess_results(std::vector<std::pair<std::string, float>> &test_results){
+    bool pass = true;
+    char buf[12];
+    uint32_t count = 0;
+    for (auto &p : test_results) {
+        if (p.second <= 0.99){
+            pass = false;
+        }
+        std::string result = p.second > 0.99 ? "✅ PASS " : "❌ FAIL ";
+        sprintf(buf, "w/ PCC=%.2f", p.second);
+        result += std::string(buf);
+
+        std::cout << "Test #" << count << ": " << result << ' ';
+        std::cout << p.first << std::endl;
+        count++;
+    }
+
+    return pass;
+}
 void test_suite(){
     /*
     1. Reserve a vector of <test_name, PCC> pairs.
@@ -556,19 +601,18 @@ void test_suite(){
     std::vector<std::pair<std::string, float>> test_results;
 
     // growing list of tests
+    // TODO: make a static registry of tests so you can then run tests from the command line by their test number in the registry 
     add_and_run_test(test_results, test_basic);
     add_and_run_test(test_results, test_2_blocks);
+    add_and_run_test(test_results, test_2_blocks_col);
 
-    char buf[12];
-    uint32_t count = 0;
-    for (auto &p : test_results) {
-        std::string result = p.second > 0.99 ? "✅ PASS" : "❌ FAIL";
-        sprintf(buf, "w/ PCC=%.2f", p.second);
-        result += std::string(buf);// (" w/ PCC={}", p.second);
-        std::cout << "Test #" << count << ": " << result << ' ';
-        std::cout << p.first << std::endl;
-        count++;
-    }
+    bool pass = print_and_assess_results(test_results);
+    std::string result = pass ? "✅✅✅ PASS ✅✅✅" : "❌❌❌ FAIL ❌❌❌";
+
+    std::cout << "----------------------------" << std::endl;
+    std::cout << "Test suite result: " << result << std::endl;
+
+
 }
 
 int main(int argc, char** argv) {

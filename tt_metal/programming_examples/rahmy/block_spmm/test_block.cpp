@@ -9,6 +9,7 @@
 // #include <matmul_common/bmm_op.hpp>
 #include <tt-metalium/tilize_untilize.hpp>
 
+#include <vector>
 #include <tuple>
 #include <filesystem> // for emitting test output
 
@@ -30,7 +31,7 @@ uint32_t _get_maximum_block_dim_with_NoC_args(int32_t block_dim, int32_t in0_blo
     return 0;
 }
 
-std::tuple<bsr_matrix, dense_matrix, std::string> test_basic() {
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_basic() {
     // matmul params setup
     uint32_t M = 64;
     uint32_t N = 64;
@@ -50,11 +51,40 @@ std::tuple<bsr_matrix, dense_matrix, std::string> test_basic() {
                 dense.data[i*N + j] = 0.0f;
         }
     }
-    return std::make_tuple(bsr, dense, "test_basic");
-} 
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_basic");
+}
+
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks() {
+    // matmul params setup
+    uint32_t M = 128;
+    uint32_t N = 128;
+    uint32_t K = 128;
+    // block params setup
+    uint32_t R = 64;
+    uint32_t C = 64;
+    uint32_t nblocks = 2;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one row
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
+    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    for (int i = 0; i < K; i++){
+        for (int j = 0; j < N; j++) {
+            if (i != j)
+                dense.data[i*N + j] = 0.0f;
+        }
+    }
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks");
+}
 
 
-// TODO: put this in its own file somewhere and include it. 
+// TODO: put this in its own file somewhere and include it.
 void bsr_spmm_multicore_reuse(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -427,10 +457,10 @@ std::pair<std::string, float> run_test(
 
     /*
     Requires: a, b to be initialized on CPU
-    Modifies: can modifiy output files and log data 
-    Effects: 
+    Modifies: can modifiy output files and log data
+    Effects:
 
-    Returns the PCC between the sequential matmul of a and b and the multicore matmul of a and b. 
+    Returns the PCC between the sequential matmul of a and b and the multicore matmul of a and b.
     */
 
     // TODO: should we put all this in a try-catch block?
@@ -462,8 +492,8 @@ std::pair<std::string, float> run_test(
     dense_matrix<bfloat16> golden = a.spmm_bfloat16(b);
 
     // tilize input data
-    tilize(bsr_bfloat16.data, R, C);
-    tilize(dense_bfloat16.data, K, N);
+    tilize(a.data, R, C);
+    tilize(b.data, K, N);
 
     // run bsr_spmm_multicore_reuse
     bsr_spmm_multicore_reuse(a, b, output, false, nblocks, M, N, K, R, C, 1, device, verbose);
@@ -478,7 +508,7 @@ std::pair<std::string, float> run_test(
         std::string local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm/" + test_name;
 
         // TODO: will a failure here get caught in the larger try catch block?
-        fs::create_directory(local_path);
+        std::filesystem::create_directory(local_path);
         std::string output_file = local_path + "/output.txt";
         std::ofstream out(output_file);
         if (!out.is_open()) {
@@ -500,33 +530,51 @@ std::pair<std::string, float> run_test(
             golden_out << golden.data[i].to_float() << "\n";
         }
         golden_out.close();
-    }    
+    }
 
     CloseDevice(device);
 
-    return pearson; 
+    return std::make_pair(test_name, pearson);
 
 }
 
-int main(int argc, char** argv) {
+void add_and_run_test(
+        vector<std::pair<std::string, float>> &results,
+        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*function_ptr)(),
+        bool verbose = false,
+        bool emit_output = false) {
+    auto [a, b, test_name] = function_ptr();
+    results.push_back(run_test(a, b, test_name, verbose, emit_output));
+}
+
+void test_suite(){
     /*
-    1. Reserve a vector of <test_name, PCC> pairs. 
+    1. Reserve a vector of <test_name, PCC> pairs.
     2. call run_test(test_func(), verbose, emit_output) for each test, adding to the vector
     3. iter over vector and pretty print passes and fails to the console
     */
-
     std::vector<std::pair<std::string, float>> test_results;
 
-    test_results.push_back(run_test(std::tie(test_basic()), false, false));
+    // growing list of tests
+    add_and_run_test(test_results, test_basic);
+    add_and_run_test(test_results, test_2_blocks);
 
+    char buf[12];
     uint32_t count = 0;
     for (auto &p : test_results) {
-        std::cout << "Test #" << count << ": " << p.first << ' ';
-        std::string result = p.second > 0.99 ? "PASS ✅" : "FAIL ❌"; 
+        std::string result = p.second > 0.99 ? "✅ PASS" : "❌ FAIL";
+        sprintf(buf, "w/ PCC=%.2f", p.second);
+        result += std::string(buf);// (" w/ PCC={}", p.second);
+        std::cout << "Test #" << count << ": " << result << ' ';
+        std::cout << p.first << std::endl;
         count++;
     }
-    /*
-    For later: add args for only running certain tests
-    */
+}
+
+int main(int argc, char** argv) {
+
+    bool test = true;
+    if (test)
+        test_suite();
 
 }

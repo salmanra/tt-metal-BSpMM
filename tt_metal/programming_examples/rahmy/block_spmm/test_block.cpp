@@ -102,7 +102,7 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
 
     // all nz on one col
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, NO_RAND);
-    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    dense_matrix<float> dense(K, N, 1.0f); // ID matrix
     for (int i = 0; i < K; i++){
         for (int j = 0; j < N; j++) {
             if (i != j)
@@ -155,7 +155,7 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
 
     // all nz on one col
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, NO_RAND);
-    dense_matrix<float> dense(K, N, 1.0f); // ID matrix
+    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
     for (int i = 0; i < K; i++){
         for (int j = 0; j < N; j++) {
             if (i != j)
@@ -166,7 +166,6 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
 
-    bsr_bfloat16.pretty_print();
     return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks_col_simplified");
 }
 
@@ -481,7 +480,7 @@ void bsr_spmm_multicore_reuse(
 
                 (std::uint32_t)Mt * Nt,  // MtNt
                 (std::uint32_t)B,        // batch
-                (std::uint32_t)1*(num_blocks != 0) // nonzero, tells writer whether it has work to do
+                (std::uint32_t)1*(num_blocks != 0) // nonzero, tells writer whether it has values to read
             };
 
             std::vector<uint32_t> compute_args = {
@@ -599,7 +598,6 @@ TestResult run_test(
         if (!out.is_open()) {
             TT_THROW("Failed to open output file: {}", output_file);
         }
-        untilize(output.data, M, N);
         for (size_t i = 0; i < output.data.size(); i++) {
             out << output.data[i].to_float() << "\n";
         }
@@ -613,28 +611,29 @@ TestResult run_test(
             TT_THROW("Failed to open golden file: {}", golden_file);
         }
 
+        tilize(golden.data, M, N);
         for (size_t i = 0; i < golden.data.size(); i++) {
             golden_out << golden.data[i].to_float() << "\n";
         }
+        untilize(golden.data, M, N);
         golden_out.close();
 
 
-        // print bsr matrix. should i tilize?
-        std::string bsr_file = local_path + "/bsr.txt";
-        std::ofstream bsr_out(bsr_file);
-        if (!bsr_out.is_open()) {
-            TT_THROW("Failed to open bsr file: {}", bsr_file);
-        }
-        untilize(a.data, R, C);
-        for (size_t i = 0; i < a.data.size(); i++) {
-            bsr_out << a.data[i].to_float() << "\n";
-        }
-        bsr_out.close();
+        // // print bsr matrix. should i tilize?
+        // std::string bsr_file = local_path + "/bsr.txt";
+        // std::ofstream bsr_out(bsr_file);
+        // if (!bsr_out.is_open()) {
+        //     TT_THROW("Failed to open bsr file: {}", bsr_file);
+        // }
+        // untilize(a.data, R, C);
+        // for (size_t i = 0; i < a.data.size(); i++) {
+        //     bsr_out << a.data[i].to_float() << "\n";
+        // }
+        // bsr_out.close();
     }
 
     // untile output data
-    if (!emit_output)
-        untilize(output.data, M, N);
+    untilize(output.data, M, N);
 
     float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
 
@@ -667,7 +666,7 @@ bool print_and_assess_results(std::vector<TestResult> &test_results){
         std::string result = pass ? "✅ PASS " : "❌ FAIL ";
         sprintf(buf, "w/ PCC=%.2f", p.pearson);
         result += std::string(buf);
-        result += p.pearson > 0.99 ? " ✅ TRUE ": " ❌ FLSE ";
+        result += p.pearson > 0.99 ? " ✅ ": " ❌ ";
         std::cout << "Test #" << count << ": " << result << " " << count << ' ' << p.test_name << std::endl;
         count++;
     }
@@ -685,9 +684,9 @@ void test_suite(){
     // growing list of tests
     // TODO: make a static registry of tests so you can then run tests from the command line by their test number in the registry 
     add_and_run_test(test_basic, test_results);
-    add_and_run_test(test_2_blocks, test_results);
-    add_and_run_test(test_2_blocks_col, test_results);
-    add_and_run_test(test_2_blocks_col_simplified, test_results, true, true);
+    add_and_run_test(test_2_blocks, test_results, true, true);
+    add_and_run_test(test_2_blocks_col, test_results, false, true);
+    add_and_run_test(test_2_blocks_col_simplified, test_results);
     add_and_run_test(test_2_blocks_row_simplified, test_results);
 
     bool pass = print_and_assess_results(test_results);
@@ -704,8 +703,40 @@ void test_suite(){
 
 int main(int argc, char** argv) {
 
-    bool test = true;
-    if (test)
+    // TODO: make this a command line arg
+    bool test = false;
+    if (test) {
         test_suite();
+    }
+    else {
+        // run what I want you to run!
+        uint32_t M = 128;
+        uint32_t N = 128;
+        uint32_t K = 128;
+        // block params setup
+        uint32_t R = 64;
+        uint32_t C = 64;
+        uint32_t nblocks = 2;
+        uint32_t block_matrix_height = M / R;
+
+        // all nz on one col
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, NO_RAND);
+        dense_matrix<float> dense(K, N, 1.0f); // ID matrix
+        for (int i = 0; i < K; i++){
+            for (int j = 0; j < N; j++) {
+                if (i != j)
+                    dense.data[i*N + j] = 0.0f;
+            }
+        }
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+
+        TestResult res = run_test(bsr_bfloat16, dense_bfloat16, "main", true, true);
+        std::vector<TestResult> vec;
+        vec.push_back(res);
+        print_and_assess_results(vec);
+
+    }
 
 }

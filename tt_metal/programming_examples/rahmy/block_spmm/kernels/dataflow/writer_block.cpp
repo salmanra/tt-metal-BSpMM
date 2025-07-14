@@ -36,7 +36,7 @@ void kernel_main() {
 
     // single-tile
     const uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
-    uint32_t l1_read_addr_increment = single_tile_size_bytes ? 0 : zero_output;
+    uint32_t l1_read_addr_increment = zero_output ? 0 : single_tile_size_bytes;
     const DataFormat data_format = get_dataformat(cb_id_out0);
 
     // DRAM initialization technique:
@@ -83,7 +83,9 @@ void kernel_main() {
                         l1_read_addr += l1_read_addr_increment;
 
                         out_tensor_tile_id += out_tensor_stride_w;
-                        DPRINT_DATA1(DPRINT << "Wrote a tile" << ENDL());
+
+                        const char * zero = zero_output ? "zero " : ""; 
+                        DPRINT_DATA1(DPRINT << "Wrote a " << zero << "tile: " << out_tensor_tile_id << ENDL());
 
                     }
                     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;

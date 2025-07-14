@@ -1,6 +1,3 @@
-
-
-
 #include <tt-metalium/host_api.hpp>
 #include <tt-metalium/constants.hpp>
 #include <tt-metalium/util.hpp>
@@ -11,6 +8,9 @@
 #include <tt-metalium/tt_metal.hpp>
 // #include <matmul_common/bmm_op.hpp>
 #include <tt-metalium/tilize_untilize.hpp>
+
+#include <tuple>
+#include <filesystem> // for emitting test output
 
 #include "bsr_matrix.hpp"
 #include "bmm_op.hpp"
@@ -30,33 +30,31 @@ uint32_t _get_maximum_block_dim_with_NoC_args(int32_t block_dim, int32_t in0_blo
     return 0;
 }
 
-void test_sequential_bsr_spmm() {
-    bsr_matrix<float> bsr(2048, 2048, 128, 128, 3, RAND);
-    dense_matrix<float> dense(2048, 16, RAND);
+std::tuple<bsr_matrix, dense_matrix, std::string> test_basic() {
+    // matmul params setup
+    uint32_t M = 64;
+    uint32_t N = 64;
+    uint32_t K = 64;
+    // block params setup
+    uint32_t R = 64;
+    uint32_t C = 64;
+    uint32_t nblocks = 1;
+    uint32_t block_matrix_height = M / R;
 
-    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
-    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    // all nz on one row
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
+    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    for (int i = 0; i < K; i++){
+        for (int j = 0; j < N; j++) {
+            if (i != j)
+                dense.data[i*N + j] = 0.0f;
+        }
+    }
+    return std::make_tuple(bsr, dense, "test_basic");
+} 
 
-    dense_matrix<bfloat16> expected = bsr_bfloat16.to_dense().gemm_bfloat16(dense_bfloat16);
-    dense_matrix<bfloat16> result = bsr_bfloat16.spmm_bfloat16(dense_bfloat16);
 
-    float pearson = check_bfloat16_vector_pcc(expected.data, result.data);
-    log_info(tt::LogVerif, "BSR vs Golden -- PCC = {}", pearson);
-    TT_FATAL(pearson > 0.99, "PCC not high enough. Result PCC: {}, Expected PCC: 0.99", pearson);
-}
-
-void test_multicore_bsr_spmm() {
-    // uhh we could write a bunch of tests. Let's do this in our machine's programming environment.
-
-    // ... I see. this task is actually a big refactor job. Let's do it!
-    /*
-
-    Do we wanna start with opening and closing the device for each test? Yes. Each test gets its fresh start. 
-
-    */
-    //
-}
-
+// TODO: put this in its own file somewhere and include it. 
 void bsr_spmm_multicore_reuse(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -69,45 +67,9 @@ void bsr_spmm_multicore_reuse(
     uint32_t R,
     uint32_t C,
     uint32_t B,
-    IDevice* device) {
+    IDevice* device,
+    bool verbose = false) {
 
-    // compare to multicore_reuse
-    /*
-    * lines 68-160 are almost identical, except that the numblocks compute kernel arg becomes a runtime arg
-    * This means that CB size, block size, and subblock size can all be used the same way as the dense example.
-    *
-    * DRAM setup is also almost identical, except we need to allocate the correct number of bytes for the BSR matrix.
-    *
-    * comptime args setup is almost identical
-    *
-    * Now the fun part: runtime args!
-    *   1. in0_start_tile_id is the tile which starts the row of interest of A
-    *   2. in1               is the tile which starts the column of interest of B
-    *   3. in0_next_block_stride. Are we using this?
-        *       I have overloaded the word "block" and now I'm reaping the rotten melons.
-        *       block should be the same, with width 2 and height per_core_M.
-        *       So we need to be able to iterate over blocks within a Block like it's a dense matrix.
-        *       Then we need to iterate over Blocks like it's sparse (with the col indices).
-        *       My reader kernel does not think about this. Let's think about this.
-        *       Number 1: The kernel should have the Block dims RxC. is each output block many Blocks, or a fraction of a Block?
-        *                   Assume R=C=128. (Rt=Ct=4). block width is 2, and we have to determine per_core_M and per_core_N
-        *                   Ah I see. per_core_M/N = 16. So a single input block will take a slice of many Blocks (2x16 slice of 4 4x4 Blocks)
-        *                   Bad assumption! the util function decides per_core_M/N. We have to think about how that gets decided and why.
-        *       Good. So how do we load a single input block of A to SRAM?
-        *                 numBlocksPerblock(height) = per_core_M / Rt (== 4)
-        *
-    *
-    * Once we figure out why the per_core sizes are what they are, we have to decide whether this task
-    * of implementing BSR SpMM is more or less the task of many-matrices-times matrix in a single program.
-    * ... okay.
-    *
-    *
-    *
-    *
-    *//*
-     * Setup program to execute along with its buffers and kernels to use
-     * Core range is just single core
-     */
     CommandQueue& cq = device->command_queue();
     Program program{};
 
@@ -154,14 +116,16 @@ void bsr_spmm_multicore_reuse(
     uint32_t out_subblock_h = 1; // TODO: figure out the correctness issue here.
     uint32_t out_subblock_w = 1;
 
-    log_info(tt::LogVerif, " -- Metalium Core Sizing --");
-    log_info(
-        tt::LogVerif,
-        " -- per_core_M= {} -- per_core_N= {} -- out_subblock_h= {} -- out_subblock_w= {} --",
-        per_core_M,
-        per_core_N,
-        out_subblock_h,
-        out_subblock_w);
+    if (verbose) {
+        log_info(tt::LogVerif, " -- Metalium Core Sizing --");
+        log_info(
+            tt::LogVerif,
+            " -- per_core_M= {} -- per_core_N= {} -- out_subblock_h= {} -- out_subblock_w= {} --",
+            per_core_M,
+            per_core_N,
+            out_subblock_h,
+            out_subblock_w);
+    }
 
     TT_ASSERT(Mt % per_core_M == 0);
     TT_ASSERT(Nt % per_core_N == 0);
@@ -203,16 +167,19 @@ void bsr_spmm_multicore_reuse(
     CoreRangeSet all_cores(
         tt::tt_metal::num_cores_to_corerangeset(num_blocks_x * num_blocks_y, compute_with_storage_grid_size, true));
 
-    log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
-    log_info(
-        tt::LogVerif,
-        " -- Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} -- num_cores_x={} -- num_cores_y={} --",
-        Mt,
-        Nt,
-        num_blocks_x,
-        num_blocks_y,
-        num_cores_x,
-        num_cores_y);
+
+    if (verbose) {
+        log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
+        log_info(
+            tt::LogVerif,
+            " -- Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} -- num_cores_x={} -- num_cores_y={} --",
+            Mt,
+            Nt,
+            num_blocks_x,
+            num_blocks_y,
+            num_cores_x,
+            num_cores_y);
+    }
 
     //////////////////////////////////////////////////
     /*
@@ -424,181 +391,142 @@ void bsr_spmm_multicore_reuse(
         }
     }
 
-    log_info(tt::LogVerif, " -- Runtime Args set --");
-    log_info(
-        tt::LogVerif,
-        " -- nnz blocks read= {}",
-        num_nnz_blocks_read);
+    if (verbose){
+        log_info(tt::LogVerif, " -- Runtime Args set --");
+        log_info(
+            tt::LogVerif,
+            " -- nnz blocks read= {}",
+            num_nnz_blocks_read);
+    }
+
 
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
     EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
 
-    log_info(tt::LogVerif, " -- All data moved to DRAM --");
+    if (verbose)
+        log_info(tt::LogVerif, " -- All data moved to DRAM --");
 
     EnqueueProgram(cq, program, false);
 
-    log_info(tt::LogVerif, " -- Program enqueued --");
+    if (verbose)
+        log_info(tt::LogVerif, " -- Program enqueued --");
 
     EnqueueReadBuffer(cq, dst_dram_buffer, output.data.data(), true);
 
     Finish(cq);
+
+}
+
+std::pair<std::string, float> run_test(
+    bsr_matrix<bfloat16>& a,
+    dense_matrix<bfloat16>& b,
+    std::string test_name,
+    bool verbose = false,
+    bool emit_output = false) {
+
+    /*
+    Requires: a, b to be initialized on CPU
+    Modifies: can modifiy output files and log data 
+    Effects: 
+
+    Returns the PCC between the sequential matmul of a and b and the multicore matmul of a and b. 
+    */
+
+    // TODO: should we put all this in a try-catch block?
+
+    // device setup
+    constexpr int device_id = 0;
+    IDevice* device = CreateDevice(device_id);
+
+
+    // matmul params setup
+    uint32_t M = a.H;
+    uint32_t N = b.W;
+    uint32_t K = a.W;
+    // block params setup
+    uint32_t R = a.R;
+    uint32_t C = a.C;
+    uint32_t nblocks = a.nblocks;
+    uint32_t block_matrix_height = M / R;
+
+    uint32_t Rt = R / TILE_HEIGHT;
+    uint32_t Ct = C / TILE_WIDTH;
+
+
+    // initialize output_data
+    dense_matrix<float> tmp(M, N);
+    dense_matrix<bfloat16> output = tmp.bfloat16_cast();
+
+    // run sequential spmm
+    dense_matrix<bfloat16> golden = a.spmm_bfloat16(b);
+
+    // tilize input data
+    tilize(bsr_bfloat16.data, R, C);
+    tilize(dense_bfloat16.data, K, N);
+
+    // run bsr_spmm_multicore_reuse
+    bsr_spmm_multicore_reuse(a, b, output, false, nblocks, M, N, K, R, C, 1, device, verbose);
+
+    // untile output data
+    untilize(output.data, M, N);
+
+    float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
+
+    if (emit_output) {
+        // let's write the output vectors to a file
+        std::string local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm/" + test_name;
+
+        // TODO: will a failure here get caught in the larger try catch block?
+        fs::create_directory(local_path);
+        std::string output_file = local_path + "/output.txt";
+        std::ofstream out(output_file);
+        if (!out.is_open()) {
+            TT_THROW("Failed to open output file: {}", output_file);
+        }
+        for (size_t i = 0; i < output.data.size(); i++) {
+            out << output.data[i].to_float() << "\n";
+        }
+        out.close();
+
+        log_info(tt::LogVerif, "Output written to {}", output_file);
+        // let's write the golden vector to a file
+        std::string golden_file = local_path + "/golden.txt";
+        std::ofstream golden_out(golden_file);
+        if (!golden_out.is_open()) {
+            TT_THROW("Failed to open golden file: {}", golden_file);
+        }
+        for (size_t i = 0; i < golden.data.size(); i++) {
+            golden_out << golden.data[i].to_float() << "\n";
+        }
+        golden_out.close();
+    }    
+
+    CloseDevice(device);
+
+    return pearson; 
+
 }
 
 int main(int argc, char** argv) {
-    bool pass = true;
-    bool emit_output = false;
+    /*
+    1. Reserve a vector of <test_name, PCC> pairs. 
+    2. call run_test(test_func(), verbose, emit_output) for each test, adding to the vector
+    3. iter over vector and pretty print passes and fails to the console
+    */
 
-    if (getenv("TT_METAL_SLOW_DISPATCH_MODE") != nullptr) {
-        TT_THROW("Test not supported w/ slow dispatch, exiting");
+    std::vector<std::pair<std::string, float>> test_results;
+
+    test_results.push_back(run_test(std::tie(test_basic()), false, false));
+
+    uint32_t count = 0;
+    for (auto &p : test_results) {
+        std::cout << "Test #" << count << ": " << p.first << ' ';
+        std::string result = p.second > 0.99 ? "PASS ✅" : "FAIL ❌"; 
+        count++;
     }
+    /*
+    For later: add args for only running certain tests
+    */
 
-    try {
-        // Device setup
-        constexpr int device_id = 0;
-        IDevice* device = CreateDevice(device_id);
-
-
-        // matmul params setup
-        uint32_t M = 64;
-        uint32_t N = 64;
-        uint32_t K = 64;
-        // block params setup
-        uint32_t R = 64;
-        uint32_t C = 64;
-        uint32_t nblocks = 1;
-        uint32_t block_matrix_height = M / R;
-
-        uint32_t Rt = R / TILE_HEIGHT;
-        uint32_t Ct = C / TILE_WIDTH;
-
-        // create (or read) source data
-        // TODO: fix a nz pattern for the sake of debugging
-        //      nz diagonal
-        //      all nz on one row
-        //      all nz on one column
-        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
-        dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-        for (int i = 0; i < K; i++){
-            for (int j = 0; j < N; j++) {
-                if (i != j)
-                    dense.data[i*N + j] = 0.0f;
-            }
-        }
-
-
-        // initialize output_data
-        dense_matrix<float> tmp(M, N);
-        dense_matrix<bfloat16> output = tmp.bfloat16_cast();
-
-        // for (int i = 0; i < M; i++){
-        //     for (int j = 0; j < N; j++) {
-        //         if (i != j)
-        //             output.data[i*N + j] = bfloat16(0.0f);
-        //     }
-        // }
-        // so the last two blocks are being overwritten
-
-
-        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
-        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
-
-        // run golden bsr_
-        dense_matrix<bfloat16> golden = bsr_bfloat16.spmm_bfloat16(dense_bfloat16);
-
-        // tilize input data
-        tilize(bsr_bfloat16.data, R, C);
-        tilize(dense_bfloat16.data, K, N);
-
-        // run bsr_spmm_multicore_reuse
-        bsr_spmm_multicore_reuse(bsr_bfloat16, dense_bfloat16, output, false, nblocks, M, N, K, R, C, 1, device);
-
-        // untile output data
-        untilize(output.data, M, N);
-
-        log_info(tt::LogVerif, "Output vector of size {}", output.data.size());
-
-        if (emit_output) {
-            // let's write the output vectors to a file
-            std::string local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm";
-            std::string output_file = local_path + "/output.txt";
-            std::ofstream out(output_file);
-            if (!out.is_open()) {
-                TT_THROW("Failed to open output file: {}", output_file);
-            }
-            for (size_t i = 0; i < output.data.size(); i++) {
-                out << output.data[i].to_float() << "\n";
-            }
-            out.close();
-    
-            log_info(tt::LogVerif, "Output written to {}", output_file);
-            // let's write the golden vector to a file
-            std::string golden_file = local_path + "/golden.txt";
-            std::ofstream golden_out(golden_file);
-            if (!golden_out.is_open()) {
-                TT_THROW("Failed to open golden file: {}", golden_file);
-            }
-            for (size_t i = 0; i < golden.data.size(); i++) {
-                golden_out << golden.data[i].to_float() << "\n";
-            }
-            golden_out.close();
-        }    
-
-        // int false_pos = 0;
-        // int false_neg = 0;
-        // int total_bad = 0;
-        // int nnz_gold = 0;
-        // int nnz_out = 0;
-        // for (int i = 0; i < M; i++){
-        //     for (int j = 0; j < N; j++) {
-        //         if (std::abs(output.data[i*N + j].to_float() - golden.data[i*N + j].to_float()) > 1e-4)
-        //             total_bad++;
-        //         if (i >= M/2 && std::abs(output.data[i*N + j].to_float() - 0.0f) > 1e-4)
-        //             false_pos++;
-        //         else if (i < M/2 && std::abs(output.data[i*N + j].to_float() - 0.0f) < 1e-4)
-        //             false_neg++;
-
-        //         if (std::abs(output.data[i*N + j].to_float() - 0.0f) > 1e-5)
-        //             nnz_out++;
-        //         if (std::abs(golden.data[i*N + j].to_float() - 0.0f) > 1e-5)
-        //             nnz_gold++;
-        //     }
-        // }
-
-        // // count nonzero elements in golden
-        // log_info(tt::LogVerif, " -- False Positive Count={} -- False Negative Count={} -- Total bad={}",
-        //     false_pos,
-        //     false_neg,
-        //     total_bad);
-
-        // log_info(tt::LogVerif, " -- NNZ elts golden={} -- NNZ elts output={}",
-        //     nnz_gold,
-        //     nnz_out);
-
-        float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
-        log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);
-        TT_FATAL(pearson > 0.99, "PCC not high enough. Result PCC: {}, Expected PCC: 0.99", pearson);
-        // check all close
-
-        // close device and check for errors
-        pass &= CloseDevice(device);
-
-    }
-    catch (const std::exception& e) {
-        tt::log_error(tt::LogTest, "Test failed with excpetion!");
-        tt::log_error(tt::LogTest, "{}", e.what());
-
-        throw;
-    }
-
-    if (pass) {
-        tt::log_info(tt::LogTest, "Test Passed");
-    }
-    else {
-        TT_THROW("Test Failed");
-    }
-
-    TT_ASSERT(pass);
-
-    return 0;
 }

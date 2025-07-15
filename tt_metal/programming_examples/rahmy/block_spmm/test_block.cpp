@@ -49,14 +49,17 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_basic
     uint32_t block_matrix_height = M / R;
 
     // all nz on one row
-    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
-    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    for (int i = 0; i < K; i++){
-        for (int j = 0; j < N; j++) {
-            if (i != j)
-                dense.data[i*N + j] = 0.0f;
-        }
-    }
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    // for (int i = 0; i < K; i++){
+    //     for (int j = 0; j < N; j++) {
+    //         if (i != j)
+    //             dense.data[i*N + j] = 0.0f;
+    //     }
+    // }
+
+    dense_matrix<float> dense(K, N, RAND);
+
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -75,20 +78,53 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
     uint32_t block_matrix_height = M / R;
 
     // all nz on one row
-    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
-    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    for (int i = 0; i < K; i++){
-        for (int j = 0; j < N; j++) {
-            if (i != j)
-                dense.data[i*N + j] = 0.0f;
-        }
-    }
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    // for (int i = 0; i < K; i++){
+    //     for (int j = 0; j < N; j++) {
+    //         if (i != j)
+    //             dense.data[i*N + j] = 0.0f;
+    //     }
+    // }
+
+
+    dense_matrix<float> dense(K, N, RAND);
+
 
     bsr.pretty_print();
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
     return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks");
+}
+
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_nonsquare() {
+    // matmul params setup
+    uint32_t M = 32;
+    uint32_t N = 32;
+    uint32_t K = 64;
+    // block params setup
+    uint32_t R = 32;
+    uint32_t C = 64;
+    uint32_t nblocks = 1;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one row
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    // for (int i = 0; i < K; i++){
+    //     for (int j = 0; j < N; j++) {
+    //         if (i != j)
+    //             dense.data[i*N + j] = 0.0f;
+    //     }
+    // }
+
+    dense_matrix<float> dense(K, N, RAND);
+
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_nonsquare");
 }
 
 std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_nonsquare() {
@@ -103,18 +139,135 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
     uint32_t block_matrix_height = M / R;
 
     // all nz on one row
-    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
-    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    for (int i = 0; i < K; i++){
-        for (int j = 0; j < N; j++) {
-            if (i != j)
-                dense.data[i*N + j] = 0.0f;
-        }
-    }
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    // for (int i = 0; i < K; i++){
+    //     for (int j = 0; j < N; j++) {
+    //         if (i != j)
+    //             dense.data[i*N + j] = 0.0f;
+    //     }
+    // }
+
+    dense_matrix<float> dense(K, N, RAND);
+
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
     return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks_nonsquare");
+}
+
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_nonsquare_tall() {
+    // matmul params setup
+    uint32_t M = 64;
+    uint32_t N = 32;
+    uint32_t K = 32;
+    // block params setup
+    uint32_t R = 64;
+    uint32_t C = 32;
+    uint32_t nblocks = 1;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one row
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    // for (int i = 0; i < K; i++){
+    //     for (int j = 0; j < N; j++) {
+    //         if (i != j)
+    //             dense.data[i*N + j] = 0.0f;
+    //     }
+    // }
+
+    dense_matrix<float> dense(K, N, RAND);
+
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_nonsquare_tall");
+}
+
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_nonsquare_tall_more_cols() {
+    // matmul params setup
+    uint32_t M = 64;
+    uint32_t N = 32;
+    uint32_t K = 64;
+    // block params setup
+    uint32_t R = 64;
+    uint32_t C = 32;
+    uint32_t nblocks = 2;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one row
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    // for (int i = 0; i < K; i++){
+    //     for (int j = 0; j < N; j++) {
+    //         if (i != j)
+    //             dense.data[i*N + j] = 0.0f;
+    //     }
+    // }
+
+    dense_matrix<float> dense(K, N, RAND);
+
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks_nonsquare_tall_more_cols");
+}
+
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_nonsquare_diag_blocks() {
+    // matmul params setup
+    uint32_t M = 64;
+    uint32_t N = 32;
+    uint32_t K = 128;
+    // block params setup
+    uint32_t R = 32;
+    uint32_t C = 64;
+    uint32_t nblocks = 2;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one row
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_DIAG, RAND);
+    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    // for (int i = 0; i < K; i++){
+    //     for (int j = 0; j < N; j++) {
+    //         if (i != j)
+    //             dense.data[i*N + j] = 0.0f;
+    //     }
+    // }
+
+    dense_matrix<float> dense(K, N, RAND);
+
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks_nonsquare_diag_blocks");
+}
+
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_nonsquare_more_rows() {
+    // matmul params setup
+    uint32_t M = 64;
+    uint32_t N = 32;
+    uint32_t K = 128;
+    // block params setup
+    uint32_t R = 32;
+    uint32_t C = 64;
+    uint32_t nblocks = 4;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one row
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+    dense_matrix<float> dense(K, N, RAND);
+    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    // for (int i = 0; i < K; i++){
+    //     for (int j = 0; j < N; j++) {
+    //         if (i != j)
+    //             dense.data[i*N + j] = 0.0f;
+    //     }
+    // }
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks_nonsquare_more_rows");
 }
 
 
@@ -130,14 +283,17 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
     uint32_t block_matrix_height = M / R;
 
     // all nz on one col
-    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, NO_RAND);
-    dense_matrix<float> dense(K, N, 1.0f); // ID matrix
-    for (int i = 0; i < K; i++){
-        for (int j = 0; j < N; j++) {
-            if (i != j)
-                dense.data[i*N + j] = 0.0f;
-        }
-    }
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
+    // dense_matrix<float> dense(K, N, 1.0f); // ID matrix
+    // for (int i = 0; i < K; i++){
+    //     for (int j = 0; j < N; j++) {
+    //         if (i != j)
+    //             dense.data[i*N + j] = 0.0f;
+    //     }
+    // }
+
+    dense_matrix<float> dense(K, N, RAND);
+
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -157,14 +313,17 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
     uint32_t block_matrix_height = M / R;
 
     // all nz on one col
-    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
-    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    for (int i = 0; i < K; i++){
-        for (int j = 0; j < N; j++) {
-            if (i != j)
-                dense.data[i*N + j] = 0.0f;
-        }
-    }
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    // for (int i = 0; i < K; i++){
+    //     for (int j = 0; j < N; j++) {
+    //         if (i != j)
+    //             dense.data[i*N + j] = 0.0f;
+    //     }
+    // }
+
+    dense_matrix<float> dense(K, N, RAND);
+
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -183,14 +342,16 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
     uint32_t block_matrix_height = M / R;
 
     // all nz on one col
-    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, NO_RAND);
-    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    for (int i = 0; i < K; i++){
-        for (int j = 0; j < N; j++) {
-            if (i != j)
-                dense.data[i*N + j] = 0.0f;
-        }
-    }
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
+    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    // for (int i = 0; i < K; i++){
+    //     for (int j = 0; j < N; j++) {
+    //         if (i != j)
+    //             dense.data[i*N + j] = 0.0f;
+    //     }
+    // }
+    dense_matrix<float> dense(K, N, RAND);
+
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -288,7 +449,7 @@ void bsr_spmm_multicore_reuse(
 
     uint32_t in0_num_subblocks = (per_core_M / out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
-    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w;
+    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct. 
 
     uint32_t in1_num_subblocks = (per_core_N / out_subblock_w);
     uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w * in1_num_subblocks;
@@ -533,6 +694,71 @@ void bsr_spmm_multicore_reuse(
             num_blocks_read++;
             if (num_blocks > 0)
                 num_nnz_output_blocks++;
+            
+            if (verbose && output_idx_y == 0 && output_idx_x == 0) {
+                log_info(tt::LogVerif, " -- Reader Args --");
+                const char* reader_arg_names[] = {
+                    "in0_tensor_addr",
+                    "in0_tensor_start_tile_id",
+                    "in0_tensor_stride_w",
+                    "in0_tensor_stride_h",
+                    "in0_block_w",
+                    "in0_block_h",
+                    "in0_block_num_tiles",
+                    "in1_tensor_addr",
+                    "in1_tensor_start_tile_id",
+                    "in1_tensor_stride_w",
+                    "in1_tensor_stride_h",
+                    "in1_block_w",
+                    "in1_block_h",
+                    "in1_block_num_tiles",
+                    "col_indices_start_of_row",
+                    "col_indices_end_of_row",
+                    "row_index_into_bsr_matrix",
+                    "column_indices_addr"
+                };
+                for (size_t i = 0; i < mm_reader_args.size(); ++i) {
+                    log_info(tt::LogVerif, "reader_arg[{}] ({}) = {}", i, reader_arg_names[i], mm_reader_args[i]);
+                }
+                log_info(tt::LogVerif, " -- Writer Args --");
+                const char* writer_arg_names[] = {
+                    "out_buffer_addr",
+                    "out_tensor_start_tile_id",
+                    "out_tensor_stride_w",
+                    "out_tensor_stride_h",
+                    "out_tensor_next_subblock_stride_w",
+                    "out_tensor_next_subblock_stride_h",
+                    "out_subblock_w",
+                    "out_subblock_h",
+                    "out_subblock_w * out_subblock_h",
+                    "out_num_subblocks_w",
+                    "out_num_subblocks_h",
+                    "MtNt",
+                    "batch",
+                    "nonzero"
+                };
+                for (size_t i = 0; i < writer_args.size(); ++i) {
+                    log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_args[i]);
+                }
+                log_info(tt::LogVerif, " -- Compute Args --");
+                const char* compute_arg_names[] = {
+                    "in0_block_w",
+                    "in0_num_subblocks",
+                    "in0_block_num_tiles",
+                    "in0_subblock_num_tiles",
+                    "in1_num_subblocks",
+                    "in1_block_num_tiles",
+                    "in1_per_core_w",
+                    "num_blocks",
+                    "out_subblock_h",
+                    "out_subblock_w",
+                    "out_subblock_num_tiles",
+                    "B"
+                };
+                for (size_t i = 0; i < compute_args.size(); ++i) {
+                    log_info(tt::LogVerif, "compute_arg[{}] ({}) = {}", i, compute_arg_names[i], compute_args[i]);
+                }
+            }
         }
     }
 
@@ -687,6 +913,8 @@ bool print_and_assess_results(std::vector<TestResult> &test_results){
     std::cout << "--- Test results ---------------------------------------" << std::endl;
     std::cout << "--------------------------------------------------------" << std::endl;
 
+    uint32_t num_tests = test_results.size();
+    uint32_t max_digits = 1;
     bool all_pass = true;
     char buf[12];
     uint32_t count = 0;
@@ -723,12 +951,17 @@ void test_suite(){
 
     // growing list of tests
     // TODO: make a static registry of tests so you can then run tests from the command line by their test number in the registry 
-    add_and_run_test(test_basic, test_results);
-    add_and_run_test(test_2_blocks, test_results, true, true);
+    add_and_run_test(test_basic, test_results, true, true);
+    add_and_run_test(test_2_blocks, test_results);
     add_and_run_test(test_2_blocks_col, test_results);
     add_and_run_test(test_2_blocks_col_simplified, test_results);
     add_and_run_test(test_2_blocks_row_simplified, test_results);
     add_and_run_test(test_2_blocks_nonsquare, test_results);
+    add_and_run_test(test_2_blocks_nonsquare_more_rows, test_results);
+    add_and_run_test(test_2_blocks_nonsquare_diag_blocks, test_results);
+    add_and_run_test(test_nonsquare_tall, test_results);
+    add_and_run_test(test_2_blocks_nonsquare_tall_more_cols, test_results);
+    add_and_run_test(test_nonsquare, test_results);
 
     bool pass = print_and_assess_results(test_results);
 
@@ -758,7 +991,7 @@ int main(int argc, char** argv) {
         uint32_t block_matrix_height = M / R;
 
         // all nz on one col
-        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, NO_RAND);
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
         dense_matrix<float> dense(K, N, 1.0f); // ID matrix
         for (int i = 0; i < K; i++){
             for (int j = 0; j < N; j++) {

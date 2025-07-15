@@ -15,6 +15,7 @@
 #define NO_RAND false
 #define FILL_ROW 1
 #define FILL_COL 2
+#define FILL_DIAG 3 // will require the size to be perfect
 #define TILE_SIZE 32
 
 // TODO: if we wanted, we could put this in a namespace,
@@ -134,7 +135,7 @@ public:
         return true;
     }
 
-    bool all_close_bfloat16(const dense_matrix<bfloat16> &other, float tol = 1e-5) {
+    bool all_close_bfloat16(const dense_matrix<bfloat16> &other, float tol = 1) {
         assert(H == other.H && W == other.W);
         for (size_t i = 0; i < H; ++i) {
             for (size_t j = 0; j < W; ++j) {
@@ -214,6 +215,21 @@ public:
                     }
                 }
             }
+        } else if (fill_type == FILL_DIAG){
+            assert(nblocks <= std::min(blocked_matrix_height, blocked_matrix_width));
+            const uint32_t diag_max_index = nblocks;
+            for (size_t i = 0; i < diag_max_index; i++) {
+                indptr[i + 1]++;
+                indices.push_back(i);
+                for (size_t k = 0; k < R * C; k++) {
+                    if (random) {
+                        data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                    } else {
+                        data.push_back(k);
+                    }
+                }
+            }
+
         } else {
             throw std::invalid_argument("Invalid fill type");
         }

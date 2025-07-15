@@ -65,8 +65,8 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_basic
 
 std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks() {
     // matmul params setup
-    uint32_t M = 128;
-    uint32_t N = 128;
+    uint32_t M = 64;
+    uint32_t N = 64;
     uint32_t K = 128;
     // block params setup
     uint32_t R = 64;
@@ -89,11 +89,39 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
     return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks");
 }
 
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_nonsquare() {
+    // matmul params setup
+    uint32_t M = 32;
+    uint32_t N = 32;
+    uint32_t K = 128;
+    // block params setup
+    uint32_t R = 32;
+    uint32_t C = 64;
+    uint32_t nblocks = 2;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one row
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, NO_RAND);
+    dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
+    for (int i = 0; i < K; i++){
+        for (int j = 0; j < N; j++) {
+            if (i != j)
+                dense.data[i*N + j] = 0.0f;
+        }
+    }
+    bsr.pretty_print();
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks_nonsquare");
+}
+
+
 std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_col() {
     // matmul params setup
     uint32_t M = 128;
-    uint32_t N = 128;
-    uint32_t K = 128;
+    uint32_t N = 64;
+    uint32_t K = 64;
     // block params setup
     uint32_t R = 64;
     uint32_t C = 64;
@@ -227,7 +255,7 @@ void bsr_spmm_multicore_reuse(
 
     int32_t num_tiles_for_col_indices = (col_indices_single_tile_size - 1 + sizeof(int) * nnz_blocks) / col_indices_single_tile_size;
     uint32_t per_core_N = _get_maximum_block_dim_with_NoC_args(per_core_M, in0_block_w, num_tiles_for_col_indices);
-    per_core_N = std::min(per_core_N, Ct); // TODO: this is a bit contrived and will always be Ct. idk what to do about it tho
+    per_core_N = std::min(std::min(per_core_N, Ct), Nt); // TODO: this is a bit contrived. idk what to do about it tho
 
     uint32_t out_subblock_h = 1; // TODO: figure out the correctness issue here.
     uint32_t out_subblock_w = 1;
@@ -654,6 +682,10 @@ void add_and_run_test(
 }
 
 bool print_and_assess_results(std::vector<TestResult> &test_results){
+    std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << "--- Test results ---------------------------------------" << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
+
     bool all_pass = true;
     char buf[12];
     uint32_t count = 0;
@@ -671,6 +703,13 @@ bool print_and_assess_results(std::vector<TestResult> &test_results){
         count++;
     }
 
+    std::string result = all_pass ? "✅✅✅ PASS ✅✅✅" : "❌❌❌ FAIL ❌❌❌";
+
+    std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << result << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
+
+
     return all_pass;
 }
 void test_suite(){
@@ -684,16 +723,14 @@ void test_suite(){
     // growing list of tests
     // TODO: make a static registry of tests so you can then run tests from the command line by their test number in the registry 
     add_and_run_test(test_basic, test_results);
-    add_and_run_test(test_2_blocks, test_results, true, true);
-    add_and_run_test(test_2_blocks_col, test_results, false, true);
+    add_and_run_test(test_2_blocks, test_results);
+    add_and_run_test(test_2_blocks_col, test_results);
     add_and_run_test(test_2_blocks_col_simplified, test_results);
     add_and_run_test(test_2_blocks_row_simplified, test_results);
+    add_and_run_test(test_2_blocks_nonsquare, test_results, true, true);
 
     bool pass = print_and_assess_results(test_results);
-    std::string result = pass ? "✅✅✅ PASS ✅✅✅" : "❌❌❌ FAIL ❌❌❌";
 
-    std::cout << "----------------------------" << std::endl;
-    std::cout << result << std::endl;
 
     /*
     For later, 
@@ -704,7 +741,7 @@ void test_suite(){
 int main(int argc, char** argv) {
 
     // TODO: make this a command line arg
-    bool test = false;
+    bool test = true;
     if (test) {
         test_suite();
     }

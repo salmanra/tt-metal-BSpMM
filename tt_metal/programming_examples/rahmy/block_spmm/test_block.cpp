@@ -84,6 +84,8 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
         }
     }
 
+    bsr.pretty_print();
+
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
     return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks");
@@ -109,7 +111,6 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
                 dense.data[i*N + j] = 0.0f;
         }
     }
-    bsr.pretty_print();
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -723,11 +724,11 @@ void test_suite(){
     // growing list of tests
     // TODO: make a static registry of tests so you can then run tests from the command line by their test number in the registry 
     add_and_run_test(test_basic, test_results);
-    add_and_run_test(test_2_blocks, test_results);
+    add_and_run_test(test_2_blocks, test_results, true, true);
     add_and_run_test(test_2_blocks_col, test_results);
     add_and_run_test(test_2_blocks_col_simplified, test_results);
     add_and_run_test(test_2_blocks_row_simplified, test_results);
-    add_and_run_test(test_2_blocks_nonsquare, test_results, true, true);
+    add_and_run_test(test_2_blocks_nonsquare, test_results);
 
     bool pass = print_and_assess_results(test_results);
 

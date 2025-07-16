@@ -8,22 +8,22 @@ using namespace tt::tt_metal;
 using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
 TestFunctionPtr TestRegistry[] = {
-    test_basic, 
-    test_2_blocks,
-    test_2_blocks_col,
-    test_2_blocks_col_simplified,
-    test_2_blocks_row_simplified,
-    test_2_blocks_nonsquare,
-    test_many_nonsquare,
-    test_nonsquare_diag_blocks,
-    test_nonsquare_tall,
-    test_2_blocks_nonsquare_tall,
-    test_nonsquare,
-    test_nonsquare_diag_tall,
-    test_nonsquare_stacked,
-    test_nonsquare_diag_first_row,
-    test_nonsquare_off_diag_first_row,
-    test_simplified_off_diag_first_row
+    test_basic, // 0
+    test_2_blocks, // 1
+    test_2_blocks_col, // 2
+    test_2_blocks_col_simplified, // 3
+    test_2_blocks_row_simplified, // 4
+    test_2_blocks_nonsquare, // 5
+    test_many_nonsquare, // 6
+    test_nonsquare_diag_blocks, // 7
+    test_nonsquare_tall, // 8
+    test_2_blocks_nonsquare_tall, // 9
+    test_nonsquare, // 10
+    test_nonsquare_diag_tall, // 11
+    test_nonsquare_stacked, // 12
+    test_nonsquare_diag_first_row, // 13
+    test_nonsquare_off_diag_first_row, // 14
+    test_simplified_off_diag_first_row // 15
 };
 
 
@@ -52,7 +52,6 @@ uint32_t _get_maximum_block_dim_with_NoC_args(int32_t block_dim, int32_t in0_blo
 }
 
 
-// TODO: put this in its own file somewhere and include it.
 void bsr_spmm_multicore_reuse(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,

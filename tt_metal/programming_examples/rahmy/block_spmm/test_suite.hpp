@@ -29,16 +29,8 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_basic
 
     // all nz on one row
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
-    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
 
     dense_matrix<float> dense(K, N, RAND);
-
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -58,17 +50,7 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
 
     // all nz on one row
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
-    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
-
-
     dense_matrix<float> dense(K, N, RAND);
-
 
     bsr.pretty_print();
 
@@ -90,16 +72,8 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_nonsq
 
     // all nz on one row
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
-    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
 
     dense_matrix<float> dense(K, N, RAND);
-
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -119,16 +93,8 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
 
     // all nz on one row
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
-    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
 
     dense_matrix<float> dense(K, N, RAND);
-
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -148,16 +114,7 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_nonsq
 
     // all nz on one row
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
-    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
-
     dense_matrix<float> dense(K, N, RAND);
-
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -177,16 +134,7 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
 
     // all nz on one row
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
-    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
-
     dense_matrix<float> dense(K, N, RAND);
-
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -254,7 +202,7 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_nonsq
     }
     std::vector<int> indptr = {0, 1};
     std::vector<int> indices = {1};
-    // all nz on one row
+
     bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
 
     dense_matrix<float> dense(K, N, RAND);
@@ -309,16 +257,7 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_nonsq
 
     // all nz on one row
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_DIAG, RAND);
-    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
-
     dense_matrix<float> dense(K, N, RAND);
-
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -339,13 +278,6 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_
     // all nz on one row
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
     dense_matrix<float> dense(K, N, RAND);
-    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -366,13 +298,6 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_nonsq
     // all nz on one row
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
     dense_matrix<float> dense(K, N, RAND);
-    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -392,14 +317,6 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
 
     // all nz on one col
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
-    // dense_matrix<float> dense(K, N, 1.0f); // ID matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
-
     dense_matrix<float> dense(K, N, RAND);
 
 
@@ -421,14 +338,6 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
 
     // all nz on one col
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
-    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
-
     dense_matrix<float> dense(K, N, RAND);
 
 
@@ -450,15 +359,7 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blo
 
     // all nz on one col
     bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
-    // dense_matrix<float> dense(K, N, 2.0f); // scaling matrix
-    // for (int i = 0; i < K; i++){
-    //     for (int j = 0; j < N; j++) {
-    //         if (i != j)
-    //             dense.data[i*N + j] = 0.0f;
-    //     }
-    // }
     dense_matrix<float> dense(K, N, RAND);
-
 
     bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
     dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();

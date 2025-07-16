@@ -1,20 +1,3 @@
-#include <tt-metalium/host_api.hpp>
-#include <tt-metalium/constants.hpp>
-#include <tt-metalium/util.hpp>
-#include <tt-metalium/bfloat16.hpp>
-#include <tt-metalium/test_tiles.hpp>
-#include <tt-metalium/device.hpp>
-#include <tt-metalium/command_queue.hpp>
-#include <tt-metalium/tt_metal.hpp>
-#include <../matmul_common/bmm_op.hpp>
-#include <tt-metalium/tilize_untilize.hpp>
-
-#include <vector>
-#include <tuple>
-#include <filesystem> // for emitting test output
-
-#include "bsr_matrix.hpp"
-
 #include "test_suite.hpp"
 
 using namespace tt::constants;
@@ -24,13 +7,13 @@ using namespace tt::tt_metal;
 
 using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
-static TestFunctionPtr TestRegistry[] = [
+TestFunctionPtr TestRegistry[] = {
     test_basic, 
     test_2_blocks,
     test_2_blocks_col,
     test_2_blocks_col_simplified,
     test_2_blocks_row_simplified,
-    test_2_blocks_non_square,
+    test_2_blocks_nonsquare,
     test_many_nonsquare,
     test_nonsquare_diag_blocks,
     test_nonsquare_tall,
@@ -41,7 +24,8 @@ static TestFunctionPtr TestRegistry[] = [
     test_nonsquare_diag_first_row,
     test_nonsquare_off_diag_first_row,
     test_simplified_off_diag_first_row
-];
+};
+
 
 struct TestResult {
     std::string test_name;
@@ -612,7 +596,7 @@ TestResult run_test(
 }
 
 void add_and_run_test(
-        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*function_ptr)(),
+        TestFunctionPtr function_ptr,
         vector<TestResult> &results,
         bool verbose = false,
         bool emit_output = false) {
@@ -668,33 +652,11 @@ void test_suite(){
     3. iter over vector and pretty print passes and fails to the console
     */
     std::vector<TestResult> test_results;
-
-    // growing list of tests
-    // TODO: make a static registry of tests so you can then run tests from the command line by their test number in the registry 
-
     size_t num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
     for (size_t i = 0; i < num_tests; i++) {
         add_and_run_test(TestRegistry[i], test_results);
     }
-    // add_and_run_test(test_basic, test_results);
-    // add_and_run_test(test_2_blocks, test_results);
-    // add_and_run_test(test_2_blocks_col, test_results);
-    // add_and_run_test(test_2_blocks_col_simplified, test_results);
-    // add_and_run_test(test_2_blocks_row_simplified, test_results);
-    // add_and_run_test(test_2_blocks_nonsquare, test_results);
-    // add_and_run_test(test_many_nonsquare, test_results);
-    // add_and_run_test(test_nonsquare_diag_blocks, test_results, true, true);
-    // add_and_run_test(test_nonsquare_tall, test_results);
-    // add_and_run_test(test_2_blocks_nonsquare_tall, test_results);
-    // add_and_run_test(test_nonsquare, test_results, true, true);
-    // add_and_run_test(test_nonsquare_diag_tall, test_results);
-    // add_and_run_test(test_nonsquare_stacked, test_results);
-    // add_and_run_test(test_nonsquare_diag_first_row, test_results);
-    // add_and_run_test(test_nonsquare_off_diag_first_row, test_results, true, true);
-    // add_and_run_test(test_simplified_off_diag_first_row, test_results);
-
     bool pass = print_and_assess_results(test_results);
-
 
     /*
     For later, 
@@ -702,12 +664,35 @@ void test_suite(){
     */
 }
 
+void run_verbose_test(int test_num){
+    auto [a, b, test_name] = TestRegistry[test_num]();
+    TestResult res = run_test(a, b, test_name, true, true);
+
+    std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << "--- Single Test results --------------------------------" << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
+
+    bool pass = true;
+    if (!res.all_close){
+        pass = false;
+    }
+
+    char buf[12];
+    std::string result = pass ? "✅ PASS " : "❌ FAIL ";
+    sprintf(buf, "w/ PCC=%.2f", res.pearson);
+    result += std::string(buf);
+    result += res.pearson > 0.99 ? " ✅ ": " ❌ ";
+    std::cout << "Test #" << test_num << ": " << result << " " << test_num << ' ' << res.test_name << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
+}
+
 int main(int argc, char** argv) {
     bool test = true;
     if (argc >= 2) {
         test = std::string(argv[1]) == "1";
     }
-    
     if (test) {
         test_suite();
     }
@@ -717,9 +702,7 @@ int main(int argc, char** argv) {
             std::cout << "No test specified. Returning." << std::endl;
             return 0;
         }
-        std::vector<TestResult> vec;
-        add_and_run_test(TestRegistry[test_num], vec, true, true);
-        print_and_assess_results(vec);
+        // TODO: maybe refactor this so there is more control over verbosity and such
+        run_verbose_test(test_num);
     }
-
 }

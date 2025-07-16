@@ -217,8 +217,7 @@ public:
             }
         } else if (fill_type == FILL_DIAG){
             assert(nblocks <= std::min(blocked_matrix_height, blocked_matrix_width));
-            const uint32_t diag_max_index = nblocks;
-            for (size_t i = 0; i < diag_max_index; i++) {
+            for (size_t i = 0; i < nblocks; i++) {
                 indptr[i + 1]++;
                 indices.push_back(i);
                 for (size_t k = 0; k < R * C; k++) {

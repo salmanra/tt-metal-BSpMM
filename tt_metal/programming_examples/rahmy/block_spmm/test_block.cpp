@@ -130,8 +130,18 @@ void bsr_spmm_multicore_reuse(
     uint32_t per_core_N = _get_maximum_block_dim_with_NoC_args(per_core_M, in0_block_w, num_tiles_for_col_indices);
     per_core_N = std::min(std::min(per_core_N, Ct), Nt); // TODO: this is a bit contrived. idk what to do about it tho
 
-    uint32_t out_subblock_h = 1; // TODO: figure out the correctness issue here.
+
+    // pick the largest subblock size that fits within the block size
+    uint32_t out_subblock_h = 1; 
     uint32_t out_subblock_w = 1;
+    for (auto& subblock_hw : bmm_op_utils::SUBBLOCK_HW_CHOICES) {
+        out_subblock_h = std::get<0>(subblock_hw);
+        out_subblock_w = std::get<1>(subblock_hw);
+        if (per_core_M % out_subblock_h == 0 and per_core_N % out_subblock_w == 0) {
+            break;
+        }
+    }
+
 
     if (verbose) {
         log_info(tt::LogVerif, " -- Metalium Core Sizing --");

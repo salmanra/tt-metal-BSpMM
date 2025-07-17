@@ -42,6 +42,8 @@ TestFunctionPtr TestRegistry[] = {
     test_random, // 31
     test_random_wide, // 32
     test_random_tall, // 33
+    test_random_tall_blocks, // 34
+    test_random_wide_blocks, // 35
 };
 
 

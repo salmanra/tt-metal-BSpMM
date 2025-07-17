@@ -5,7 +5,6 @@
 void kernel_main(){
     // why are all the constants not compile time args?
 
-    // TODO: test this dataflow kernel.
     // in0 tensor args
     uint32_t in0_tensor_addr = get_arg_val<uint32_t>(0);
     uint32_t in0_tensor_start_tile_id = get_arg_val<uint32_t>(1);

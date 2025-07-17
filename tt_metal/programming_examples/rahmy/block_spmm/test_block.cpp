@@ -347,7 +347,7 @@ void bsr_spmm_multicore_reuse(
                 (std::uint32_t)in0_block_w * per_core_M,  // in0_block_num_tiles
 
                 (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
-                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id TODO: you tried, you really did...
+                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id 
                 (std::uint32_t)1,                            // in1_tensor_stride_w
                 (std::uint32_t)Nt,                           // in1_tensor_stride_h
 
@@ -513,7 +513,6 @@ TestResult run_test(
     Returns the PCC between the sequential matmul of a and b and the multicore matmul of a and b.
     */
 
-    // TODO: should we put all this in a try-catch block?
 
     // device setup
     constexpr int device_id = 0;
@@ -555,7 +554,6 @@ TestResult run_test(
         // let's write the output vectors to a file
         std::string local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm/" + test_name;
 
-        // TODO: will a failure here get caught in the larger try catch block?
         std::filesystem::create_directory(local_path);
         std::string output_file = local_path + "/output.txt";
         std::ofstream out(output_file);
@@ -719,7 +717,6 @@ int main(int argc, char** argv) {
             std::cout << "No test specified. Returning." << std::endl;
             return 0;
         }
-        // TODO: maybe refactor this so there is more control over verbosity and such
         run_verbose_test(test_num);
     }
 }

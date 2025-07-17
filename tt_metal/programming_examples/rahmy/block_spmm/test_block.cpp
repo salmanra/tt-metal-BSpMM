@@ -27,6 +27,16 @@ TestFunctionPtr TestRegistry[] = {
     test_2_blocks_diag, // 16
     test_off_diag_first_row, // 17
     test_diag_first_row, // 18
+    test_2_blocks_fill_col, // 19
+    test_2_blocks_fill_row, // 20
+    test_4_blocks, // 21
+    test_diag_times_wide, // 22
+    test_simplified_times_wide, // 23
+    test_simplified_tall_times_wide, // 24
+    test_simplified_tall_times_wide_v2, // 25
+    test_big_block_times_wide, // 26
+    test_diag_first_row_times_wide, // 27
+    test_diag_second_row_times_wide, // 28
 };
 
 
@@ -605,9 +615,9 @@ void add_and_run_test(
 }
 
 bool print_and_assess_results(std::vector<TestResult> &test_results){
-    std::cout << "--------------------------------------------------------" << std::endl;
-    std::cout << "--- Test results ---------------------------------------" << std::endl;
-    std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Test results ----------------------------------------------------------------" << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
     // assume there are <1000 tests.
     std::string spacing = "  ";
@@ -637,9 +647,9 @@ bool print_and_assess_results(std::vector<TestResult> &test_results){
 
     std::string result = all_pass ? "✅✅✅ PASS ✅✅✅" : "❌❌❌ FAIL ❌❌❌";
 
-    std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << result << std::endl;
-    std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
 
     return all_pass;

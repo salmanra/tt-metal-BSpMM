@@ -40,6 +40,8 @@ TestFunctionPtr TestRegistry[] = {
     test_big_diag, // 29
     test_checkerboard, // 30
     test_random, // 31
+    test_random_wide, // 32
+    test_random_tall, // 33
 };
 
 

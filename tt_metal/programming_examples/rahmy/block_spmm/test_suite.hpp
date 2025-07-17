@@ -60,6 +60,51 @@ std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_rando
     return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_random");
 }
 
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_random_wide() {
+    // matmul params setup
+    uint32_t M = 256;
+    uint32_t N = 1024;
+    uint32_t K = 256;
+    // block params setup
+    uint32_t R = 64;
+    uint32_t C = 64;
+    uint32_t nblocks = 8;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one row
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+    dense_matrix<float> dense(K, N, RAND);
+
+    
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_random_wide");
+}
+
+std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_random_tall() {
+    // matmul params setup
+    uint32_t M = 1024;
+    uint32_t N = 256;
+    uint32_t K = 256;
+    // block params setup
+    uint32_t R = 64;
+    uint32_t C = 64;
+    uint32_t nblocks = 8;
+    uint32_t block_matrix_height = M / R;
+
+    // all nz on one row
+    bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+    dense_matrix<float> dense(K, N, RAND);
+
+    
+
+    bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+    dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+    return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_random_tall");
+}
+
+
 std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_checkerboard() {
     // matmul params setup
     uint32_t M = 256;

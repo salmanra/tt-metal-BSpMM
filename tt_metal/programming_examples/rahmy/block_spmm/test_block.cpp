@@ -321,7 +321,7 @@ void bsr_spmm_multicore_reuse(
             // Write runtime args to device
             std::vector<uint32_t> mm_reader_args = {
                 (std::uint32_t)src0_dram_buffer->address(),     // in0_tensor_addr
-                (std::uint32_t)output_idx_y * Rt * Ct,          // in0_tensor_start_tile_id 
+                (std::uint32_t)a.indptr[output_idx_y] * Rt * Ct,// in0_tensor_start_tile_id 
                 (std::uint32_t)1,                               // in0_tensor_stride_w
                 (std::uint32_t)Ct,                              // in0_tensor_stride_h
 
@@ -386,7 +386,7 @@ void bsr_spmm_multicore_reuse(
             if (num_blocks > 0)
                 num_nnz_output_blocks++;
             
-            if (verbose && output_idx_y == 0 && output_idx_x == 0) {
+            if (verbose && output_idx_y == 1 && output_idx_x == 0) {
                 a.pretty_print();
                 log_info(tt::LogVerif, " -- Reader Args --");
                 const char* reader_arg_names[] = {

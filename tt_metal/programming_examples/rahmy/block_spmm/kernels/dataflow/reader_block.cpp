@@ -123,7 +123,7 @@ void kernel_main(){
         // --- "column_indices" gets us the column indices of the BSR matrix, which are the row indices of the dense matrix
         // --- "in1_tensor_start_tile_id" will be the top of a column, and bsr_col_index gets us the row in the dense matrix
         uint32_t bsr_col_index = column_indices[block];
-        uint32_t in1_tensor_row_start_tile_id = in1_tensor_start_tile_id + bsr_col_index * in1_block_h;
+        uint32_t in1_tensor_row_start_tile_id = in1_tensor_start_tile_id + bsr_col_index * in1_block_num_tiles;
         for (uint32_t h = 0; h < in1_block_h; h++) {
             uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
             for (uint32_t w = 0; w < in1_block_w; w++) {

@@ -23,7 +23,10 @@ TestFunctionPtr TestRegistry[] = {
     test_nonsquare_stacked, // 12
     test_nonsquare_diag_first_row, // 13
     test_nonsquare_off_diag_first_row, // 14
-    test_simplified_off_diag_first_row // 15
+    test_simplified_off_diag_first_row, // 15
+    test_2_blocks_diag, // 16
+    test_off_diag_first_row, // 17
+    test_diag_first_row, // 18
 };
 
 
@@ -310,12 +313,9 @@ void bsr_spmm_multicore_reuse(
     uint32_t num_blocks_read = 0;
     for (int output_idx_y = 0; output_idx_y < num_blocks_y; output_idx_y++) {
         for (int output_idx_x = 0; output_idx_x < num_blocks_x; output_idx_x++) {
-            // TODO: test and reason
             int core_idx_x = num_blocks_read % num_cores_x;
             int core_idx_y = num_blocks_read / num_cores_x;
             CoreCoord core = {(std::size_t)core_idx_x, (std::size_t)core_idx_y};
-
-            // What is the translation between core index and output tiles?
 
             uint32_t num_blocks = a.indptr[output_idx_y + 1] - a.indptr[output_idx_y];
             // Write runtime args to device
@@ -386,7 +386,7 @@ void bsr_spmm_multicore_reuse(
             if (num_blocks > 0)
                 num_nnz_output_blocks++;
             
-            if (verbose && output_idx_y == 1 && output_idx_x == 0) {
+            if (verbose && output_idx_y == 0 && output_idx_x == 0) {
                 a.pretty_print();
                 log_info(tt::LogVerif, " -- Reader Args --");
                 const char* reader_arg_names[] = {

@@ -8,6 +8,8 @@
 #include "compute_kernel_api/matmul.h"
 #include "debug/dprint.h"  // required in all kernels using DPRINT
 
+#include "compute_kernel_api/eltwise_unary/fill.h"
+
 
 namespace NAMESPACE {
 void MAIN {
@@ -41,6 +43,20 @@ void MAIN {
     mm_init();
     //DPRINT_MATH(DPRINT << "Math core waiting on " << num_blocks << " blocks." << ENDL());
 
+    bool zero_output = num_blocks == 0;
+    
+    // DRAM initialization technique:
+    // If this core is handling a zero output block,
+    // 1. Compute kernel packs zeros (fill_tile) and pushes to output buffer
+    // 2. Writer waits on a single tile from the output buffer before noc'ing to dram
+    if (zero_output) {
+        // use fill_tile to swarm DST with zeros
+        // then pack that tile to the intermediate buffer?
+        fill_tile(0, 0);
+        cb_reserve_back(tt::CBIndex::c_16, 1);
+        pack_tile(0, tt::CBIndex::c_16);
+        cb_push_back(tt::CBIndex::c_16, 1);
+    }
 
     for (uint32_t b = 0; b < batch; b++) {
         bool spill = num_blocks > 1;

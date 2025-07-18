@@ -7,6 +7,7 @@
 #include "debug/dprint.h"  // required in all kernels using DPRINT
 
 
+
 void kernel_main() {
     // out tensor args
     uint32_t out_tensor_addr = get_arg_val<uint32_t>(0);
@@ -39,29 +40,13 @@ void kernel_main() {
     uint32_t l1_read_addr_increment = zero_output ? 0 : single_tile_size_bytes;
     const DataFormat data_format = get_dataformat(cb_id_out0);
 
-    // DRAM initialization technique:
-    // 1. Cores cooperate to write zeros to the entire region of DRAM. 
-    //      The zeros still have to come from somewhere! Maybe I can provide a global tile 
-    // 2. Cores dealing with nonzero output go about their business. 
-    if (zero_output){
-        DPRINT_DATA1(DPRINT << "Writer core is writing zeros like a numbskull" << ENDL());
-        // on gang. This ain't it. 
-        // TODO: learn more and come back. See the google doc july 9
-        // now we can memset our CB with zeros and get nocing. 
-        // we're still writing to a single output block
-        // now just 
-        // we can memset the 
-        uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
-        memset((void *)l1_read_addr, 0, single_tile_size_bytes);
-
-        // now the rest of the kernel can write to output normally, 
-        // and if it's writing zeros, just never increment the l1_read_addr and never wait on the cb
-    }
-
-
 
     const InterleavedAddrGenFast<out_is_dram> s = {
         .bank_base_address = out_tensor_addr, .page_size = single_tile_size_bytes, .data_format = data_format};
+
+
+    if (zero_output) 
+        cb_wait_front(cb_id_out0, 1);
 
     bool one_time_profile = true;
     for (uint32_t b = 0; b < batch; b++) {

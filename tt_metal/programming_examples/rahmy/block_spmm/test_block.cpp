@@ -6,7 +6,7 @@ using namespace tt;
 using namespace tt::tt_metal;
 
 
-// 
+// namespaces so things are logically organized
 using namespace bsr_test_suite;
 using namespace bsr_host_code;
 
@@ -27,7 +27,7 @@ using HostCodeFunctionPtr = void (*)(
     IDevice* device,
     bool verbose); 
 
-// what if we made the registries arrays of pairs, funcptr:string
+// what if we made the registries arrays of pairs, funcptr:string?
 // that way we wouldn't have to pass the strings around, just the index into the registry
 
 static TestFunctionPtr TestRegistry[] = {
@@ -71,7 +71,8 @@ static TestFunctionPtr TestRegistry[] = {
 
 
 static HostCodeFunctionPtr HostCodeRegistry[] = {
-    bsr_spmm_multicore_reuse, // 
+    bsr_spmm_multicore_reuse, // 0
+    bsr_spmm_multicore_reuse_naive, // 1 
 };
 
 struct TestResult {

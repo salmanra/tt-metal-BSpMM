@@ -1,4 +1,7 @@
+
+#include "include_me.hpp"
 #include "test_suite.hpp"
+#include "host_code.hpp"
 
 using namespace tt::constants;
 using namespace std;
@@ -67,12 +70,14 @@ static TestFunctionPtr TestRegistry[] = {
     test_random_tall, // 33
     test_random_tall_blocks, // 34
     test_random_wide_blocks, // 35
+    test_big_zero_rows, // 36
+    test_big_zero_rows_more, // 37
 };
 
 
-static HostCodeFunctionPtr HostCodeRegistry[] = {
-    bsr_spmm_multicore_reuse, // 0
-    bsr_spmm_multicore_reuse_naive, // 1 
+static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
+    {bsr_spmm_multicore_reuse, "bsr_spmm_multicore_reuse"}, // 0
+    {bsr_spmm_multicore_reuse_naive, "bsr_spmm_multicore_reuse_naive"}, // 1 
 };
 
 struct TestResult {
@@ -118,7 +123,7 @@ TestResult run_test(
 
 
     // initialize output_data
-    dense_matrix<float> tmp(M, N);
+    dense_matrix<float> tmp(M, N, 0.0f);
     dense_matrix<bfloat16> output = tmp.bfloat16_cast();
 
     // run sequential spmm
@@ -204,10 +209,13 @@ void add_and_run_test(
     results.push_back(run_test(host_func, a, b, test_name, verbose, emit_output));
 }
 
-bool print_and_assess_results(std::vector<TestResult> &test_results){
+bool print_and_assess_results(std::vector<TestResult> &test_results, std::string& host_code_function_name){
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Test results ----------------------------------------------------------------" << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Host code function: " << host_code_function_name << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+
 
     // assume there are <1000 tests.
     std::string spacing = "  ";
@@ -231,7 +239,7 @@ bool print_and_assess_results(std::vector<TestResult> &test_results){
         sprintf(buf, "w/ PCC=%.2f", p.pearson);
         result += std::string(buf);
         result += p.pearson > 0.99 ? " ✅ ": " ❌ ";
-        std::cout << "Test #" << count << ": " << spacing << result << " " << count << ' ' << p.test_name << std::endl;
+        std::cout << "Test #" << count << ": " << spacing << result << " " << count << ' ' << spacing << p.test_name << std::endl;
         count++;
     }
 
@@ -252,13 +260,14 @@ void test_suite(uint32_t host_code_function_index = 0){
     3. iter over vector and pretty print passes and fails to the console
     */
 
-    HostCodeFunctionPtr host_function = HostCodeRegistry[host_code_function_index];
+    
+    auto [host_function_ptr, host_function_name] = HostCodeRegistry[host_code_function_index];
     std::vector<TestResult> test_results;
     size_t num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
     for (size_t i = 0; i < num_tests; i++) {
-        add_and_run_test(host_function, TestRegistry[i], test_results);
+        add_and_run_test(host_function_ptr, TestRegistry[i], test_results);
     }
-    bool pass = print_and_assess_results(test_results);
+    bool pass = print_and_assess_results(test_results, host_function_name);
 
     /*
     For later, 
@@ -268,7 +277,7 @@ void test_suite(uint32_t host_code_function_index = 0){
 
 void run_verbose_test(int host_code_num, int test_num){
     auto [a, b, test_name] = TestRegistry[test_num]();
-    TestResult res = run_test(HostCodeRegistry[host_code_num], a, b, test_name, true, true);
+    TestResult res = run_test(HostCodeRegistry[host_code_num].first, a, b, test_name, true, true);
 
     std::cout << "--------------------------------------------------------" << std::endl;
     std::cout << "--- Single Test results --------------------------------" << std::endl;

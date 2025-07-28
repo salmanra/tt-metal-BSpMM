@@ -375,12 +375,23 @@ void matmul_multicore_reuse(
     I have a feeling it's the second one, in which case the meaningful times will be a 
     little harder to squeeze out. 
     */
+
+    // for learning how the code operates, let's  make all these calls block. 
     {
-        ZoneScopedNC("Data Movement and Device code.", tracy::Color::Cyan);
-        EnqueueWriteBuffer(cq, src0_dram_buffer, a.data(), false);
-        EnqueueWriteBuffer(cq, src1_dram_buffer, b.data(), false);
-        EnqueueProgram(cq, program, false);
-        EnqueueReadBuffer(cq, dst_dram_buffer, output.data(), true);
+        ZoneScopedNC("Data Movement and Device code.", tracy::Color::Brown4);
+        {
+            ZoneScopedNC("h2d transfer", tracy::Color::AntiqueWhite4);
+            EnqueueWriteBuffer(cq, src0_dram_buffer, a.data(), false);
+            EnqueueWriteBuffer(cq, src1_dram_buffer, b.data(), true);
+        }
+        {
+            ZoneScopedNC("Device Program launch", tracy::Color::Red2);
+            EnqueueProgram(cq, program, true);
+        }
+        {
+            ZoneScopedNC("d2h transfer", tracy::Color::Aquamarine1);
+            EnqueueReadBuffer(cq, dst_dram_buffer, output.data(), true);
+        }
     }
 }
 

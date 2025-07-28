@@ -15,6 +15,7 @@
 #include <tt-metalium/tilize_untilize.hpp>
 
 #include <tracy/Tracy.hpp>
+#include "hostdevcommon/profiler_common.h"
 
 using namespace tt::constants;
 using namespace std;
@@ -461,6 +462,10 @@ int main(int argc, char** argv) {
         float pearson = check_bfloat16_vector_pcc(golden_vec, result_vec);
         log_info(tt::LogVerif, "Metalium vs Golden -- PCC = {}", pearson);
         TT_FATAL(pearson > 0.99, "PCC not high enough. Result PCC: {}, Expected PCC: 0.99", pearson);
+
+
+        // NEW: required for viewing device profile in tracy
+        tt_metal::detail::DumpDeviceProfileResults(device);
 
         pass &= CloseDevice(device);
 

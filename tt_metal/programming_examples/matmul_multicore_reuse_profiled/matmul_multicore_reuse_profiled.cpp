@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <common/TracyColor.hpp>
 #include <tt-metalium/host_api.hpp>
 #include <tt-metalium/constants.hpp>
 #include <tt-metalium/util.hpp>
@@ -94,14 +95,16 @@ void matmul_multicore_reuse(
     uint32_t MtKt = Mt * Kt;
     uint32_t MtNt = Mt * Nt;
 
-    log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
-    log_info(
-        tt::LogVerif,
-        "Mt= {} -- Nt= {} -- num_cores_x= {} -- num_cores_y= {} --",
-        Mt,
-        Nt,
-        num_cores_x,
-        num_cores_y);
+
+    // We are profiling, don't want this output now
+    // log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
+    // log_info(
+    //     tt::LogVerif,
+    //     "Mt= {} -- Nt= {} -- num_cores_x= {} -- num_cores_y= {} --",
+    //     Mt,
+    //     Nt,
+    //     num_cores_x,
+    //     num_cores_y);
 
     // NOTE: Only supports matmuls where output is blocks of 16 x 16 tiles (ie. multiples of 16*32 x 16*32)
     // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])2
@@ -119,14 +122,15 @@ void matmul_multicore_reuse(
     uint32_t out_subblock_h = std::get<2>(matmul_params);
     uint32_t out_subblock_w = std::get<3>(matmul_params);
 
-    log_info(tt::LogVerif, " -- Metalium Core Sizing --");
-    log_info(
-        tt::LogVerif,
-        " -- per_core_M= {} -- per_core_N= {} -- out_subblock_h= {} -- out_subblock_w= {} --",
-        per_core_M,
-        per_core_N,
-        out_subblock_h,
-        out_subblock_w);
+    // We are profiling, don't want this output now
+    // log_info(tt::LogVerif, " -- Metalium Core Sizing --");
+    // log_info(
+    //     tt::LogVerif,
+    //     " -- per_core_M= {} -- per_core_N= {} -- out_subblock_h= {} -- out_subblock_w= {} --",
+    //     per_core_M,
+    //     per_core_N,
+    //     out_subblock_h,
+    //     out_subblock_w);
 
     TT_ASSERT(Mt % per_core_M == 0);
     TT_ASSERT(Nt % per_core_N == 0);
@@ -187,14 +191,6 @@ void matmul_multicore_reuse(
     CoreRangeSet all_cores(
         tt::tt_metal::num_cores_to_corerangeset(num_blocks_x * num_blocks_y, compute_with_storage_grid_size, true));
 
-    log_info(tt::LogVerif, " -- Metalium Grid Sizing AFTER --");
-    log_info(
-        tt::LogVerif,
-        "Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} --",
-        Mt,
-        Nt,
-        num_blocks_x,
-        num_blocks_y);
 
     //////////////////////////////////////////////////
     /*
@@ -376,6 +372,8 @@ void matmul_multicore_reuse(
 ///////////////////////////////////////
 
 int main(int argc, char** argv) {
+    ZoneScoped;
+    
     bool pass = true;
 
     if (getenv("TT_METAL_SLOW_DISPATCH_MODE") != nullptr) {
@@ -423,7 +421,7 @@ int main(int argc, char** argv) {
         std::vector<bfloat16> result_vec(dram_buffer_C_size / sizeof(bfloat16));
         /* Calling the MatMul host program. Read in result into a host vector */
         {
-            ZoneScopedN("ProgramLoopBody");
+            ZoneScopedNC("ProgramLoopBody", tracy::Color::Bisque);
             for (int i = 0; i < NUM_ITERS; i++) {
                 matmul_multicore_reuse(src0_vec, src1_vec, result_vec, false, M, N, K, B, device);
             }

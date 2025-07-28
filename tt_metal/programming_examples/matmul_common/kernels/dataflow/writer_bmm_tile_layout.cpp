@@ -41,6 +41,8 @@ void kernel_main() {
         for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
             uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
             for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
+                DeviceZoneScopedN("Write Sub Block");
+
                 uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
 
                 cb_wait_front(cb_id_out0, out_subblock_tile_count);

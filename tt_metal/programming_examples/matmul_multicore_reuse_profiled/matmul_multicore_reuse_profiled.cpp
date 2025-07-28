@@ -373,25 +373,24 @@ void matmul_multicore_reuse(
         OR
         2. The reader kernel can NoC tiles as they are ready individually
     I have a feeling it's the second one, in which case the meaningful times will be a 
-    little harder to squeeze out. 
+    little harder to squeeze out. If it is the second one, then the nonblocking h2d/d2h will
+    result in runtime which is somewhat resilient to input matrix size (compute can begin at the same
+    time regardless of input matrix size)
+    Then there are deeper possibilities;
+    1. nonblocking write writes contiguously, thus the first cores to get data are those 
+        asking for the first tiles of data, thus the cores begin their computations in a 
+        cascading manner.
+    2. nonblocking write writes "randomly", or in some other less predictable manner, and
+        the cores follow some other pattern of beginning their computation, or none at all. 
     */
 
     // for learning how the code operates, let's  make all these calls block. 
     {
         ZoneScopedNC("Data Movement and Device code.", tracy::Color::Brown4);
-        {
-            ZoneScopedNC("h2d transfer", tracy::Color::AntiqueWhite4);
-            EnqueueWriteBuffer(cq, src0_dram_buffer, a.data(), false);
-            EnqueueWriteBuffer(cq, src1_dram_buffer, b.data(), true);
-        }
-        {
-            ZoneScopedNC("Device Program launch", tracy::Color::Red2);
-            EnqueueProgram(cq, program, true);
-        }
-        {
-            ZoneScopedNC("d2h transfer", tracy::Color::Aquamarine1);
-            EnqueueReadBuffer(cq, dst_dram_buffer, output.data(), true);
-        }
+        EnqueueWriteBuffer(cq, src0_dram_buffer, a.data(), false);
+        EnqueueWriteBuffer(cq, src1_dram_buffer, b.data(), false);
+        EnqueueProgram(cq, program, true);
+        EnqueueReadBuffer(cq, dst_dram_buffer, output.data(), false);
     }
 }
 

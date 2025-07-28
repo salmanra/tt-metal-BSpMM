@@ -6,6 +6,8 @@
 
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
+#include "tools/profiler/kernel_profiler.hpp"
+
 
 namespace NAMESPACE {
 void MAIN {
@@ -30,6 +32,8 @@ void MAIN {
         uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;
 
         for (uint32_t block = 0; block < num_blocks; block++) {
+            DeviceZoneScopedN("Process Block");
+
             bool last_out = block == (num_blocks - 1);
 
             cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);

@@ -410,6 +410,8 @@ int main(int argc, char** argv) {
         /* Silicon accelerator setup */
         constexpr int device_id = 0;
         IDevice* device = CreateDevice(device_id);
+        
+        ZoneScopedN("Poat-device setup");
 
         ////////////////////////////////////////////////////////////////////////////
         //                      Matmul Parameters Setup

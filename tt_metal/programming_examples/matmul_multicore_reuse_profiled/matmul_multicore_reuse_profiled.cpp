@@ -383,6 +383,12 @@ void matmul_multicore_reuse(
         cascading manner.
     2. nonblocking write writes "randomly", or in some other less predictable manner, and
         the cores follow some other pattern of beginning their computation, or none at all. 
+    But DRAM is banked, and the core placement is potentially unoptimized for the banking, 
+    so the first available DRAM tiles may or may not be far away from their target Tensix cores,
+    which introduces a second layer of difficulty in assessing the behavior of non-blocking dram writes. 
+
+    TODO: figure out how to relate the core ids in Tracy's (x, y) pairs to the metalium grid (logical and physical).
+    
     */
 
     // for learning how the code operates, let's  make all these calls block. 

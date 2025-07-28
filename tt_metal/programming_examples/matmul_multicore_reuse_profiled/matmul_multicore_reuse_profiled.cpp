@@ -66,6 +66,8 @@ void matmul_multicore_reuse(
     uint32_t K,
     uint32_t B,
     IDevice* device) {
+
+    ZoneScoped;
     /*
      * Setup program to execute along with its buffers and kernels to use
      * Core range is just single core
@@ -363,10 +365,23 @@ void matmul_multicore_reuse(
     // ReadFromBuffer(dst_dram_buffer, output);
     // ReadFromBuffer(src0_dram_buffer, output);
 
-    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data(), false);
-    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data(), false);
-    EnqueueProgram(cq, program, false);
-    EnqueueReadBuffer(cq, dst_dram_buffer, output.data(), true);
+    // if we actually want this zone to mean anything, it has to capture the time 
+    // between beginning the Writes and the first succesful reader kernel NoC. 
+    /*
+    Could the behavior be:
+        1. The reader kernel blocks on its NoC call until the entire write buffer is filled
+        OR
+        2. The reader kernel can NoC tiles as they are ready individually
+    I have a feeling it's the second one, in which case the meaningful times will be a 
+    little harder to squeeze out. 
+    */
+    {
+        ZoneScopedNC("Data Movement and Device code.", tracy::Color::Cyan);
+        EnqueueWriteBuffer(cq, src0_dram_buffer, a.data(), false);
+        EnqueueWriteBuffer(cq, src1_dram_buffer, b.data(), false);
+        EnqueueProgram(cq, program, false);
+        EnqueueReadBuffer(cq, dst_dram_buffer, output.data(), true);
+    }
 }
 
 ///////////////////////////////////////

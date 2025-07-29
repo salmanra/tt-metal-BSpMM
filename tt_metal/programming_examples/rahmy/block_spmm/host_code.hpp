@@ -9,7 +9,7 @@ using CoreSpec = std::variant<CoreCoord, CoreRange, CoreRangeSet>;
 namespace bsr_host_code {
 
 // list of host code function declarations
-void bsr_spmm_matmul_multicore_reuse(bsr_matrix<bfloat16>& a,
+void bsr_spmm_multicore_reuse(bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
     dense_matrix<bfloat16>& output,
     bool bcast_batch,
@@ -23,7 +23,7 @@ void bsr_spmm_matmul_multicore_reuse(bsr_matrix<bfloat16>& a,
     IDevice* device,
     bool verbose);
 
-void bsr_spmm_matmul_multicore_reuse_naive(bsr_matrix<bfloat16>& a,
+void bsr_spmm_multicore_reuse_naive(bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
     dense_matrix<bfloat16>& output,
     bool bcast_batch,

@@ -8,6 +8,56 @@ using CoreSpec = std::variant<CoreCoord, CoreRange, CoreRangeSet>;
 
 namespace bsr_host_code {
 
+// list of host code function declarations
+void bsr_spmm_matmul_multicore_reuse(bsr_matrix<bfloat16>& a,
+    dense_matrix<bfloat16>& b,
+    dense_matrix<bfloat16>& output,
+    bool bcast_batch,
+    uint32_t nnz_blocks,
+    uint32_t M,
+    uint32_t N,
+    uint32_t K,
+    uint32_t R,
+    uint32_t C,
+    uint32_t B,
+    IDevice* device,
+    bool verbose);
+
+void bsr_spmm_matmul_multicore_reuse_naive(bsr_matrix<bfloat16>& a,
+    dense_matrix<bfloat16>& b,
+    dense_matrix<bfloat16>& output,
+    bool bcast_batch,
+    uint32_t nnz_blocks,
+    uint32_t M,
+    uint32_t N,
+    uint32_t K,
+    uint32_t R,
+    uint32_t C,
+    uint32_t B,
+    IDevice* device,
+    bool verbose);
+
+using HostCodeFunctionPtr = void (*)(
+    bsr_matrix<bfloat16>& a,
+    dense_matrix<bfloat16>& b,
+    dense_matrix<bfloat16>& output,
+    bool bcast_batch,
+    uint32_t nnz_blocks,
+    uint32_t M,
+    uint32_t N,
+    uint32_t K,
+    uint32_t R,
+    uint32_t C,
+    uint32_t B,
+    IDevice* device,
+    bool verbose); 
+
+static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
+    {bsr_spmm_multicore_reuse, "bsr_spmm_multicore_reuse"}, // 0
+    {bsr_spmm_multicore_reuse_naive, "bsr_spmm_multicore_reuse_naive"}, // 1 
+};
+
+
 std::shared_ptr<Buffer> MakeBuffer(IDevice* device, uint32_t size, uint32_t page_size, bool sram = false) {
     InterleavedBufferConfig config{
         .device = device,

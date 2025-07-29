@@ -6,7 +6,15 @@ using namespace tt;
 
 using CoreSpec = std::variant<CoreCoord, CoreRange, CoreRangeSet>;
 
+
+
 namespace bsr_test_suite {
+
+
+    // I want the registry and the alias to come with this header file. 
+    // Maybe I do need to add declarations :(
+
+    
 
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_zero_rows_more() {
         // matmul params setup

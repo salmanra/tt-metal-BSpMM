@@ -417,7 +417,7 @@ int main(int argc, char** argv) {
         constexpr int device_id = 0;
         IDevice* device = CreateDevice(device_id);
         
-        ZoneScopedN("Poat-device setup");
+        ZoneScopedN("Post-device setup");
 
         ////////////////////////////////////////////////////////////////////////////
         //                      Matmul Parameters Setup

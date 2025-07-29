@@ -46,6 +46,7 @@ int main(int argc, char** argv) {
     profile_test(host_function, a, b, test_name);
 
     std::cout << "--- Profiling complete ----------------------------------------------------------" << std::endl;
+    std::cout << "--- ⚠️⚠️⚠️ PROFILING RESULTS WILL ONLY BE WRITTEN IF THIS PROGRAM IS BUILT WITH PROFILING ENABLED AND IS RUN WITH TRACY LISTENING VIA THE './capture-release' COMMAND" << std::endl;
     return 0;
 }
 

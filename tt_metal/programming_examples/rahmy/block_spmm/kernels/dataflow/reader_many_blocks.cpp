@@ -76,6 +76,14 @@ void kernel_main(){
         .page_size = NoC_Args_single_tile_size_bytes,
         .data_format = NoC_Args_data_format};
 
+    
+    // all we really want to do is
+    // 1. make the NoC Args its own special struct
+    // 2. pass the number of tiles the struct spans as a 
+    //    runtime argument
+    // 3. Let the reader NoC the args, and let all three kernels wait on reader to announce(push_back) the args
+    //
+
     // NoC Args are read first, so that we can use them to read the in0 and in1 blocks.
     // The reader kernel is both the producer and consumer of the NoC Args!
     cb_reserve_back(cb_id_NoC_Args, 1); // assume col indices fit into one tile for now

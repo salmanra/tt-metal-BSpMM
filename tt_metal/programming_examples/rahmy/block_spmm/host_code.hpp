@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 
 #include "include_me.hpp"
 
@@ -155,6 +156,18 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     uint32_t Ct = C / TILE_WIDTH;
 
 
+    struct output_block_args {
+        // reader args
+        uint32_t in0_tensor_start_tile_id;
+        uint32_t in1_tensor_start_tile_id;
+        uint32_t block_row_start;
+        uint32_t block_row_end;
+        uint32_t block_row_index;
+
+        // writer args
+        uint32_t out_buffer_addr;
+        uint32_t out_tensor_start_tile_id;
+    };
 
 
     // Get large matmul params

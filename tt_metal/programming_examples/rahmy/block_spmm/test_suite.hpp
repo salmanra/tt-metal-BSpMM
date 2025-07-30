@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include "include_me.hpp"
 
 using namespace tt;
@@ -51,6 +52,7 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_col();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_row_simplified();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_col_simplified();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_dense();
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
@@ -93,6 +95,7 @@ namespace bsr_test_suite {
         test_random_wide_blocks, // 35
         test_big_zero_rows, // 36
         test_big_zero_rows_more, // 37
+        test_dense, // 38
     };
     
 
@@ -351,6 +354,53 @@ namespace bsr_test_suite {
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_big_dense");
+    }
+
+    // TODO: this example is prime for a next-steps sort of thinking for the impl. What to do 
+    //          with nblocks > ncores?
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_dense_2_blocks_per_core() {
+        // matmul params setup
+
+        uint32_t num_cores = 64; // given our wormhole arch, this is how many Tensix tiles we have
+
+        uint32_t M = 1024;
+        uint32_t N = 128;
+        uint32_t K = 128;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t nblocks = 128;
+        uint32_t block_matrix_height = M / R;
+        
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_dense_2_blocks_per_core");
+    }
+
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_dense() {
+        // One output block per core!
+        uint32_t num_cores = 64; // given our wormhole arch, this is how many Tensix tiles we have
+
+        uint32_t M = 1024;
+        uint32_t N = 64;
+        uint32_t K = 64;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t nblocks = 64; 
+        uint32_t block_matrix_height = M / R;
+        
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_dense");
     }
 
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_basic() {

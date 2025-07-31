@@ -28,8 +28,8 @@ int main(int argc, char** argv) {
     const int host_code_id = 0;
 
     // uhhh pick a host function pick a test and run it ten times.
-    int host_code_num = argc > 1 ? std::stoi(argv[1]) : host_code_id;
-    int test_num = argc > 2 ? std::stoi(argv[2]) : big_test_id;
+    int test_num = argc > 1 ? std::stoi(argv[1]) : big_test_id;
+    int host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
 
     HostCodeFunctionPtr host_function = HostCodeRegistry[host_code_num].first;
     std::string host_function_name = HostCodeRegistry[host_code_num].second;

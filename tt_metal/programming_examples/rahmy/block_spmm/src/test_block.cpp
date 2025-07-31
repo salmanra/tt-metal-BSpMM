@@ -214,6 +214,8 @@ void run_verbose_test(int host_code_num, int test_num){
     std::cout << "--------------------------------------------------------" << std::endl;
     std::cout << "--- Single Test results --------------------------------" << std::endl;
     std::cout << "--------------------------------------------------------" << std::endl;
+    std::cout << "--- Host Code function: " << HostCodeRegistry[host_code_num].second << std::endl;
+    std::cout << "--------------------------------------------------------" << std::endl;
 
     bool pass = true;
     if (res.pearson < 0.99){

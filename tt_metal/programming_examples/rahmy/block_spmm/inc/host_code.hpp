@@ -672,19 +672,32 @@ void bsr_spmm_multicore_reuse(
     uint32_t num_blocks_x = Nt / per_core_N;
     uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
     TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
+
+    // TODO: make a custom core range set for the number of nonzero output blocks
+    uint32_t dram_buffer_dst_row_size = 
+        single_tile_size * Rt * Nt;
+
+    std::unordered_map<uint32_t, std::shared_ptr<Buffer>> dst_dram_buffers; 
+    for (uint32_t i = 0; i < a.indptr.size() - 1; i++) {
+        if (a.indptr[i+1] - a.indptr[i] > 0)
+            dst_dram_buffers[i] = MakeBuffer(device, dram_buffer_dst_row_size, single_tile_size);
+    }
+
+    uint32_t nnz_output_blocks_total = num_blocks_x * dst_dram_buffers.size(); // blocks per row * nnz rows
+
     CoreRangeSet all_cores(
-        tt::tt_metal::num_cores_to_corerangeset(num_blocks_x * num_blocks_y, compute_with_storage_grid_size, true));
+        tt::tt_metal::num_cores_to_corerangeset(nnz_output_blocks_total, compute_with_storage_grid_size, true));
 
 
     if (verbose) {
         log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
         log_info(
             tt::LogVerif,
-            " -- Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} -- num_cores_x={} -- num_cores_y={} --",
+            " -- Mt= {} -- Nt= {} -- nnz_output_blocks= {} -- num_cores_used={} -- num_cores_available_x={} -- num_cores_available_y={} --",
             Mt,
             Nt,
-            num_blocks_x,
-            num_blocks_y,
+            nnz_output_blocks_total,
+            all_cores.size(),
             num_cores_x,
             num_cores_y);
     }
@@ -711,14 +724,7 @@ void bsr_spmm_multicore_reuse(
     auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
     auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_D_size, col_indices_single_tile_size);
 
-    uint32_t dram_buffer_dst_row_size = 
-        single_tile_size * Rt * Nt;
 
-    std::unordered_map<uint32_t, std::shared_ptr<Buffer>> dst_dram_buffers; 
-    for (uint32_t i = 0; i < a.indptr.size() - 1; i++) {
-        if (a.indptr[i+1] - a.indptr[i] > 0)
-            dst_dram_buffers[i] = MakeBuffer(device, dram_buffer_dst_row_size, single_tile_size);
-    }
 
     // NAIVE: for this first, naive impl, keep all the CBs the same size, the maximum size
     uint32_t src0_cb_index = CBIndex::c_0;  // 0
@@ -761,6 +767,7 @@ void bsr_spmm_multicore_reuse(
 
     /*
      * Create Kernels (Reader, Writer, Compute)
+     TODO: "all_cores" is bad? 
      */
     // Create reader and writer kernels per core
     auto reader_id = tt_metal::CreateKernel(
@@ -796,7 +803,6 @@ void bsr_spmm_multicore_reuse(
     //          Yes it is clear: i'm already thinking about this, and the depth of reasoning I'm practicing will help 
     //          me with whatever I decide to do afterwards. 
 
-    uint32_t nnz_output_blocks_total = num_blocks_x * dst_dram_buffers.size(); // blocks per row * nnz rows
     TT_ASSERT(nnz_output_blocks_total <= num_cores_x * num_cores_y);
 
     uint32_t nnz_output_blocks_read = 0;
@@ -1102,11 +1108,12 @@ void bsr_spmm_multicore_reuse_naive(
         log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
         log_info(
             tt::LogVerif,
-            " -- Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} -- num_cores_x={} -- num_cores_y={} --",
+            " -- Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} -- num_cores_used={}-- num_cores_x={} -- num_cores_y={} --",
             Mt,
             Nt,
             num_blocks_x,
             num_blocks_y,
+            all_cores.size(),
             num_cores_x,
             num_cores_y);
     }
@@ -1388,8 +1395,9 @@ void bsr_spmm_multicore_reuse_naive(
         log_info(tt::LogVerif, " -- Runtime Args set --");
         log_info(
             tt::LogVerif,
-            " -- nnz output blocks= {}",
-            num_nnz_output_blocks);
+            " -- nnz output blocks= {} -- num output blocks total {} --",
+            num_nnz_output_blocks,
+            num_blocks_read);
     }
 
 

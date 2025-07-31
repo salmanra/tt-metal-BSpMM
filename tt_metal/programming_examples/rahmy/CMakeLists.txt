@@ -1,9 +1,9 @@
 set(RAHMY_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/hello_world_compute_kernel_remix/hello_world_compute_kernel_remix.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/single_core_spmv/single_core_spmv.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/block.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/test_block.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/profile_block.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/block.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/test_block.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/profile_block.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/add_2_integers_in_compute_rahmy/add_2_integers_in_compute_rahmy.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/sfpi_fill/sfpi_fill.cpp
 )

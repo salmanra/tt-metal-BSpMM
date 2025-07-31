@@ -12,8 +12,8 @@
 // #include <matmul_common/bmm_op.hpp>
 #include <tt-metalium/tilize_untilize.hpp>
 
-#include "bsr_matrix.hpp"
-#include "bmm_op.hpp"
+#include "../inc/bsr_matrix.hpp"
+#include "../inc/bmm_op.hpp"
 
 using namespace tt::constants;
 using namespace std;

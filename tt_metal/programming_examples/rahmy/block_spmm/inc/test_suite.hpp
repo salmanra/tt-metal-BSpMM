@@ -53,6 +53,7 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_row_simplified();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_col_simplified();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_dense();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_empty_rows();
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
@@ -96,8 +97,31 @@ namespace bsr_test_suite {
         test_big_zero_rows, // 36
         test_big_zero_rows_more, // 37
         test_dense, // 38
+        test_many_empty_rows, // 39
     };
-    
+
+    // this case should expose the performance difference between the naive and new versions
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_empty_rows() {
+        // matmul params setup
+        uint32_t M = 8192;
+        uint32_t N = 256;
+        uint32_t K = 256;
+        // block params setup
+        uint32_t R = 256;
+        uint32_t C = 256;
+        uint32_t nblocks = 1;
+        uint32_t block_matrix_height = M / R;
+
+        // all nz on one row
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_many_empty_rows");
+    }    
 
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_zero_rows_more() {
         // matmul params setup

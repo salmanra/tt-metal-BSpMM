@@ -1,8 +1,8 @@
 #include <common/TracyColor.hpp>
 #include <string>
-#include "include_me.hpp"
-#include "test_suite.hpp"
-#include "host_code.hpp"
+#include "../inc/include_me.hpp"
+#include "../inc/test_suite.hpp"
+#include "../inc/host_code.hpp"
 
 #include <tracy/Tracy.hpp>
 #include "hostdevcommon/profiler_common.h"

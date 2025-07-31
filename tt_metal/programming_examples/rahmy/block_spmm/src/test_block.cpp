@@ -1,7 +1,8 @@
 
-#include "include_me.hpp"
-#include "test_suite.hpp"
-#include "host_code.hpp"
+#include <string>
+#include "../inc/include_me.hpp"
+#include "../inc/test_suite.hpp"
+#include "../inc/host_code.hpp"
 
 using namespace tt::constants;
 using namespace std;
@@ -232,22 +233,25 @@ void run_verbose_test(int host_code_num, int test_num){
 
 int main(int argc, char** argv) {
 
-    // want to provide an opt for which Host code function to use.
-    // gonna need the more robust getopts function
-
-    bool test = true;
-    if (argc >= 2) {
-        test = std::string(argv[1]) == "1";
+    bool test_all = true;
+    int host_code_index = 0;
+    if (argc > 1) {
+        test_all = std::string(argv[1]) == "all";
     }
-    if (test) {
-        test_suite();
+    if (argc > 2) {
+        host_code_index = std::stoi(argv[2]);
+    }
+
+
+    if (test_all) {
+        test_suite(host_code_index);
     }
     else {
-        int test_num = argc > 2 ? std::stoi(argv[2]) : -1;
+        int test_num = argc > 1 ? std::stoi(argv[1]) : -1;
         if (test_num == -1) {
             std::cout << "No test specified. Returning." << std::endl;
             return 0;
         }
-        run_verbose_test(0, test_num);
+        run_verbose_test(host_code_index, test_num);
     }
 }

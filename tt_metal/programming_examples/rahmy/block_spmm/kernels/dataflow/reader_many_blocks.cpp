@@ -7,7 +7,7 @@ void kernel_main(){
 
     // in0 tensor args
     uint32_t in0_tensor_addr = get_arg_val<uint32_t>(0);
-    uint32_t in0_tensor_start_tile_id = get_arg_val<uint32_t>(1);
+    uint32_t in0_tensor_start_tile_id = get_arg_val<uint32_t>(1); // TODO:
     uint32_t in0_tensor_stride_w = get_arg_val<uint32_t>(2);
     uint32_t in0_tensor_stride_h = get_arg_val<uint32_t>(3);
     // in0_next_block_stride is replaced with in0_block_num_tiles
@@ -19,7 +19,7 @@ void kernel_main(){
 
     // in1 tensor args
     uint32_t in1_tensor_addr = get_arg_val<uint32_t>(7);
-    uint32_t in1_tensor_start_tile_id = get_arg_val<uint32_t>(8);
+    uint32_t in1_tensor_start_tile_id = get_arg_val<uint32_t>(8); // TODO:
     uint32_t in1_tensor_stride_w = get_arg_val<uint32_t>(9);
     uint32_t in1_tensor_stride_h = get_arg_val<uint32_t>(10);
     // in1_next_block_stride is replaced with col indices obtained from NoC args
@@ -31,15 +31,16 @@ void kernel_main(){
 
     // in0/in1 common args
     // num_blocks is determined by the runtime args, range of nonzero blocks in that row
-    uint32_t block_row_start = get_arg_val<uint32_t>(14);
-    uint32_t block_row_end = get_arg_val<uint32_t>(15);
-    uint32_t block_row_index = get_arg_val<uint32_t>(16);  // this is the row index in the sparse matrix
+    uint32_t block_row_start = get_arg_val<uint32_t>(14); // TODO:
+    uint32_t block_row_end = get_arg_val<uint32_t>(15);// TODO:
+    uint32_t block_row_index = get_arg_val<uint32_t>(16);  // TODO: // this is the row index in the sparse matrix
 
     uint32_t num_blocks = block_row_end - block_row_start;
 
     // NoC Args
     uint32_t NoC_Args_addr = get_arg_val<uint32_t>(17);
-
+    // TODO: new arg: num bytes NoC_Args
+    // TODO: new arg: num output blocks (num iters, whatever)
     ////DPRINT_DATA0(DPRINT << "Runtime args obtained. NNZ blocks to read: " << num_blocks << ENDL());
 
 
@@ -84,6 +85,12 @@ void kernel_main(){
     // 3. Let the reader NoC the args, and let all three kernels wait on reader to announce(push_back) the args
     //
 
+
+    // POTENTIAL: memory save
+    // we can NoC bytes from DRAM for indexing as needed (once for each output block, not too bad?)
+    // saves us memory in SRAM.
+    // 
+    uint32_t *column_indices;
     // NoC Args are read first, so that we can use them to read the in0 and in1 blocks.
     // The reader kernel is both the producer and consumer of the NoC Args!
     cb_reserve_back(cb_id_NoC_Args, 1); // assume col indices fit into one tile for now
@@ -92,7 +99,7 @@ void kernel_main(){
     noc_async_read_barrier();
     cb_push_back(cb_id_NoC_Args, 1);
 
-    uint32_t* column_indices = (uint32_t*)l1_write_addr_NoC_Args;
+    column_indices = (uint32_t*)l1_write_addr_NoC_Args;
 
     // Now, iterate over the blocks in the row
     // We could either:

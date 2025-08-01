@@ -109,6 +109,7 @@ CBHandle MakeCircularBufferFP32(Program& program, const CoreSpec& core, tt::CBIn
 
 uint32_t _get_maximum_block_dim_with_NoC_args(int32_t block_dim, int32_t in0_block_w, int32_t num_tiles_in_NoC_args) {
     int32_t num_available_tiles_in_SRAM = 400; // as provided by TT code. roughly: SRAM size in bytes divided by tile size in bytes
+                                               // but i think this is the Grayskull number. not important for now
     num_available_tiles_in_SRAM -= num_tiles_in_NoC_args;
     int32_t other_dim = (num_available_tiles_in_SRAM - 2 * in0_block_w * block_dim) / (2 * in0_block_w + block_dim);
     if (other_dim > 0) {
@@ -116,6 +117,34 @@ uint32_t _get_maximum_block_dim_with_NoC_args(int32_t block_dim, int32_t in0_blo
     }
     return 0;
 }
+
+uint32_t get_Npc_from_BSR_block_size(uint32_t Nt, uint32_t Mpc, uint32_t in0_block_w, uint32_t num_cores_x, uint32_t num_tiles_for_NoC_args) {
+    auto Nt_fac = _get_prime_factors(Nt);
+    uint32_t Npc_min = 1;
+    for (auto it = Nt_fac.begin(); it != Nt_fac.end(); ++it) {
+        auto ele = *it;
+        if (ele > num_cores_x) {
+            Npc_min *= ele;
+            Nt_fac.erase(it);
+            --it;
+        }
+    }
+    uint32_t Npc = Npc_min;
+    auto Npc_choices = _get_possible_products(Nt_fac);
+    auto Npc_max = _get_maximum_block_dim_with_NoC_args(Mpc, in0_block_w, num_tiles_for_NoC_args);
+    for (auto& ele : Npc_choices) {
+        if (ele * Npc_min <= Npc_max) {
+            Npc = ele * Npc_min;
+        } else {
+            break;
+        }
+    }
+
+    return Npc;
+}
+
+
+
 
 
 void bsr_spmm_multicore_reuse_many_blocks_per_core(
@@ -181,14 +210,24 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     // NAIVE: these should adapt to per core workload later. So we have to understand the util function and why it works!
     //          short idea: let the tt block size be the nz block size, then take the largest of the 20 subblock choices which fits.
     //          what breaks when in0_block_w = 2??
+
+    // okay i get it: getting the matmul params is easy in the dense case because you need params in terms of tiles, and tiles have 
+    // a fixed size for every possible matrix pair. But for us, we want the matmul params in terms of BSR blocks, which have variable size.
+    // But it's also still tiles. Let's focus on our current test suite (with block size a multiple of tile size). This is still very useful in 
+    // the dense case, and in prototyping the overhead analysis. 
+    // Ohh... OPPORTUNITY: we can max out on Npc, then iterate over Mpc{Rt}.
+    //                      This let's us reuse the SRAM buffers, meaning we can 
+    //                      actually handle more data per core than the dense case!!!
+    //                      we peakin. 
     uint32_t per_core_M = Rt;
     uint32_t in0_block_w = Ct;
 
+    // TODO: get the number of tiles used for the new NoC args and add to this calc 
     int32_t num_tiles_for_col_indices = (col_indices_single_tile_size - 1 + sizeof(int) * nnz_blocks) / col_indices_single_tile_size;
-    uint32_t per_core_N = _get_maximum_block_dim_with_NoC_args(per_core_M, in0_block_w, num_tiles_for_col_indices);
-    per_core_N = std::min({per_core_N, Ct, Nt}); // TODO: this is a bit contrived. idk what to do about it tho
-
-
+    // uint32_t per_core_N = _get_maximum_block_dim_with_NoC_args(per_core_M, in0_block_w, num_tiles_for_col_indices);
+    // // TODO: this is a bit contrived. idk what to do about it tho
+    // per_core_N = std::min({per_core_N, Ct, Nt});
+    uint32_t per_core_N = get_Npc_from_BSR_block_size(Nt, per_core_M, in0_block_w, num_cores_x, num_tiles_for_col_indices);
     // pick the largest subblock size that fits within the block size
     uint32_t out_subblock_h, out_subblock_w;
     for (auto& subblock_hw : bmm_op_utils::SUBBLOCK_HW_CHOICES) {
@@ -248,19 +287,30 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     uint32_t num_blocks_x = Nt / per_core_N;
     uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
     TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
+    uint32_t dram_buffer_dst_row_size = 
+        single_tile_size * Rt * Nt;
+
+    std::unordered_map<uint32_t, std::shared_ptr<Buffer>> dst_dram_buffers; 
+    for (uint32_t i = 0; i < a.indptr.size() - 1; i++) {
+        if (a.indptr[i+1] - a.indptr[i] > 0)
+            dst_dram_buffers[i] = MakeBuffer(device, dram_buffer_dst_row_size, single_tile_size);
+    }
+
+    uint32_t nnz_output_blocks_total = num_blocks_x * dst_dram_buffers.size(); // blocks per row * nnz rows
+
     CoreRangeSet all_cores(
-        tt::tt_metal::num_cores_to_corerangeset(num_blocks_x * num_blocks_y, compute_with_storage_grid_size, true));
+        tt::tt_metal::num_cores_to_corerangeset(nnz_output_blocks_total, compute_with_storage_grid_size, true));
 
 
     if (verbose) {
         log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
         log_info(
             tt::LogVerif,
-            " -- Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} -- num_cores_x={} -- num_cores_y={} --",
+            " -- Mt= {} -- Nt= {} -- nnz_output_blocks= {} -- num_cores_used={} -- num_cores_available_x={} -- num_cores_available_y={} --",
             Mt,
             Nt,
-            num_blocks_x,
-            num_blocks_y,
+            nnz_output_blocks_total,
+            all_cores.ranges().size(),
             num_cores_x,
             num_cores_y);
     }
@@ -286,15 +336,6 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
     auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
     auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_D_size, col_indices_single_tile_size);
-
-    uint32_t dram_buffer_dst_row_size = 
-        single_tile_size * Rt * Nt;
-
-    std::unordered_map<uint32_t, std::shared_ptr<Buffer>> dst_dram_buffers; 
-    for (uint32_t i = 0; i < a.indptr.size() - 1; i++) {
-        if (a.indptr[i+1] - a.indptr[i] > 0)
-            dst_dram_buffers[i] = MakeBuffer(device, dram_buffer_dst_row_size, single_tile_size);
-    }
 
     // NAIVE: for this first, naive impl, keep all the CBs the same size, the maximum size
     uint32_t src0_cb_index = CBIndex::c_0;  // 0
@@ -371,8 +412,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     //    ... it's not clear whether doing this first and then working on the multicast impl is better
     //          Yes it is clear: i'm already thinking about this, and the depth of reasoning I'm practicing will help 
     //          me with whatever I decide to do afterwards. 
-
-    uint32_t nnz_output_blocks_total = num_blocks_x * dst_dram_buffers.size(); // blocks per row * nnz rows
+    // TODO: obsolete this assert
     TT_ASSERT(nnz_output_blocks_total <= num_cores_x * num_cores_y);
 
     uint32_t nnz_output_blocks_read = 0;
@@ -394,8 +434,8 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
                 (std::uint32_t)Ct,                              // in0_tensor_stride_h
 
                 (std::uint32_t)in0_block_w,               // in0_block_w
-                (std::uint32_t)per_core_M,                // in0_block_h
-                (std::uint32_t)in0_block_w * per_core_M,  // in0_block_num_tiles
+                (std::uint32_t)Rt,                         // in0_block_h
+                (std::uint32_t)in0_block_w * Rt,  // in0_block_num_tiles
 
                 (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
                 (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id 
@@ -673,7 +713,6 @@ void bsr_spmm_multicore_reuse(
     uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
     TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
 
-    // TODO: make a custom core range set for the number of nonzero output blocks
     uint32_t dram_buffer_dst_row_size = 
         single_tile_size * Rt * Nt;
 

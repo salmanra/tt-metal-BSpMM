@@ -1,6 +1,8 @@
 #include <stdint.h>
+#include <cstdint>
 #include "dataflow_api.h"
 #include "debug/dprint.h"  // required in all kernels using DPRINT
+#include "hostdevcommon/kernel_structs.h"
 
 void kernel_main(){
     // why are all the constants not compile time args?
@@ -39,6 +41,8 @@ void kernel_main(){
 
     // NoC Args
     uint32_t NoC_Args_addr = get_arg_val<uint32_t>(17);
+
+    uint32_t indptr_addr = get_arg_val<uint32_t>(18);
     // TODO: new arg: num bytes NoC_Args
     // TODO: new arg: num output blocks (num iters, whatever)
     ////DPRINT_DATA0(DPRINT << "Runtime args obtained. NNZ blocks to read: " << num_blocks << ENDL());
@@ -51,6 +55,7 @@ void kernel_main(){
     const uint32_t cb_id_in0 = tt::CBIndex::c_0;
     const uint32_t cb_id_in1 = tt::CBIndex::c_1;
     const uint32_t cb_id_NoC_Args = tt::CBIndex::c_2;
+    const uint32_t cb_id_indptr = tt::CBIndex::c_3;
 
 
     // input data format will probably by bfloat16
@@ -61,12 +66,15 @@ void kernel_main(){
     // NoC Args dataformat will probably be uint32_t
     const uint32_t NoC_Args_single_tile_size_bytes = get_tile_size(cb_id_NoC_Args);
     const DataFormat NoC_Args_data_format = get_dataformat(cb_id_NoC_Args);
+    const uint32_t indptr_single_tile_size_bytes = get_tile_size(cb_id_indptr);
+    const DataFormat indptr_data_format = get_dataformat(cb_id_indptr);
 
 
     // The keys to the kingdom
     uint32_t l1_write_addr_in0;
     uint32_t l1_write_addr_in1;
     uint32_t l1_write_addr_NoC_Args;
+    uint32_t l1_write_addr_indptr;
 
     const InterleavedAddrGenFast<in0_is_dram> s0 = {
         .bank_base_address = in0_tensor_addr, .page_size = in0_single_tile_size_bytes, .data_format = in0_data_format};
@@ -76,7 +84,10 @@ void kernel_main(){
         .bank_base_address = NoC_Args_addr,
         .page_size = NoC_Args_single_tile_size_bytes,
         .data_format = NoC_Args_data_format};
-
+    const InterleavedAddrGenFast<true> s3 = {
+        .bank_base_address = indptr_addr,
+        .page_size = indptr_single_tile_size_bytes,
+        .data_format = indptr_data_format};
     
     // all we really want to do is
     // 1. make the NoC Args its own special struct
@@ -90,7 +101,7 @@ void kernel_main(){
     // we can NoC bytes from DRAM for indexing as needed (once for each output block, not too bad?)
     // saves us memory in SRAM.
     // 
-    uint32_t *column_indices;
+    uint32_t *column_indices, *indptr;
     // NoC Args are read first, so that we can use them to read the in0 and in1 blocks.
     // The reader kernel is both the producer and consumer of the NoC Args!
     cb_reserve_back(cb_id_NoC_Args, 1); // assume col indices fit into one tile for now
@@ -100,6 +111,21 @@ void kernel_main(){
     cb_push_back(cb_id_NoC_Args, 1);
 
     column_indices = (uint32_t*)l1_write_addr_NoC_Args;
+
+    cb_reserve_back(cb_id_indptr, 1);
+    l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
+    noc_async_read_tile(0, s3, l1_write_addr_indptr);
+    noc_async_read_barrier();
+    cb_push_back(cb_id_indptr, 1);
+
+    indptr = (uint32_t*)l1_write_addr_indptr;
+
+    // Now the idea is to pass the number of output blocks as a runtime arg, 
+    // then let the reader grab the rows as needed since if there is more than one
+    // output block assigned to a core, each output block is in its own row. 
+    // 
+    // Rt, Ct, indptr can be used to get the next start tile ids. 
+    // That's it for the reader. 
 
     // Now, iterate over the blocks in the row
     // We could either:

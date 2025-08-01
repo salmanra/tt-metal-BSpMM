@@ -71,8 +71,6 @@ void MAIN {
 
             //DPRINT_MATH(DPRINT << "Math core recieved " << block + 1 << " blocks so far." << ENDL());
 
-            // when subtile dims are 1,1 ,, these offsets never leave zero. Are they backwards?
-            // Are they otherwise bad?
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
                 int in1_index_subblock_offset = 0;

@@ -410,7 +410,7 @@ namespace bsr_test_suite {
         uint32_t num_cores = 64; // given our wormhole arch, this is how many Tensix tiles we have
 
         uint32_t M = 1024;
-        uint32_t N = 64;
+        uint32_t N = 256;
         uint32_t K = 64;
         // block params setup
         uint32_t R = 32;

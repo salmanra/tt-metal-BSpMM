@@ -170,8 +170,8 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     uint32_t single_tile_size = detail::TileSize(cb_data_format);
     // uint32_t single_tile_size = 2 * 1024;
 
-    tt::DataFormat col_indices_data_format = tt::DataFormat::Int32;
-    uint32_t col_indices_single_tile_size = detail::TileSize(col_indices_data_format);
+    tt::DataFormat indexing_data_format = tt::DataFormat::Int32;
+    uint32_t indexing_data_single_tile_size = detail::TileSize(indexing_data_format);
 
     auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
@@ -198,18 +198,8 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
         uint32_t out_tensor_start_tile_id;
     };
 
+    //
 
-    // Get large matmul params
-    //
-    // auto matmul_params = bmm_op_utils::get_large_matmul_params(Mt, Nt, num_cores_y, num_cores_x, in0_block_w);
-    // uint32_t per_core_M = std::get<0>(matmul_params);
-    // uint32_t per_core_N = std::get<1>(matmul_params);
-    // uint32_t out_subblock_h = std::get<2>(matmul_params);
-    // uint32_t out_subblock_w = std::get<3>(matmul_params);
-    //
-    // NAIVE: these should adapt to per core workload later. So we have to understand the util function and why it works!
-    //          short idea: let the tt block size be the nz block size, then take the largest of the 20 subblock choices which fits.
-    //          what breaks when in0_block_w = 2??
 
     // okay i get it: getting the matmul params is easy in the dense case because you need params in terms of tiles, and tiles have 
     // a fixed size for every possible matrix pair. But for us, we want the matmul params in terms of BSR blocks, which have variable size.
@@ -219,11 +209,12 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     //                      This let's us reuse the SRAM buffers, meaning we can 
     //                      actually handle more data per core than the dense case!!!
     //                      we peakin. 
+
     uint32_t per_core_M = Rt;
     uint32_t in0_block_w = Ct;
 
     // TODO: get the number of tiles used for the new NoC args and add to this calc 
-    int32_t num_tiles_for_col_indices = (col_indices_single_tile_size - 1 + sizeof(int) * nnz_blocks) / col_indices_single_tile_size;
+    int32_t num_tiles_for_col_indices = (indexing_data_single_tile_size - 1 + sizeof(int) * nnz_blocks) / indexing_data_single_tile_size;
     // uint32_t per_core_N = _get_maximum_block_dim_with_NoC_args(per_core_M, in0_block_w, num_tiles_for_col_indices);
     // // TODO: this is a bit contrived. idk what to do about it tho
     // per_core_N = std::min({per_core_N, Ct, Nt});
@@ -254,6 +245,9 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     TT_ASSERT(Nt % per_core_N == 0);
     TT_ASSERT(Kt % in0_block_w == 0);
 
+    // NAIVE: these should adapt to per core workload. So we have to understand the util function and why it works!
+    //          short idea: let the tt block size be the nz block size, then take the largest of the 20 subblock choices which fits.
+    //          what breaks when in0_block_w = 2??
     uint32_t in0_block_tiles = per_core_M * in0_block_w;
     uint32_t in0_CB_tiles = in0_block_tiles * 2;  // double buffer
     uint32_t in0_CB_size = in0_CB_tiles * single_tile_size;
@@ -274,19 +268,12 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
 
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
 
+    //////////////////////////////////////////////////
     /*
-     * Multi-Core prep
+     * Create DRAM Buffers for input and output vectors
+     * Writing data from input vectors to source buffers
      */
-    // auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
-    // uint32_t num_cores_x = compute_with_storage_grid_size.x;
-    // uint32_t num_cores_y = compute_with_storage_grid_size.y;
-    //
-    // NAIVE: these should adapt to per core workload later.
-    // uint32_t num_blocks_y = Mt / per_core_M;
-    uint32_t num_blocks_y = M / R; // block_matrix_height, how many blocks tall the input matrix is.
     uint32_t num_blocks_x = Nt / per_core_N;
-    uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
-    TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
     uint32_t dram_buffer_dst_row_size = 
         single_tile_size * Rt * Nt;
 
@@ -295,6 +282,28 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
         if (a.indptr[i+1] - a.indptr[i] > 0)
             dst_dram_buffers[i] = MakeBuffer(device, dram_buffer_dst_row_size, single_tile_size);
     }
+
+    // NAIVE: these should adapt to per core workload.
+    uint32_t dram_buffer_A_size =
+        single_tile_size * Rt * Ct * nnz_blocks;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
+    uint32_t dram_buffer_B_size =
+        single_tile_size * Nt * Kt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
+
+    uint32_t dram_buffer_D_size =
+        sizeof(int) * nnz_blocks; //
+    if (dram_buffer_D_size > indexing_data_single_tile_size)
+        dram_buffer_D_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_D_size) / (indexing_data_single_tile_size));
+
+    uint32_t dram_buffer_indptr_size = 
+        sizeof(int) * (M / R);
+    if (dram_buffer_indptr_size > indexing_data_single_tile_size)
+        dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
+
+
+    auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
+    auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
+    auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_D_size, std::min(indexing_data_single_tile_size, dram_buffer_D_size));
+    auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, std::min(indexing_data_single_tile_size, dram_buffer_indptr_size));
 
     uint32_t nnz_output_blocks_total = num_blocks_x * dst_dram_buffers.size(); // blocks per row * nnz rows
 
@@ -310,32 +319,14 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
             Mt,
             Nt,
             nnz_output_blocks_total,
-            all_cores.ranges().size(),
+            all_cores.num_cores(),
             num_cores_x,
             num_cores_y);
     }
 
-    //////////////////////////////////////////////////
     /*
-     * Create DRAM Buffers for input and output vectors
-     * Writing data from input vectors to source buffers
-     */
-
-    uint32_t dram_buffer_A_size =
-        single_tile_size * Rt * Ct * nnz_blocks;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
-    uint32_t dram_buffer_B_size =
-        single_tile_size * Nt * Kt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
-
-
-    // In fact let's pad this to fill a tile at least
-    uint32_t dram_buffer_D_size =
-        sizeof(int) * nnz_blocks; //
-    dram_buffer_D_size = col_indices_single_tile_size * ((col_indices_single_tile_size - 1 + dram_buffer_D_size) / (col_indices_single_tile_size));
-
-
-    auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
-    auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
-    auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_D_size, col_indices_single_tile_size);
+    SRAM Circular Buffers
+    */
 
     // NAIVE: for this first, naive impl, keep all the CBs the same size, the maximum size
     uint32_t src0_cb_index = CBIndex::c_0;  // 0
@@ -348,8 +339,6 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
                                               .set_page_size(src1_cb_index, single_tile_size);
     auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src1_config);
 
-
-
     uint32_t output_cb_index = tt::CBIndex::c_16;
     uint32_t interm0_cb_index = tt::CBIndex::c_24;
     std::map<uint8_t, tt::DataFormat> output_cb_data_format_spec{
@@ -359,11 +348,16 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
         .set_page_size(interm0_cb_index, single_tile_size);
         auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_config);
 
+
+    // TODO: uh this is nasty and wastes memory and may even be incorrect for buffer sizes larger than a single tile.
     uint32_t column_indices_cb_index = CBIndex::c_2;  // 2
     CircularBufferConfig cb_column_indices_config = CircularBufferConfig(
         dram_buffer_D_size, {{column_indices_cb_index, tt::DataFormat::Int32}})
-                                                .set_page_size(column_indices_cb_index, col_indices_single_tile_size);
+                                                .set_page_size(column_indices_cb_index, std::min(indexing_data_single_tile_size, dram_buffer_D_size));
     auto cb_column_indices = tt_metal::CreateCircularBuffer(program, all_cores, cb_column_indices_config);
+
+    auto indptr_cb_index = CBIndex::c_3; // 3
+    auto cb_indptr = MakeCircularBuffer(program, all_cores, indptr_cb_index, dram_buffer_indptr_size, std::min(indexing_data_single_tile_size, dram_buffer_indptr_size), tt::DataFormat::Int32);
 
      /*
      * Compile time arguments
@@ -451,6 +445,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
                 (std::uint32_t) output_idx_y, // row index into bsr matrix
 
                 (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
+                (std::uint32_t)indptr_dram_buffer->address(),
             };
 
             std::vector<uint32_t> writer_args = {
@@ -573,7 +568,8 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
 
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
-    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
+    EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
 
     if (verbose)
         log_info(tt::LogVerif, " -- All data moved to DRAM --");

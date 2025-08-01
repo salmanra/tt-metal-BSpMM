@@ -186,11 +186,12 @@ void matmul_multicore_reuse(
     log_info(tt::LogVerif, " -- Metalium Grid Sizing AFTER --");
     log_info(
         tt::LogVerif,
-        "Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} --",
+        "Mt= {} -- Nt= {} -- num_blocks_x= {} -- num_blocks_y= {} -- num_cores_used={}",
         Mt,
         Nt,
         num_blocks_x,
-        num_blocks_y);
+        num_blocks_y,
+        all_cores.num_cores());
 
     //////////////////////////////////////////////////
     /*
@@ -390,9 +391,9 @@ int main(int argc, char** argv) {
         // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])
 
         /* Create source data */
-        constexpr uint32_t M = 640;  // user-defined
-        constexpr uint32_t N = 640;  // user-defined
-        constexpr uint32_t K = 640;  // user-defined
+        constexpr uint32_t M = 2048;  // user-defined
+        constexpr uint32_t N = 2048;  // user-defined
+        constexpr uint32_t K = 512;  // user-defined
         constexpr uint32_t B = 1;    // user-defined
 
         uint32_t Mt = M / TILE_HEIGHT;

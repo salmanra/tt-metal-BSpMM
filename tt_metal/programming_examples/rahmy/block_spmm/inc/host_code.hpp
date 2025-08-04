@@ -76,7 +76,7 @@ using HostCodeFunctionPtr = void (*)(
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
     {bsr_spmm_multicore_reuse_many_blocks_per_core, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // 0
     {bsr_spmm_multicore_reuse, "bsr_spmm_multicore_reuse"}, // 1
-    {bsr_spmm_multicore_reuse_naive, "bsr_spmm_multicore_reuse_naive"}, // 1
+    {bsr_spmm_multicore_reuse_naive, "bsr_spmm_multicore_reuse_naive"}, // 2
 };
 
 
@@ -206,7 +206,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     // But it's also still tiles. Let's focus on our current test suite (with block size a multiple of tile size). This is still very useful in 
     // the dense case, and in prototyping the overhead analysis. 
     // Ohh... OPPORTUNITY: we can max out on Npc, then iterate over Mpc{Rt}.
-    //                      This let's us reuse the SRAM buffers, meaning we can 
+    //                      This lets us reuse the SRAM buffers, meaning we can 
     //                      actually handle more data per core than the dense case!!!
     //                      we peakin. 
 
@@ -215,9 +215,6 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
 
     // TODO: get the number of tiles used for the new NoC args and add to this calc 
     int32_t num_tiles_for_col_indices = (indexing_data_single_tile_size - 1 + sizeof(int) * nnz_blocks) / indexing_data_single_tile_size;
-    // uint32_t per_core_N = _get_maximum_block_dim_with_NoC_args(per_core_M, in0_block_w, num_tiles_for_col_indices);
-    // // TODO: this is a bit contrived. idk what to do about it tho
-    // per_core_N = std::min({per_core_N, Ct, Nt});
     uint32_t per_core_N = get_Npc_from_BSR_block_size(Nt, per_core_M, in0_block_w, num_cores_x, num_tiles_for_col_indices);
     // pick the largest subblock size that fits within the block size
     uint32_t out_subblock_h, out_subblock_w;
@@ -508,7 +505,8 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
                     "col_indices_start_of_row",
                     "col_indices_end_of_row",
                     "row_index_into_bsr_matrix",
-                    "column_indices_addr"
+                    "column_indices_addr",
+                    "indptr_dram_buffer->address()",
                 };
                 for (size_t i = 0; i < mm_reader_args.size(); ++i) {
                     log_info(tt::LogVerif, "reader_arg[{}] ({}) = {}", i, reader_arg_names[i], mm_reader_args[i]);

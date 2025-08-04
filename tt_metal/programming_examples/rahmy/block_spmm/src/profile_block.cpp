@@ -24,6 +24,8 @@ void profile_test(
 
 int main(int argc, char** argv) {
 
+    const int num_host_programs = sizeof(HostCodeRegistry) / sizeof(HostCodeRegistry[0]);
+
     const int big_test_id = 30;
     const int host_code_id = 0;
 
@@ -47,6 +49,11 @@ int main(int argc, char** argv) {
 
     std::cout << "--- Profiling complete ----------------------------------------------------------" << std::endl;
     std::cout << "--- ⚠️⚠️⚠️ PROFILING RESULTS WILL ONLY BE WRITTEN IF THIS PROGRAM IS BUILT WITH PROFILING ENABLED AND IS RUN WITH TRACY LISTENING VIA THE './capture-release' COMMAND" << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Host code function: " << host_function_name << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Test case: " << test_name << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
     return 0;
 }
 

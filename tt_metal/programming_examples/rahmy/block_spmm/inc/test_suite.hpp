@@ -54,6 +54,7 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks_col_simplified();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_dense();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_empty_rows();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_dense_2_blocks_per_core();
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
@@ -98,6 +99,9 @@ namespace bsr_test_suite {
         test_big_zero_rows_more, // 37
         test_dense, // 38
         test_many_empty_rows, // 39
+        test_big_random, // 40
+        test_big_dense, // 41
+        test_dense_2_blocks_per_core, // 42
     };
 
     // this case should expose the performance difference between the naive and new versions

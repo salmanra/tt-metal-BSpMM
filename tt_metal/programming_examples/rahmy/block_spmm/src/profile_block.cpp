@@ -14,6 +14,7 @@ using namespace tt::tt_metal;
 
 using namespace bsr_test_suite;
 using namespace bsr_host_code;
+// TODO: dense host code
 
 void profile_test(
     HostCodeFunctionPtr host_func,
@@ -67,6 +68,7 @@ void profile_test(
     constexpr int device_id = 0;
     IDevice* device = CreateDevice(device_id);
     {
+        ZoneScopedNC("Post-device setup", tracy::Color::DarkOliveGreen);
         // matmul params setup
         uint32_t M = a.H;
         uint32_t N = b.W;

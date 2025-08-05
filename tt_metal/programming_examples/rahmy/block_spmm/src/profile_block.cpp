@@ -1,4 +1,5 @@
 #include <common/TracyColor.hpp>
+#include <cstdio>
 #include <string>
 #include "../inc/include_me.hpp"
 #include "../inc/test_suite.hpp"
@@ -7,14 +8,16 @@
 #include <tracy/Tracy.hpp>
 #include "hostdevcommon/profiler_common.h"
 
+#include <cstdlib> // required to start ./capture-release listening
+#include <filesystem>
+
 using namespace tt::constants;
 using namespace std;
 using namespace tt;
 using namespace tt::tt_metal;
 
-using namespace bsr_test_suite;
 using namespace bsr_host_code;
-// TODO: dense host code
+using namespace profiling_suite;
 
 void profile_test(
     HostCodeFunctionPtr host_func,
@@ -27,29 +30,46 @@ int main(int argc, char** argv) {
 
     const int num_host_programs = sizeof(HostCodeRegistry) / sizeof(HostCodeRegistry[0]);
 
-    const int big_test_id = 30;
+    const int test_id = 0;
     const int host_code_id = 0;
 
     // uhhh pick a host function pick a test and run it ten times.
-    int test_num = argc > 1 ? std::stoi(argv[1]) : big_test_id;
+    int test_num = argc > 1 ? std::stoi(argv[1]) : test_id;
     int host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
 
+    // get the host code and test case
     HostCodeFunctionPtr host_function = HostCodeRegistry[host_code_num].first;
     std::string host_function_name = HostCodeRegistry[host_code_num].second;
-    auto [a, b, test_name] = TestRegistry[test_num]();
+    auto [a, b, test_name] = ProfileCaseRegistry[test_num]();
 
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- ⚠️⚠️⚠️ PROFILING RESULTS WILL ONLY BE WRITTEN IF THIS PROGRAM IS BUILT WITH PROFILING ENABLED AND IS RUN WITH TRACY LISTENING VIA THE './capture-release' COMMAND" << std::endl;
+
+    // set up command strings to direct and capture the trace
+    char buf[1000];
+    size_t n = sprintf(buf, "/home/user/tt-metal/profiles/bsr/%s/", host_function_name.c_str());
+    std::string trace_directory(buf, n);
+    std::string trace_file_location = trace_directory + test_name + ".tracy";
+
+    n = sprintf(buf, "mkdir -p %s", trace_directory.c_str());
+    std::string mkdir_command(buf, n);
+    
+    n = sprintf(buf, "./capture-release -f -o %s", trace_file_location.c_str());
+    std::string capture_trace_command(buf, n);
+
+    // print header
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Host code function: " << host_function_name << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Test case: " << test_name << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
+    // run ./capture-release to allow the profiler to listen for the program 
+    std::system(mkdir_command.c_str());
+    std::system(capture_trace_command.c_str());
+
+    // run the program
     profile_test(host_function, a, b, test_name);
 
-    std::cout << "--- Profiling complete ----------------------------------------------------------" << std::endl;
-    std::cout << "--- ⚠️⚠️⚠️ PROFILING RESULTS WILL ONLY BE WRITTEN IF THIS PROGRAM IS BUILT WITH PROFILING ENABLED AND IS RUN WITH TRACY LISTENING VIA THE './capture-release' COMMAND" << std::endl;
+    // print footer
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Host code function: " << host_function_name << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;

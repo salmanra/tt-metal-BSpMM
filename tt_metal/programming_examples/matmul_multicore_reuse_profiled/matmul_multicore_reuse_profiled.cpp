@@ -424,11 +424,11 @@ int main(int argc, char** argv) {
         ////////////////////////////////////////////////////////////////////////////
         // NOTE: Only supports matmuls where output is blocks of 16 x 16 tiles (ie. multiples of 16*32 x 16*32)
         // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])
-
+        //                                                          < 2^15 = 32,768
         /* Create source data */
-        constexpr uint32_t M = 640;  // user-defined
-        constexpr uint32_t N = 640;  // user-defined
-        constexpr uint32_t K = 640;  // user-defined
+        constexpr uint32_t M = 8192;  // user-defined
+        constexpr uint32_t N = 4096;  // user-defined
+        constexpr uint32_t K = 512;  // user-defined
         constexpr uint32_t B = 1;    // user-defined
 
         uint32_t Mt = M / TILE_HEIGHT;

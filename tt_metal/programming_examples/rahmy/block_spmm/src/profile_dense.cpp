@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
 
     const int num_host_programs = sizeof(DenseHostCodeRegistry) / sizeof(DenseHostCodeRegistry[0]);
 
-    const int big_test_id = 30;
+    const int big_test_id = 0;
     const int host_code_id = 0;
 
     // uhhh pick a host function pick a test and run it ten times.

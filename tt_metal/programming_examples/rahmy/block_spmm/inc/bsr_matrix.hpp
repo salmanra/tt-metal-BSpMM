@@ -9,7 +9,8 @@
 #include <random>
 #include <cmath>
 #include <chrono>
-// #include <omp.h>
+#include "bmm_op.hpp"
+#include "tt-metalium/constants.hpp"
 
 #define RAND true
 #define NO_RAND false
@@ -302,12 +303,20 @@ public:
         // 32x32 for everything?
         // 128x128 for everything, falling back to smaller sizes if that doesn't fit? 
         // 64x64 for everything, falling back to smaller sizes. That's it because in0_block_w = 2.
-        R = 32;
-        C = 32;
-        if (W % 64 == 0)
-            C = 64;
-        if (H % 64 == 0)
-            R = 64; // TODO: pick this optimally. We can force it to be as big as possible!
+        // TODO: change this to choose block sizes equal to whatever TT would pick for its dense block sizes, 
+        //          using the sparse fit-in-SRAM function.
+        //          maybe we maintain our own version of bmm_op.hpp after all...
+        auto matmul_params = bmm_op_utils::get_large_matmul_params(H / TILE_HEIGHT, W / TILE_WIDTH, 8, 8, 2);
+        uint32_t per_core_M = std::get<0>(matmul_params);
+        uint32_t per_core_N = std::get<1>(matmul_params);
+        uint32_t out_subblock_h = std::get<2>(matmul_params);
+        uint32_t out_subblock_w = std::get<3>(matmul_params);
+        R = per_core_M * TILE_HEIGHT;
+        C = 2 * TILE_WIDTH;
+        // if (W % 64 == 0)
+        //     C = 64;
+        // if (H % 64 == 0)
+        //     R = 64; /
         
         size_t blocked_matrix_height = H / R;
         size_t blocked_matrix_width = W / C;

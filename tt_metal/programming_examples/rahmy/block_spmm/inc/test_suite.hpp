@@ -3,12 +3,11 @@
 #include <cstdint>
 #include "include_me.hpp"
 #include "block_spmm/inc/bsr_matrix.hpp"
+#include "tt-metalium/bfloat16.hpp"
 
 using namespace tt;
 
 using CoreSpec = std::variant<CoreCoord, CoreRange, CoreRangeSet>;
-
-
 
 namespace bsr_test_suite {
 
@@ -1107,11 +1106,13 @@ namespace bsr_test_suite {
 namespace dense_test_suite {
 
     std::tuple<dense_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> dense_test_0();
+    std::tuple<dense_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> dense_test_large();
 
     using TestDenseFunctionPtr = std::tuple<dense_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
     static TestDenseFunctionPtr DenseTestRegistry[] = {
         dense_test_0, // 0
+        dense_test_large, // 1
     };
 
     std::tuple<dense_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> dense_test_0() {
@@ -1129,4 +1130,287 @@ namespace dense_test_suite {
         return std::make_tuple(src0_bfoat16, src1_bfloat16, "dense_test_0");
     }    
 
+        std::tuple<dense_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> dense_test_large() {
+        // matmul params setup
+        uint32_t M = 4096;
+        uint32_t N = 4096;
+        uint32_t K = 512;
+
+        // all nz on one row
+        dense_matrix<float> src0(M, K, RAND);
+        dense_matrix<float> src1(K, N, RAND);
+
+        dense_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
+        dense_matrix<bfloat16> src1_bfloat16 = src1.bfloat16_cast();
+        return std::make_tuple(src0_bfoat16, src1_bfloat16, "dense_test_large");
+    }    
+
 } // namespace dense_test_suite
+
+namespace profiling_suite {
+    // ehh... what are the interesting test cases to profile?
+
+    // invariably, big test cases are interesting.
+    // Dense
+        // Square
+        // Tall (we're screwed)
+        // Wide
+    // Sparse (p < 0.1)
+        // single input block
+        // diagonal
+            // perm
+        // column fill
+        // row fill
+    // Semi-sparse (0.1 < p < 0.5)
+        // Random placement
+        // Row fill
+        // Column fill
+        // Checkerboard
+        // Diagonal
+
+    // What were the largest dimensions the dense cases supported?
+        //         // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])
+        //                                                          < 2^15 = 32,768
+        // --> M=N=2^7=4096 is the largest s quare output which is power of 2
+        // I tried M=8192 N=4096 K=512 and, after a bunch of time, got an error (floating point exception) which is apparently a divide by 0 error 
+        //      where does the matmul kernel divide by 0? curious but not important. 
+        // 
+        // 
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ///////// Profile Case Declarations ////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    using ProfileCaseReturnType = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string>;
+    ProfileCaseReturnType profile_case_dense_square();
+    ProfileCaseReturnType profile_case_dense_tall();
+    ProfileCaseReturnType profile_case_dense_wide();
+    
+    template <uint32_t, uint32_t>
+    ProfileCaseReturnType profile_case_sparse_single_input_block();
+    template <uint32_t, uint32_t>
+    ProfileCaseReturnType profile_case_sparse_diagonal();
+    template <uint32_t, uint32_t>
+    ProfileCaseReturnType profile_case_sparse_fill_row();
+    template <uint32_t, uint32_t>
+    ProfileCaseReturnType profile_case_sparse_fill_column();
+    template <uint32_t, uint32_t>
+    ProfileCaseReturnType profile_case_sparse_fill_random();
+
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ///////// Profile Case Registry ////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    using ProfileCaseFunctionPtr = ProfileCaseReturnType (*)();
+    static ProfileCaseFunctionPtr ProfileCaseRegistry[] = {
+        profile_case_dense_square, // 0
+        profile_case_dense_tall, // 1
+        profile_case_dense_wide, // 2
+        profile_case_sparse_single_input_block<32, 32>, // 3
+        profile_case_sparse_single_input_block<64, 64>, // 4
+        profile_case_sparse_single_input_block<128, 128>, // 5
+        profile_case_sparse_diagonal<32, 32>, // 6
+        profile_case_sparse_diagonal<64, 64>, // 7
+        profile_case_sparse_diagonal<128, 128>, // 8
+        profile_case_sparse_fill_column<32, 32>, // 9
+        profile_case_sparse_fill_column<64, 64>, // 10
+        profile_case_sparse_fill_column<128, 128>, // 11
+        profile_case_sparse_fill_row<32, 32>, // 12
+        profile_case_sparse_fill_row<64, 64>, // 13
+        profile_case_sparse_fill_row<128, 128>, // 14
+        profile_case_sparse_fill_random<32, 32>, // 15
+        profile_case_sparse_fill_random<64, 64>, // 16
+        profile_case_sparse_fill_random<128, 128>, // 17
+    };
+    
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ///////// Profile Case Definitions /////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+
+    ////////////////////////////////////////////////////////////////////////////
+    ///////// Dense Cases //////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    inline ProfileCaseReturnType profile_case_dense_square() {
+        uint32_t M = 2048;
+        uint32_t N = 2048;
+        uint32_t K = 512;
+
+        dense_matrix<float> tmp(M, K, RAND);
+        bsr_matrix<float> src0(tmp);
+        dense_matrix<float> src1(K, N, RAND);
+
+        bsr_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
+        dense_matrix<bfloat16> src1_bfloat16 = src1.bfloat16_cast();
+        return std::make_tuple(src0_bfoat16, src1_bfloat16, "profile_case_dense_square");
+    }
+
+    inline ProfileCaseReturnType profile_case_dense_tall() {
+        uint32_t M = 16384;
+        uint32_t N = 1024;
+        uint32_t K = 512;
+
+        dense_matrix<float> tmp(M, K, RAND);
+        bsr_matrix<float> src0(tmp);
+        dense_matrix<float> src1(K, N, RAND);
+
+        bsr_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
+        dense_matrix<bfloat16> src1_bfloat16 = src1.bfloat16_cast();
+        return std::make_tuple(src0_bfoat16, src1_bfloat16, "profile_case_dense_tall");
+    }
+
+    inline ProfileCaseReturnType profile_case_dense_wide() {
+        uint32_t M = 1024;
+        uint32_t N = 16384;
+        uint32_t K = 512;
+
+        dense_matrix<float> tmp(M, K, RAND);
+        bsr_matrix<float> src0(tmp);
+        dense_matrix<float> src1(K, N, RAND);
+
+        bsr_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
+        dense_matrix<bfloat16> src1_bfloat16 = src1.bfloat16_cast();
+        return std::make_tuple(src0_bfoat16, src1_bfloat16, "profile_case_dense_wide");
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ///////// Sparse Cases /////////////////////////////////////////////////////
+    ///////// p < 0.1 //////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    
+    // ... what if we templated these for R and C? 
+    //      We could actually template along fill_type too... 
+
+    template <uint32_t R = 32, uint32_t C = 32>
+    inline ProfileCaseReturnType profile_case_sparse_single_input_block() {
+        // matmul params setup
+        uint32_t M = 8192;
+        uint32_t N = 2048;
+        uint32_t K = 256;
+        // block params setup
+        uint32_t nblocks = 1;
+        uint32_t block_matrix_height = M / R;
+
+        // nz block is in the first position
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        
+        char buf[50];
+        size_t n = sprintf(buf, "profile_case_sparse_single_block_R%i_C%d", R, C);
+        std::string test_name(buf, n);
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name); 
+    }
+
+    template <uint32_t R = 32, uint32_t C = 32>
+    inline ProfileCaseReturnType profile_case_sparse_diagonal() {
+        // matmul params setup
+        uint32_t M = 4096;
+        uint32_t N = 4096;
+        uint32_t K = 4096;
+        // block params setup
+        uint32_t block_matrix_height = M / R;
+        uint32_t nblocks = block_matrix_height;
+
+        // nz blocks fill the diagonal
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_DIAG, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+
+        char buf[50];
+        size_t n = sprintf(buf, "profile_case_sparse_diagonal_R%i_C%d", R, C);
+        std::string test_name(buf, n);
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name);   
+    }
+
+    template <uint32_t R = 32, uint32_t C = 32>
+    inline ProfileCaseReturnType profile_case_sparse_fill_column() {
+        // matmul params setup
+        uint32_t M = 4096;
+        uint32_t N = 4096;
+        uint32_t K = 4096;
+        // block params setup
+        uint32_t block_matrix_height = M / R;
+        uint32_t nblocks = block_matrix_height;
+
+        // nz blocks fill the first column
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        
+        char buf[50];
+        size_t n = sprintf(buf, "profile_case_sparse_fill_column_R%i_C%d", R, C);
+        std::string test_name(buf, n);
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name);
+    }
+
+    template <uint32_t R = 32, uint32_t C = 32>
+    inline ProfileCaseReturnType profile_case_sparse_fill_row() {
+        // matmul params setup
+        uint32_t M = 4096;
+        uint32_t N = 4096;
+        uint32_t K = 4096;
+        // block params setup
+        uint32_t block_matrix_height = M / R;
+        uint32_t nblocks = block_matrix_height;
+
+        // nz blocks fill the first row
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+
+        char buf[50];
+        size_t n = sprintf(buf, "profile_case_sparse_fill_row_R%i_C%d", R, C);
+        std::string test_name(buf, n);
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name);
+    }
+
+    template <uint32_t R = 32, uint32_t C = 32>
+    inline ProfileCaseReturnType profile_case_sparse_fill_random() {
+        // matmul params setup
+        uint32_t M = 4096;
+        uint32_t N = 4096;
+        uint32_t K = 4096;
+        // block params setup
+        uint32_t block_matrix_height = M / R;
+        uint32_t nblocks = block_matrix_height;
+
+        // nz blocks placed randomly
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+
+        char buf[50];
+        size_t n = sprintf(buf, "profile_case_sparse_fill_random_R%i_C%d", R, C);
+        std::string test_name(buf, n);
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name);
+    }
+
+}

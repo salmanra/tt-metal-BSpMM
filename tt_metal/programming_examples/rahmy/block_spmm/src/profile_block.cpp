@@ -36,6 +36,7 @@ int main(int argc, char** argv) {
     // uhhh pick a host function pick a test and run it ten times.
     int test_num = argc > 1 ? std::stoi(argv[1]) : test_id;
     int host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
+    int num_iters = argc > 3 ? std::stoi(argv[3]) : 10;
 
     // get the host code and test case
     HostCodeFunctionPtr host_function = HostCodeRegistry[host_code_num].first;
@@ -52,7 +53,7 @@ int main(int argc, char** argv) {
     n = sprintf(buf, "mkdir -p %s", trace_directory.c_str());
     std::string mkdir_command(buf, n);
     
-    n = sprintf(buf, "./capture-release -f -o %s", trace_file_location.c_str());
+    n = sprintf(buf, "./capture-release -f -o %s &", trace_file_location.c_str());
     std::string capture_trace_command(buf, n);
 
     // print header
@@ -61,19 +62,27 @@ int main(int argc, char** argv) {
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Test case: " << test_name << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Num iters: " << num_iters << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Output file: " << trace_file_location << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
     // run ./capture-release to allow the profiler to listen for the program 
     std::system(mkdir_command.c_str());
     std::system(capture_trace_command.c_str());
 
     // run the program
-    profile_test(host_function, a, b, test_name);
+    profile_test(host_function, a, b, test_name, num_iters);
 
     // print footer
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Host code function: " << host_function_name << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Test case: " << test_name << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Num iters: " << num_iters << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Output file: " << trace_file_location << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     return 0;
 }

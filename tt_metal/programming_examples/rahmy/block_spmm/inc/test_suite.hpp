@@ -365,9 +365,9 @@ namespace bsr_test_suite {
     //          with nblocks > ncores?
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense() {
         // matmul params setup
-        uint32_t M = 1024;
-        uint32_t N = 1024;
-        uint32_t K = 1024;
+        uint32_t M = 4096;
+        uint32_t N = 4096;
+        uint32_t K = 512;
         // block params setup
         // uint32_t R = 64;
         // uint32_t C = 64;
@@ -375,7 +375,7 @@ namespace bsr_test_suite {
         // uint32_t block_matrix_height = M / R;
         
         dense_matrix<float> tmp(M, K, RAND);
-        bsr_matrix<float> bsr(tmp);
+        bsr_matrix<float> bsr(tmp, N);
         dense_matrix<float> dense(K, N, RAND);
 
 
@@ -1117,9 +1117,9 @@ namespace dense_test_suite {
 
     std::tuple<dense_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> dense_test_0() {
         // matmul params setup
-        uint32_t M = 8192;
-        uint32_t N = 256;
-        uint32_t K = 256;
+        uint32_t M = 2048;
+        uint32_t N = 2048;
+        uint32_t K = 512;
 
         // all nz on one row
         dense_matrix<float> src0(M, K, RAND);
@@ -1190,6 +1190,8 @@ namespace profiling_suite {
     ProfileCaseReturnType profile_case_dense_tall();
     ProfileCaseReturnType profile_case_dense_wide();
     
+    // template on block sizes R and C.
+    // we could template on fill_type, but too late :P
     template <uint32_t, uint32_t>
     ProfileCaseReturnType profile_case_sparse_single_input_block();
     template <uint32_t, uint32_t>
@@ -1200,6 +1202,8 @@ namespace profiling_suite {
     ProfileCaseReturnType profile_case_sparse_fill_column();
     template <uint32_t, uint32_t>
     ProfileCaseReturnType profile_case_sparse_fill_random();
+
+    ProfileCaseReturnType profile_case_sanity_check();
 
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
@@ -1228,6 +1232,7 @@ namespace profiling_suite {
         profile_case_sparse_fill_random<32, 32>, // 15
         profile_case_sparse_fill_random<64, 64>, // 16
         profile_case_sparse_fill_random<128, 128>, // 17
+        profile_case_sanity_check, // 18
     };
     
     ////////////////////////////////////////////////////////////////////////////
@@ -1239,15 +1244,35 @@ namespace profiling_suite {
     ////////////////////////////////////////////////////////////////////////////
 
     ////////////////////////////////////////////////////////////////////////////
+    ///////// Sanity Check /////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    inline ProfileCaseReturnType profile_case_sanity_check() {
+        uint32_t M = 32;
+        uint32_t N = 32;
+        uint32_t K = 32;
+
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t nblocks = 1;
+
+        bsr_matrix<float> src0(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> src1(K, N, RAND);
+
+        bsr_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
+        dense_matrix<bfloat16> src1_bfloat16 = src1.bfloat16_cast();
+        return std::make_tuple(src0_bfoat16, src1_bfloat16, "profile_case_sanity_check");
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
     ///////// Dense Cases //////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
     inline ProfileCaseReturnType profile_case_dense_square() {
-        uint32_t M = 2048;
-        uint32_t N = 2048;
+        uint32_t M = 4096;
+        uint32_t N = 4096;
         uint32_t K = 512;
 
         dense_matrix<float> tmp(M, K, RAND);
-        bsr_matrix<float> src0(tmp);
+        bsr_matrix<float> src0(tmp, N);
         dense_matrix<float> src1(K, N, RAND);
 
         bsr_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
@@ -1256,12 +1281,11 @@ namespace profiling_suite {
     }
 
     inline ProfileCaseReturnType profile_case_dense_tall() {
-        uint32_t M = 16384;
+        uint32_t M = 8192;
         uint32_t N = 1024;
         uint32_t K = 512;
-
         dense_matrix<float> tmp(M, K, RAND);
-        bsr_matrix<float> src0(tmp);
+        bsr_matrix<float> src0(tmp, N);
         dense_matrix<float> src1(K, N, RAND);
 
         bsr_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
@@ -1271,11 +1295,11 @@ namespace profiling_suite {
 
     inline ProfileCaseReturnType profile_case_dense_wide() {
         uint32_t M = 1024;
-        uint32_t N = 16384;
+        uint32_t N = 8192;
         uint32_t K = 512;
 
         dense_matrix<float> tmp(M, K, RAND);
-        bsr_matrix<float> src0(tmp);
+        bsr_matrix<float> src0(tmp, N);
         dense_matrix<float> src1(K, N, RAND);
 
         bsr_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
@@ -1290,8 +1314,6 @@ namespace profiling_suite {
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
     
-    // ... what if we templated these for R and C? 
-    //      We could actually template along fill_type too... 
 
     template <uint32_t R = 32, uint32_t C = 32>
     inline ProfileCaseReturnType profile_case_sparse_single_input_block() {

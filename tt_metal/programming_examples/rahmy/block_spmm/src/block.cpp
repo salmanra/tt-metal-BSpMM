@@ -9,11 +9,11 @@
 #include <tt-metalium/device.hpp>
 #include <tt-metalium/command_queue.hpp>
 #include <tt-metalium/tt_metal.hpp>
-// #include <matmul_common/bmm_op.hpp>
+#include <../matmul_common/bmm_op.hpp>
 #include <tt-metalium/tilize_untilize.hpp>
 
 #include "../inc/bsr_matrix.hpp"
-#include "../inc/bmm_op.hpp"
+// #include "../inc/bmm_op.hpp"
 
 using namespace tt::constants;
 using namespace std;

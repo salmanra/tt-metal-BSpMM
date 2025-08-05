@@ -1,6 +1,7 @@
 #ifndef BSR_MATRIX_HPP
 #define BSR_MATRIX_HPP
 
+#include <cstdint>
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -9,7 +10,7 @@
 #include <random>
 #include <cmath>
 #include <chrono>
-#include "bmm_op.hpp"
+#include <../matmul_common/bmm_op.hpp>
 #include "tt-metalium/constants.hpp"
 
 #define RAND true
@@ -294,7 +295,7 @@ public:
     // this is the first function that caters to TT hardware by
     // picking block size a multiple of tile size
     // REQUIRES: other has been tilized by the TT utils
-    bsr_matrix(dense_matrix<T>& other) :
+    bsr_matrix(dense_matrix<T>& other, uint32_t right_outer_dim = 0) :
         H(other.H),
         W(other.W) 
         {
@@ -306,18 +307,27 @@ public:
         // TODO: change this to choose block sizes equal to whatever TT would pick for its dense block sizes, 
         //          using the sparse fit-in-SRAM function.
         //          maybe we maintain our own version of bmm_op.hpp after all...
-        auto matmul_params = bmm_op_utils::get_large_matmul_params(H / TILE_HEIGHT, W / TILE_WIDTH, 8, 8, 2);
+        // TODO: the way we are sizing right now is a bit of a cheat, but it's good for now.
+        // TODO: continue the cheat by passing number of cores to constructor
+
+
+        uint32_t Nt = right_outer_dim > 0 ? right_outer_dim / TILE_WIDTH : std::max(H, W) / TILE_WIDTH;
+        auto matmul_params = bmm_op_utils::get_large_matmul_params(H / TILE_HEIGHT, Nt, 8, 8, 2);
         uint32_t per_core_M = std::get<0>(matmul_params);
         uint32_t per_core_N = std::get<1>(matmul_params);
         uint32_t out_subblock_h = std::get<2>(matmul_params);
         uint32_t out_subblock_w = std::get<3>(matmul_params);
+
+        
+        // try to let Ct = 2, but accept it otherwise
         R = per_core_M * TILE_HEIGHT;
-        C = 2 * TILE_WIDTH;
+        C = std::min(per_core_N * TILE_WIDTH, 2 * TILE_WIDTH);
         // if (W % 64 == 0)
         //     C = 64;
         // if (H % 64 == 0)
         //     R = 64; /
-        
+
+
         size_t blocked_matrix_height = H / R;
         size_t blocked_matrix_width = W / C;
         nblocks = blocked_matrix_height * blocked_matrix_width;
@@ -325,7 +335,6 @@ public:
         indptr.resize(blocked_matrix_height + 1);
         indices.reserve(nblocks);
         data.resize(nblocks * R * C);
-
 
         size_t count = 0;
         for (int i = 0 ; i < nblocks; i++){

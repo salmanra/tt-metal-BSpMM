@@ -174,6 +174,12 @@ void matmul_multicore_reuse_mcast(
     uint32_t num_cores_c = core_range.x;
     uint32_t num_cores_r = core_range.y;
 
+    log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
+    log_info(
+        tt::LogVerif,
+        " -- num cores used={} -- ",
+        num_cores_c * num_cores_r);
+
     CoreRange all_cores(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
@@ -494,9 +500,9 @@ int main(int argc, char** argv) {
         // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])
 
         /* Create source data */
-        constexpr uint32_t M = 3584;  // user-defined
-        constexpr uint32_t N = 3072;  // user-defined
-        constexpr uint32_t K = 768;   // user-defined
+        constexpr uint32_t M = 4096;  // user-defined
+        constexpr uint32_t N = 4096;  // user-defined
+        constexpr uint32_t K = 512;   // user-defined
         constexpr uint32_t B = 1;     // user-defined
 
         uint32_t Mt = M / TILE_HEIGHT;

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include "include_me.hpp"
+#include "block_spmm/inc/bsr_matrix.hpp"
 
 using namespace tt;
 
@@ -10,8 +11,7 @@ using CoreSpec = std::variant<CoreCoord, CoreRange, CoreRangeSet>;
 
 
 namespace bsr_test_suite {
-    // I want the registry and the alias to come with this header file. 
-    // Maybe I do need to add declarations :(
+
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_zero_rows_more();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_zero_rows();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_diag();
@@ -370,12 +370,13 @@ namespace bsr_test_suite {
         uint32_t N = 1024;
         uint32_t K = 1024;
         // block params setup
-        uint32_t R = 64;
-        uint32_t C = 64;
-        uint32_t nblocks = 256;
-        uint32_t block_matrix_height = M / R;
+        // uint32_t R = 64;
+        // uint32_t C = 64;
+        // uint32_t nblocks = 256;
+        // uint32_t block_matrix_height = M / R;
         
-        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> tmp(M, K, RAND);
+        bsr_matrix<float> bsr(tmp);
         dense_matrix<float> dense(K, N, RAND);
 
 
@@ -1102,3 +1103,30 @@ namespace bsr_test_suite {
     }
 
 } // namespace bsr_test_suite
+
+namespace dense_test_suite {
+
+    std::tuple<dense_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> dense_test_0();
+
+    using TestDenseFunctionPtr = std::tuple<dense_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
+
+    static TestDenseFunctionPtr DenseTestRegistry[] = {
+        dense_test_0, // 0
+    };
+
+    std::tuple<dense_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> dense_test_0() {
+        // matmul params setup
+        uint32_t M = 8192;
+        uint32_t N = 256;
+        uint32_t K = 256;
+
+        // all nz on one row
+        dense_matrix<float> src0(M, K, RAND);
+        dense_matrix<float> src1(K, N, RAND);
+
+        dense_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
+        dense_matrix<bfloat16> src1_bfloat16 = src1.bfloat16_cast();
+        return std::make_tuple(src0_bfoat16, src1_bfloat16, "dense_test_0");
+    }    
+
+} // namespace dense_test_suite

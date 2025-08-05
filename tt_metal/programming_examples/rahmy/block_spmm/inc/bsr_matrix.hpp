@@ -289,6 +289,97 @@ public:
     }
 
 
+    // construct a copy of the dense matrix in this bsr matrix
+    // this is the first function that caters to TT hardware by
+    // picking block size a multiple of tile size
+    // REQUIRES: other has been tilized by the TT utils
+    bsr_matrix(dense_matrix<T>& other) :
+        H(other.H),
+        W(other.W) 
+        {
+        // how do we choose block sizes?
+        // largest square multiple of 32 that tilizes the dense matrix?
+        // 32x32 for everything?
+        // 128x128 for everything, falling back to smaller sizes if that doesn't fit? 
+        // 64x64 for everything, falling back to smaller sizes. That's it because in0_block_w = 2.
+        R = 32;
+        C = 32;
+        if (W % 64 == 0)
+            C = 64;
+        if (H % 64 == 0)
+            R = 64; // TODO: pick this optimally. We can force it to be as big as possible!
+        
+        size_t blocked_matrix_height = H / R;
+        size_t blocked_matrix_width = W / C;
+        nblocks = blocked_matrix_height * blocked_matrix_width;
+
+        indptr.resize(blocked_matrix_height + 1);
+        indices.reserve(nblocks);
+        data.resize(nblocks * R * C);
+
+
+        size_t count = 0;
+        for (int i = 0 ; i < nblocks; i++){
+            size_t row = i / blocked_matrix_width;
+            size_t col = i % blocked_matrix_width;
+            indptr[row + 1]++;
+            indices.push_back(col);
+            for (int j = 0; j < R * C; j++){
+                data.push_back(other.data[count++]);
+            }
+        }
+
+        for (size_t i = 1; i < indptr.size(); i++) {
+            indptr[i] += indptr[i - 1];
+        }
+        indptr.resize(blocked_matrix_height + 1);
+
+        std::vector<T> tilized_input;
+        tilized_input.reserve(other.data.size());
+
+        const auto write_face = [](std::vector<T>& tilized_input,
+                                const std::vector<T>& input,
+                                uint32_t face_height,
+                                uint32_t face_width,
+                                uint32_t face_idx,
+                                uint32_t n) -> void {
+            for (uint32_t i = 0; i < face_height; i++) {
+                for (uint32_t j = 0; j < face_width; j++) {
+                    tilized_input.push_back(input[face_idx + j]);
+                }
+                face_idx += n;
+            }
+        };
+
+        uint32_t TILE_HEIGHT = R;
+        uint32_t TILE_WIDTH = C;
+        uint32_t FACE_HEIGHT = R;
+        uint32_t FACE_WIDTH = C;
+        uint32_t row_tiles = H / TILE_HEIGHT;
+        uint32_t col_tiles = W / TILE_WIDTH;
+        uint32_t row_of_tiles_num_elements = TILE_HEIGHT * W;
+        uint32_t tile_start = 0;
+        for (uint32_t row_tile = 0; row_tile < row_tiles; row_tile++) {
+            uint32_t row_tile_start = tile_start;
+            for (uint32_t col_tile = 0; col_tile < col_tiles; col_tile++) {
+                uint32_t face0_id = row_tile_start;
+                uint32_t face1_id = face0_id + FACE_WIDTH;
+                uint32_t face2_id = face0_id + W * FACE_HEIGHT;
+                uint32_t face3_id = face2_id + FACE_WIDTH;
+
+                write_face(tilized_input, other.data, FACE_HEIGHT, FACE_WIDTH, face0_id, W);
+                // write_face(tilized_input, other.data, FACE_HEIGHT, FACE_WIDTH, face1_id, W);
+                // write_face(tilized_input, other.data, FACE_HEIGHT, FACE_WIDTH, face2_id, W);
+                // write_face(tilized_input, other.data, FACE_HEIGHT, FACE_WIDTH, face3_id, W);
+                row_tile_start += TILE_WIDTH;
+            }
+            tile_start += row_of_tiles_num_elements;
+        }
+
+
+        data = std::move(tilized_input);
+    }
+
     bsr_matrix(
         std::vector<T> data,
         std::vector<int> indptr,

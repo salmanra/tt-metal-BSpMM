@@ -43,7 +43,7 @@ int main(int argc, char** argv) {
     auto [a, b, test_name] = ProfileCaseRegistry[test_num]();
 
 
-    // set up command strings to direct and capture the trace
+    // set up command strings to direct and capture the trace (and its csv file)
     char buf[1000];
     size_t n = sprintf(buf, "/home/user/tt-metal/profiles/bsr/%s/", host_function_name.c_str());
     std::string trace_directory(buf, n);
@@ -54,6 +54,13 @@ int main(int argc, char** argv) {
     
     n = sprintf(buf, "./capture-release -f -o %s &", trace_file_location.c_str());
     std::string capture_trace_command(buf, n);
+
+    n = sprintf(buf, "/home/user/tt-metal/profiles/csvs/bsr/%s/", host_function_name.c_str());
+    std::string csv_directory(buf);
+    std::string csv_file_location = csv_directory + test_name + ".csv";
+
+    n = sprintf(buf, "./csvexport-release %s > %s", trace_file_location.c_str(), csv_file_location.c_str());
+    std::string csvexport_command(buf);
 
     // print header
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
@@ -73,6 +80,9 @@ int main(int argc, char** argv) {
     // run the program
     profile_test(host_function, a, b, test_name, num_iters);
 
+    // Generate csv file. Does this work live?
+    std::system(csvexport_command.c_str());
+    
     // print footer
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Host code function: " << host_function_name << std::endl;

@@ -96,6 +96,13 @@ int main(int argc, char** argv) {
     n = sprintf(buf, "./capture-release -f -o %s &", trace_file_location.c_str());
     std::string capture_trace_command(buf, n);
 
+    n = sprintf(buf, "/home/user/tt-metal/profiles/csvs/dense/%s/", host_function_name.c_str());
+    std::string csv_directory(buf);
+    std::string csv_file_location = csv_directory + test_name + ".csv";
+
+    n = sprintf(buf, "./csvexport-release %s > %s", trace_file_location.c_str(), csv_file_location.c_str());
+    std::string csvexport_command(buf);
+
     // print header
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Host code function: " << host_function_name << std::endl;
@@ -108,10 +115,11 @@ int main(int argc, char** argv) {
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
     // run ./capture-release to allow the profiler to listen for the program 
-    std::system(mkdir_command.c_str());
-    std::system(capture_trace_command.c_str());
+    // std::system(mkdir_command.c_str());
+    // std::system(capture_trace_command.c_str());
+    std::system(csvexport_command.c_str());
 
-    profile_dense_test(host_function, a, b, test_name);
+    // profile_dense_test(host_function, a, b, test_name);
 
     // print footer
     std::cout << "---------------------------------------------------------------------------------" << std::endl;

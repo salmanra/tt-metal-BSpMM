@@ -1,0 +1,161 @@
+[
+    {
+        "profile_case_dense_square.csv": {
+            "Program Loop total ns": 65430546
+        },
+        "profile_case_dense_tall.csv": {
+            "Program Loop total ns": 43876318
+        },
+        "profile_case_dense_wide.csv": {
+            "Program Loop total ns": 45098363
+        },
+        "profile_case_sparse_diagonal_R128_C128.csv": {
+            "Program Loop total ns": 0
+        },
+        "profile_case_sparse_diagonal_R32_C32.csv": {
+            "Program Loop total ns": 0
+        },
+        "profile_case_sparse_diagonal_R64_C64.csv": {
+            "Program Loop total ns": 0
+        },
+        "profile_case_sparse_fill_column_R128_C128.csv": {
+            "Program Loop total ns": 44696815
+        },
+        "profile_case_sparse_fill_column_R32_C32.csv": {
+            "Program Loop total ns": 55146742
+        },
+        "profile_case_sparse_fill_column_R64_C64.csv": {
+            "Program Loop total ns": 49998729
+        },
+        "profile_case_sparse_fill_random_R32_C32.csv": {
+            "Program Loop total ns": 0
+        },
+        "profile_case_sparse_fill_random_R64_C64.csv": {
+            "Program Loop total ns": 0
+        },
+        "profile_case_sparse_fill_row_R128_C128.csv": {
+            "Program Loop total ns": 56342519
+        },
+        "profile_case_sparse_fill_row_R32_C32.csv": {
+            "Program Loop total ns": 56114190
+        },
+        "profile_case_sparse_fill_row_R64_C64.csv": {
+            "Program Loop total ns": 50589806
+        },
+        "profile_case_sparse_single_block_R128_C128.csv": {
+            "Program Loop total ns": 6958636
+        },
+        "profile_case_sparse_single_block_R32_C32.csv": {
+            "Program Loop total ns": 6029891
+        },
+        "profile_case_sparse_single_block_R64_C64.csv": {
+            "Program Loop total ns": 6452139
+        }
+    },
+    {
+        "profile_case_dense_square.csv": {
+            "Program Loop total ns": 45322636
+        },
+        "profile_case_dense_tall.csv": {
+            "Program Loop total ns": 33113537
+        },
+        "profile_case_dense_wide.csv": {
+            "Program Loop total ns": 32746679
+        },
+        "profile_case_sparse_diagonal_R128_C128.csv": {
+            "Program Loop total ns": 179567134
+        },
+        "profile_case_sparse_diagonal_R32_C32.csv": {
+            "Program Loop total ns": 173048462
+        },
+        "profile_case_sparse_diagonal_R64_C64.csv": {
+            "Program Loop total ns": 169143230
+        },
+        "profile_case_sparse_fill_column_R128_C128.csv": {
+            "Program Loop total ns": 191411528
+        },
+        "profile_case_sparse_fill_column_R32_C32.csv": {
+            "Program Loop total ns": 169593108
+        },
+        "profile_case_sparse_fill_column_R64_C64.csv": {
+            "Program Loop total ns": 172771122
+        },
+        "profile_case_sparse_fill_random_R32_C32.csv": {
+            "Program Loop total ns": 168961363
+        },
+        "profile_case_sparse_fill_random_R64_C64.csv": {
+            "Program Loop total ns": 170014160
+        },
+        "profile_case_sparse_fill_row_R128_C128.csv": {
+            "Program Loop total ns": 168391712
+        },
+        "profile_case_sparse_fill_row_R32_C32.csv": {
+            "Program Loop total ns": 168376192
+        },
+        "profile_case_sparse_fill_row_R64_C64.csv": {
+            "Program Loop total ns": 195155236
+        },
+        "profile_case_sparse_single_block_R128_C128.csv": {
+            "Program Loop total ns": 0
+        },
+        "profile_case_sparse_single_block_R32_C32.csv": {
+            "Program Loop total ns": 0
+        },
+        "profile_case_sparse_single_block_R64_C64.csv": {
+            "Program Loop total ns": 0
+        }
+    },
+    {
+        "profile_case_dense_square.csv": {
+            "Program Loop total ns": 68020519
+        },
+        "profile_case_dense_tall.csv": {
+            "Program Loop total ns": 46731625
+        },
+        "profile_case_dense_wide.csv": {
+            "Program Loop total ns": 46952376
+        },
+        "profile_case_sparse_diagonal_R128_C128.csv": {
+            "Program Loop total ns": 155563383
+        },
+        "profile_case_sparse_diagonal_R32_C32.csv": {
+            "Program Loop total ns": 176173090
+        },
+        "profile_case_sparse_diagonal_R64_C64.csv": {
+            "Program Loop total ns": 148629734
+        },
+        "profile_case_sparse_fill_column_R128_C128.csv": {
+            "Program Loop total ns": 160791604
+        },
+        "profile_case_sparse_fill_column_R32_C32.csv": {
+            "Program Loop total ns": 146990750
+        },
+        "profile_case_sparse_fill_column_R64_C64.csv": {
+            "Program Loop total ns": 145861234
+        },
+        "profile_case_sparse_fill_random_R32_C32.csv": {
+            "Program Loop total ns": 151785166
+        },
+        "profile_case_sparse_fill_random_R64_C64.csv": {
+            "Program Loop total ns": 147374251
+        },
+        "profile_case_sparse_fill_row_R128_C128.csv": {
+            "Program Loop total ns": 143985969
+        },
+        "profile_case_sparse_fill_row_R32_C32.csv": {
+            "Program Loop total ns": 145758838
+        },
+        "profile_case_sparse_fill_row_R64_C64.csv": {
+            "Program Loop total ns": 158900809
+        },
+        "profile_case_sparse_single_block_R128_C128.csv": {
+            "Program Loop total ns": 0
+        },
+        "profile_case_sparse_single_block_R32_C32.csv": {
+            "Program Loop total ns": 0
+        },
+        "profile_case_sparse_single_block_R64_C64.csv": {
+            "Program Loop total ns": 0
+        }
+    }
+]

@@ -9,7 +9,6 @@
 #include "hostdevcommon/profiler_common.h"
 
 #include <cstdlib> // required to start ./capture-release listening
-#include <filesystem>
 
 using namespace tt::constants;
 using namespace std;

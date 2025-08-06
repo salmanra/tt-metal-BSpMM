@@ -1,7 +1,5 @@
 #!/usr/bin/bash
 
-# TODO: this file is practically useless now
-
 function capture_all_one_host {
     num_tests=17 # size of ProfileCaseRegistry
     host_program_index=0
@@ -29,34 +27,6 @@ function capture_trace {
         ./build/programming_examples/rahmy/profile_block $1 $2
     fi
 }
-
-
-# function capture_trace {
-#     # $1 index into HostCodeRegistry (see /block/include/host_code.hpp)
-#     # $2 index into TestCaseRegistry (see /block/include/test_suite.hpp)
-#     host_program_names=("bsr_spmm_multicore_reuse_many_blocks_per_core" "bsr_spmm_multicore_reuse" "bsr_spmm_multicore_reuse_naive")
-#     latest_host_program_index=0
-#     default_test_case=0
-#     if [[ "$#" -eq "0" ]]; then
-#         # capture-release with latest func
-#         # run test 30
-#         mkdir -p "profiles/${host_program_names[$latest_host_program_index]}"
-#         ./capture-release -f -o "profiles/${host_program_names[$latest_host_program_index]}/$default_test_case.tracy" &
-#         ./build/programming_examples/rahmy/profile_dense $default_test_case $latest_host_program_index
-#     elif [[ "$#" -eq "1" ]]; then
-#         # capture-release with given func
-#         # run test 30
-#         mkdir -p "profiles/${host_program_names[$1]}"
-#         ./capture-release -f -o "profiles/${host_program_names[$1]}/$default_test_case.tracy" &
-#         ./build/programming_examples/rahmy/profile_block $default_test_case $1
-#     elif [[ "$#" -eq "2" ]]; then
-#         # capture-release with given func
-#         # run the given test
-#         mkdir -p "profiles/${host_program_names[$1]}"
-#         ./capture-release -f -o "profiles/${host_program_names[$1]}/$2.tracy" &
-#         ./build/programming_examples/rahmy/profile_block $2 $1
-#     fi
-# }
 
 num_host_programs=3
 

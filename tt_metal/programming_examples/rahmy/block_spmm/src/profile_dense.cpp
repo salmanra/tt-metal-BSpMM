@@ -4,6 +4,7 @@
 
 #include <common/TracyColor.hpp>
 #include <tracy/Tracy.hpp>
+#include "block_spmm/inc/bsr_matrix.hpp"
 #include "hostdevcommon/profiler_common.h"
 
 #include "../inc/include_me.hpp"
@@ -11,13 +12,16 @@
 #include "../inc/host_code.hpp"
 #include "tt-metalium/bfloat16.hpp"
 
+#include <cstdlib> // required to start ./capture-release listening
+
+
 using namespace tt::constants;
 using namespace std;
 using namespace tt;
 using namespace tt::tt_metal;
 
-using namespace dense_test_suite;
 using namespace dense_host_code;
+using namespace profiling_suite;
 
 #define NUM_ITERS 10
 
@@ -73,27 +77,51 @@ int main(int argc, char** argv) {
     // uhhh pick a host function pick a test and run it ten times.
     int test_num = argc > 1 ? std::stoi(argv[1]) : big_test_id;
     int host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
+    int num_iters = argc > 3 ? std::stoi(argv[3]) : 10;
 
     DenseHostCodeFunctionPtr host_function = DenseHostCodeRegistry[host_code_num].first;
     std::string host_function_name = DenseHostCodeRegistry[host_code_num].second;
-    auto [a, b, test_name] = DenseTestRegistry[test_num]();
+    auto [tmp, b, test_name] = ProfileCaseRegistry[test_num]();
+    dense_matrix<bfloat16> a = tmp.to_dense();
 
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- ⚠️⚠️⚠️ PROFILING RESULTS WILL ONLY BE WRITTEN IF THIS PROGRAM IS BUILT WITH PROFILING ENABLED AND IS RUN WITH TRACY LISTENING VIA THE './capture-release' COMMAND" << std::endl;
+    // set up command strings to direct and capture the trace
+    char buf[1000];
+    size_t n = sprintf(buf, "/home/user/tt-metal/profiles/dense/%s/", host_function_name.c_str());
+    std::string trace_directory(buf, n);
+    std::string trace_file_location = trace_directory + test_name + ".tracy";
+
+    n = sprintf(buf, "mkdir -p %s", trace_directory.c_str());
+    std::string mkdir_command(buf, n);
+    
+    n = sprintf(buf, "./capture-release -f -o %s &", trace_file_location.c_str());
+    std::string capture_trace_command(buf, n);
+
+    // print header
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Host code function: " << host_function_name << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Test case: " << test_name << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Num iters: " << num_iters << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Output file: " << trace_file_location << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+
+    // run ./capture-release to allow the profiler to listen for the program 
+    std::system(mkdir_command.c_str());
+    std::system(capture_trace_command.c_str());
 
     profile_dense_test(host_function, a, b, test_name);
 
-    std::cout << "--- Profiling complete ----------------------------------------------------------" << std::endl;
-    std::cout << "--- ⚠️⚠️⚠️ PROFILING RESULTS WILL ONLY BE WRITTEN IF THIS PROGRAM IS BUILT WITH PROFILING ENABLED AND IS RUN WITH TRACY LISTENING VIA THE './capture-release' COMMAND" << std::endl;
+    // print footer
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Host code function: " << host_function_name << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Test case: " << test_name << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Num iters: " << num_iters << std::endl;
+    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    std::cout << "--- Output file: " << trace_file_location << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     return 0;
 }

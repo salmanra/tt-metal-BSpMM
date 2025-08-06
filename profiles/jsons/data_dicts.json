@@ -13,7 +13,7 @@
             "Program Loop total ns": 0
         },
         "profile_case_sparse_diagonal_R32_C32.csv": {
-            "Program Loop total ns": 0
+            "Program Loop total ns": 31772029
         },
         "profile_case_sparse_diagonal_R64_C64.csv": {
             "Program Loop total ns": 0

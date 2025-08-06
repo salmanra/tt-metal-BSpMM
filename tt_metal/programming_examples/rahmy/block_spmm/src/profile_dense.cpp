@@ -115,11 +115,10 @@ int main(int argc, char** argv) {
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
     // run ./capture-release to allow the profiler to listen for the program 
-    // std::system(mkdir_command.c_str());
-    // std::system(capture_trace_command.c_str());
-    std::system(csvexport_command.c_str());
+    std::system(mkdir_command.c_str());
+    std::system(capture_trace_command.c_str());
 
-    // profile_dense_test(host_function, a, b, test_name);
+    profile_dense_test(host_function, a, b, test_name);
 
     // print footer
     std::cout << "---------------------------------------------------------------------------------" << std::endl;

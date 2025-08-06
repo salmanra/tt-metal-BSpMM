@@ -88,13 +88,6 @@ void kernel_main(){
         .bank_base_address = indptr_addr,
         .page_size = indptr_single_tile_size_bytes,
         .data_format = indptr_data_format};
-    
-    // all we really want to do is
-    // 1. make the NoC Args its own special struct
-    // 2. pass the number of tiles the struct spans as a 
-    //    runtime argument
-    // 3. Let the reader NoC the args, and let all three kernels wait on reader to announce(push_back) the args
-    //
 
 
     // POTENTIAL: memory save

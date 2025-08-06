@@ -54,6 +54,7 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_dense();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_empty_rows();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_dense_2_blocks_per_core();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_diag();
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
@@ -101,7 +102,28 @@ namespace bsr_test_suite {
         test_big_random, // 40
         test_big_dense, // 41
         test_dense_2_blocks_per_core, // 42
+        test_huge_diag, // 43
     };
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_diag() {
+
+            // matmul params setup
+        uint32_t M = 2048;
+        uint32_t N = 2048;
+        uint32_t K = 2048;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t block_matrix_height = M / R;
+        uint32_t nblocks = block_matrix_height;
+
+        // nz blocks fill the diagonal
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_DIAG, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_huge_diag");
+    }
 
     // this case should expose the performance difference between the naive and new versions
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_empty_rows() {
@@ -1342,9 +1364,9 @@ namespace profiling_suite {
     template <uint32_t R = 32, uint32_t C = 32>
     inline ProfileCaseReturnType profile_case_sparse_diagonal() {
         // matmul params setup
-        uint32_t M = 4096;
-        uint32_t N = 4096;
-        uint32_t K = 4096;
+        uint32_t M = 2048;
+        uint32_t N = 2048;
+        uint32_t K = 2048;
         // block params setup
         uint32_t block_matrix_height = M / R;
         uint32_t nblocks = block_matrix_height;
@@ -1414,9 +1436,9 @@ namespace profiling_suite {
     template <uint32_t R = 32, uint32_t C = 32>
     inline ProfileCaseReturnType profile_case_sparse_fill_random() {
         // matmul params setup
-        uint32_t M = 4096;
-        uint32_t N = 4096;
-        uint32_t K = 4096;
+        uint32_t M = 2048;
+        uint32_t N = 2048;
+        uint32_t K = 2048;
         // block params setup
         uint32_t block_matrix_height = M / R;
         uint32_t nblocks = block_matrix_height;

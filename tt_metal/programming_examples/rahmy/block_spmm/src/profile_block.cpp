@@ -80,9 +80,6 @@ int main(int argc, char** argv) {
     // run the program
     profile_test(host_function, a, b, test_name, num_iters);
 
-    // Generate csv file. Does this work live?
-    std::system(csvexport_command.c_str());
-    
     // print footer
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Host code function: " << host_function_name << std::endl;

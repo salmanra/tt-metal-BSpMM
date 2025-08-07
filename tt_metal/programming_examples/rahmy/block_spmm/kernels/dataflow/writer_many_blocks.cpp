@@ -29,7 +29,6 @@ void kernel_main() {
     uint32_t batch = get_arg_val<uint32_t>(12);
 
     uint32_t nonzero = get_arg_val<uint32_t>(13);
-    bool zero_output = nonzero == 0;
 
     constexpr bool out_is_dram = get_compile_time_arg_val(0) == 1;
 
@@ -37,16 +36,12 @@ void kernel_main() {
 
     // single-tile
     const uint32_t single_tile_size_bytes = get_tile_size(cb_id_out0);
-    uint32_t l1_read_addr_increment = zero_output ? 0 : single_tile_size_bytes;
+    uint32_t l1_read_addr_increment = single_tile_size_bytes;
     const DataFormat data_format = get_dataformat(cb_id_out0);
 
 
     const InterleavedAddrGenFast<out_is_dram> s = {
         .bank_base_address = out_tensor_addr, .page_size = single_tile_size_bytes, .data_format = data_format};
-
-
-    if (zero_output) 
-        cb_wait_front(cb_id_out0, 1);
 
     bool one_time_profile = true;
     for (uint32_t b = 0; b < batch; b++) {
@@ -58,8 +53,7 @@ void kernel_main() {
                 uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
 
                 // nonzero
-                if (!zero_output)
-                    cb_wait_front(cb_id_out0, out_subblock_tile_count);
+                cb_wait_front(cb_id_out0, out_subblock_tile_count);
                 uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
 
                 for (uint32_t h = 0; h < out_subblock_h; h++) {
@@ -69,10 +63,6 @@ void kernel_main() {
                         l1_read_addr += l1_read_addr_increment;
 
                         out_tensor_tile_id += out_tensor_stride_w;
-
-                        const char * zero = zero_output ? "zero " : ""; 
-                        DPRINT_DATA1(DPRINT << "Wrote a " << zero << "tile: " << out_tensor_tile_id << ENDL());
-
                     }
                     out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
                 }
@@ -84,8 +74,7 @@ void kernel_main() {
                                             // have to use noc_async_write_barrier() at
                                             // least once at the end of data movement kernel
                                             // to make sure all writes are done.
-                if (!zero_output)
-                    cb_pop_front(cb_id_out0, out_subblock_tile_count);
+                cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
             }
             out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;

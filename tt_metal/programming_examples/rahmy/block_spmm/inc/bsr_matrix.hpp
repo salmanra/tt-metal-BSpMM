@@ -320,13 +320,14 @@ public:
 
         
         // try to let Ct = 2, but accept it otherwise
-        R = per_core_M * TILE_HEIGHT;
-        C = std::min(per_core_N * TILE_WIDTH, 2 * TILE_WIDTH);
+        // R = per_core_M * TILE_HEIGHT;
+        // C = std::min(per_core_N * TILE_WIDTH, 2 * TILE_WIDTH);
         // if (W % 64 == 0)
         //     C = 64;
         // if (H % 64 == 0)
         //     R = 64; /
-
+        R = 32;
+        C = 32;
 
         size_t blocked_matrix_height = H / R;
         size_t blocked_matrix_width = W / C;

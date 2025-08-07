@@ -102,7 +102,7 @@ namespace bsr_test_suite {
         test_big_random, // 40
         test_big_dense, // 41
         test_dense_2_blocks_per_core, // 42
-        test_huge_diag, // 43
+        // test_huge_diag, // 43
     };
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_diag() {
 

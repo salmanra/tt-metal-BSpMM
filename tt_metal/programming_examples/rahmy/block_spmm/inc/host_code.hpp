@@ -4,6 +4,8 @@
 #include <cstdint>
 
 #include "include_me.hpp"
+#include "tt-metalium/bfloat16.hpp"
+#include "tt-metalium/host_api.hpp"
 
 using namespace tt;
 
@@ -739,12 +741,9 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     uint32_t dram_buffer_dst_total_size = 0;
     uint32_t nnz_rows = 0;
 
-    std::unordered_map<uint32_t, std::shared_ptr<Buffer>> dst_dram_buffers; 
     for (uint32_t i = 0; i < a.indptr.size() - 1; i++) {
         if (a.indptr[i+1] - a.indptr[i] > 0)
             nnz_rows++;
-            // dram_buffer_dst_total_size += dram_buffer_dst_row_size;
-            // dst_dram_buffers[i] = MakeBuffer(device, dram_buffer_dst_row_size, single_tile_size);
     }
     dram_buffer_dst_total_size = dram_buffer_dst_row_size * nnz_rows;
     auto dst_dram_buffer = MakeBuffer(device, dram_buffer_dst_total_size, single_tile_size);
@@ -771,7 +770,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_D_size, std::min(indexing_data_single_tile_size, dram_buffer_D_size));
     auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, std::min(indexing_data_single_tile_size, dram_buffer_indptr_size));
 
-    uint32_t nnz_output_blocks_total = num_blocks_x * dst_dram_buffers.size(); // blocks per row * nnz rows
+    uint32_t nnz_output_blocks_total = num_blocks_x * nnz_rows; // blocks per row * nnz rows
 
 
     CoreRangeSet all_cores(
@@ -865,10 +864,13 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = {}});
 
     uint32_t nnz_output_blocks_read = 0;
+    uint32_t num_empty_rows_so_far = 0;
     for (int output_idx_y = 0; output_idx_y < a.indptr.size() - 1; output_idx_y++) {
         uint32_t nnz_blocks_in_row = a.indptr[output_idx_y + 1] - a.indptr[output_idx_y];
-        if (nnz_blocks_in_row == 0)
+        if (nnz_blocks_in_row == 0){
+            num_empty_rows_so_far++;
             continue;
+        }
         // else, we are in a nonzero row
         for (uint32_t output_idx_x = 0; output_idx_x < num_blocks_x; output_idx_x++){
             int core_idx_x = nnz_output_blocks_read % num_cores_x;
@@ -904,9 +906,11 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
                 (std::uint32_t)indptr_dram_buffer->address(),
             };
 
+            // output tile isn't about output_idx_y becase that's treating the dense matrix (no folds).
+            // but we have folds!!!
             std::vector<uint32_t> writer_args = {
-                (std::uint32_t)dst_dram_buffers[output_idx_y]->address(),      // out_buffer_addr
-                (std::uint32_t)output_idx_x * per_core_N,  // out_tensor_start_tile_id
+                (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
+                (std::uint32_t)((output_idx_y - num_empty_rows_so_far) * Rt * Nt) + output_idx_x * per_core_N,  // out_tensor_start_tile_id
                 (std::uint32_t)1,                           // out_tensor_stride_w
                 (std::uint32_t)Nt,                         // out_tensor_stride_h
                 (std::uint32_t)out_subblock_w,       // out_tensor_next_subblock_stride_w
@@ -1036,10 +1040,16 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     if (verbose)
         log_info(tt::LogVerif, " -- Program enqueued --");
 
-    for (auto & pair : dst_dram_buffers){
-        uintptr_t row_index = pair.first;
-        std::shared_ptr<Buffer> buffer = pair.second;
-        EnqueueReadBuffer(cq, buffer, output.data.data() + (row_index * R * N), false);
+
+    // we index into host data by row_index,
+    // and we index into DRAM data by "folded" row index
+    uint32_t nonzero_row_index = 0;
+    for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
+        if (a.indptr[row_index+1] - a.indptr[row_index] == 0) 
+            continue;
+        BufferRegion DRAM_row(nonzero_row_index * dram_buffer_dst_row_size, dram_buffer_dst_row_size);
+        EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, true);
+        nonzero_row_index++;
     }
 
     Finish(cq);
@@ -1909,8 +1919,6 @@ void bsr_spmm_multicore_reuse_naive(
     Finish(cq);
 
 }
-
-
 }
 
 namespace dense_host_code {

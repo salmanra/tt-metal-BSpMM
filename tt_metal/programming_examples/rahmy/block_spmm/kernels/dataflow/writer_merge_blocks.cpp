@@ -26,6 +26,7 @@ void kernel_main() {
 
     // batch args
     uint32_t MtNt = get_arg_val<uint32_t>(11);  // TODO: figure out this constant. And it should be constant now!
+                                                //          But only because we handle the multiple blocks serially...
     uint32_t batch = get_arg_val<uint32_t>(12); // TODO: rename to reflect num blocks M per core.
 
     uint32_t nonzero = get_arg_val<uint32_t>(13);

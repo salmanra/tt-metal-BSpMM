@@ -148,10 +148,8 @@ void kernel_main(){
     // I choose 1. because it's simpler for now!
     // TODO: wrap this in a for loop over the number of output blocks being processed by this core, 
     //        accessing/indexing the sparse indexing DSes
-
     for (uint32_t output_block = 0; output_block < num_output_blocks; output_block++){
-        uint32_t output_idx_x = coords[2*output_block]; 
-        uint32_t output_idx_y = coords[2*output_block + 1]; 
+        uint32_t output_idx_y = y_coords[output_block]; 
         uint32_t block_row_start = indptr[output_idx_y];
         uint32_t block_row_end = indptr[output_idx_y + 1];
         uint32_t in0_tensor_start_tile_id = block_row_start * in0_block_num_tiles;

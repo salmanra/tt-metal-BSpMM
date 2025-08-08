@@ -25,8 +25,8 @@ void kernel_main() {
     uint32_t out_num_subblocks_h = get_arg_val<uint32_t>(10);
 
     // batch args
-    uint32_t MtNt = get_arg_val<uint32_t>(11);  // if 0
-    uint32_t batch = get_arg_val<uint32_t>(12);
+    uint32_t MtNt = get_arg_val<uint32_t>(11);  // TODO: figure out this constant. And it should be constant now!
+    uint32_t batch = get_arg_val<uint32_t>(12); // TODO: rename to reflect num blocks M per core.
 
     uint32_t nonzero = get_arg_val<uint32_t>(13);
 

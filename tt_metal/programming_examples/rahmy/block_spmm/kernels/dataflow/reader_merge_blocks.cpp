@@ -5,8 +5,6 @@
 #include "hostdevcommon/kernel_structs.h"
 
 void kernel_main(){
-    // why are all the constants not compile time args?
-
     // in0 tensor args
     // uint32_t in0_tensor_addr = get_arg_val<uint32_t>(0);
     // // uint32_t in0_tensor_start_tile_id = get_arg_val<uint32_t>(1); // TODO:
@@ -42,11 +40,11 @@ void kernel_main(){
 
 
     const uint32_t num_output_blocks = get_arg_val<uint32_t>(0);
+    const uint32_t output_idx_x = get_arg_val<uint32_t>(1);
     // variable number of args
-    uint32_t coords[2*num_output_blocks];
+    uint32_t y_coords[num_output_blocks];
     for (int i = 0; i < num_output_blocks; i++){
-        coords[2*i] = get_arg_val<uint32_t>(1+2*i);
-        coords[2*i+1] = get_arg_val<uint32_t>(1+2*i+1);
+        y_coords[i] = get_arg_val<uint32_t>(2 + i);
     }
 
     DPRINT_DATA0(DPRINT << "Runtime args obtained. num output blocks to compute: " << num_output_blocks << ENDL());

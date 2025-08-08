@@ -35,44 +35,45 @@ void MAIN {
     uint32_t in1_num_subblocks = get_arg_val<uint32_t>(4);        // outer column block size (in inner column blocks)
     uint32_t in1_block_num_tiles = get_arg_val<uint32_t>(5);      // out_subblock_w*in0_block_w* in1_num_subblocks;
     uint32_t in1_per_core_w = get_arg_val<uint32_t>(6);           // out_subblock_w*in1_num_subblocks
-    uint32_t num_blocks = get_arg_val<uint32_t>(7);               // outer inner dim (in inner dim blocks)
-    uint32_t out_subblock_h = get_arg_val<uint32_t>(8);           // inner row block size in tiles
-    uint32_t out_subblock_w = get_arg_val<uint32_t>(9);           // inner column block size in tiles
-    uint32_t out_subblock_num_tiles = get_arg_val<uint32_t>(10);  // out_subblock_h * out_subblock_w;
-    uint32_t batch = get_arg_val<uint32_t>(11);                   // batch dim
+    // uint32_t num_blocks = get_arg_val<uint32_t>(7);               // outer inner dim (in inner dim blocks)
+    uint32_t out_subblock_h = get_arg_val<uint32_t>(7);           // inner row block size in tiles
+    uint32_t out_subblock_w = get_arg_val<uint32_t>(8);           // inner column block size in tiles
+    uint32_t out_subblock_num_tiles = get_arg_val<uint32_t>(9);  // out_subblock_h * out_subblock_w;
+    uint32_t batch = get_arg_val<uint32_t>(10);                   // batch dim
 
     mm_init();
     //DPRINT_MATH(DPRINT << "Math core waiting on " << num_blocks << " blocks." << ENDL());
-
-    bool zero_output = num_blocks == 0;
-    
-    // DRAM initialization technique:
-    // If this core is handling a zero output block,
-    // 1. Compute kernel packs zeros (fill_tile) and pushes to output buffer
-    // 2. Writer waits on a single tile from the output buffer before noc'ing to dram
-    if (zero_output) {
-        // use fill_tile to swarm DST with zeros
-        // then pack that tile to the intermediate buffer?
-        fill_tile(0, 0);
-        cb_reserve_back(tt::CBIndex::c_16, 1);
-        pack_tile(0, tt::CBIndex::c_16);
-        cb_push_back(tt::CBIndex::c_16, 1);
-    }
+    // TODO: 
+    uint32_t num_blocks = 0;
 
     for (uint32_t b = 0; b < batch; b++) {
         bool spill = num_blocks > 1;
         bool enable_reload = false;
         uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;
 
-
+        // TODO: iterate over the maximum number of blocks 
+        //          given to this core by a single input row
         for (uint32_t block = 0; block < num_blocks; block++) {
             bool last_out = block == (num_blocks - 1);
 
+            // we have specified in0 cb size to hold per_core_M, not per_block_M, 
+            // in1 cb size is the same. 
+            // And the interm/out buf also MpcxNpc.
+            // So we can in principle wait_front on in0_core_num_tiles
+            // ... no it doesn't make sense.
+            // Let this wait_front stay as is. We should almost never actually sleep on it. 
+
+            // TODO: check if any output blocks are complete and 
+            //          subtract from the total number of tiles to wait
             cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
             cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
 
             //DPRINT_MATH(DPRINT << "Math core recieved " << block + 1 << " blocks so far." << ENDL());
-
+            // TODO: adapt the subblocks iteration over work region, not block
+            //       Initial thoughts: keep this iteration within a block,
+            //          then wrap it in an iteration over "active" blocks,
+            //          ie output blocks which still have input blocks to 
+            //          compute and accumulate from.
             int in0_index_subblock_offset = 0;
             for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
                 int in1_index_subblock_offset = 0;

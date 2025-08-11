@@ -102,7 +102,7 @@ namespace bsr_test_suite {
         test_big_random, // 40
         test_big_dense, // 41
         test_dense_2_blocks_per_core, // 42
-        // test_huge_diag, // 43
+        test_huge_diag, // 43
     };
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_diag() {
 
@@ -1208,7 +1208,10 @@ namespace profiling_suite {
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
     using ProfileCaseReturnType = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string>;
+    template <uint32_t>
     ProfileCaseReturnType profile_case_dense_square();
+
+
     ProfileCaseReturnType profile_case_dense_tall();
     ProfileCaseReturnType profile_case_dense_wide();
     
@@ -1236,7 +1239,7 @@ namespace profiling_suite {
     ////////////////////////////////////////////////////////////////////////////
     using ProfileCaseFunctionPtr = ProfileCaseReturnType (*)();
     static ProfileCaseFunctionPtr ProfileCaseRegistry[] = {
-        profile_case_dense_square, // 0
+        profile_case_dense_square<512>, // 0
         profile_case_dense_tall, // 1
         profile_case_dense_wide, // 2
         profile_case_sparse_single_input_block<32, 32>, // 3
@@ -1255,6 +1258,13 @@ namespace profiling_suite {
         profile_case_sparse_fill_random<64, 64>, // 16
         profile_case_sparse_fill_random<128, 128>, // 17
         profile_case_sanity_check, // 18
+    };
+
+    static ProfileCaseFunctionPtr ProfileDenseAblationRegistry[] = {
+        profile_case_dense_square<512>, // 0
+        profile_case_dense_square<1024>, // 1
+        profile_case_dense_square<2048>, // 1
+        profile_case_dense_square<4096>, // 1
     };
     
     ////////////////////////////////////////////////////////////////////////////
@@ -1288,10 +1298,10 @@ namespace profiling_suite {
     ////////////////////////////////////////////////////////////////////////////
     ///////// Dense Cases //////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
+    template <uint32_t K = 512>
     inline ProfileCaseReturnType profile_case_dense_square() {
         uint32_t M = 4096;
         uint32_t N = 4096;
-        uint32_t K = 512;
 
         dense_matrix<float> tmp(M, K, RAND);
         bsr_matrix<float> src0(tmp, N);
@@ -1299,7 +1309,11 @@ namespace profiling_suite {
 
         bsr_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
         dense_matrix<bfloat16> src1_bfloat16 = src1.bfloat16_cast();
-        return std::make_tuple(src0_bfoat16, src1_bfloat16, "profile_case_dense_square");
+
+        char buf[50];
+        size_t n = sprintf(buf, "profile_case_dense_square_K%i", K);
+        std::string test_name(buf, n);
+        return std::make_tuple(src0_bfoat16, src1_bfloat16, test_name);
     }
 
     inline ProfileCaseReturnType profile_case_dense_tall() {

@@ -502,7 +502,7 @@ int main(int argc, char** argv) {
         /* Create source data */
         constexpr uint32_t M = 4096;  // user-defined
         constexpr uint32_t N = 4096;  // user-defined
-        constexpr uint32_t K = 512;   // user-defined
+        constexpr uint32_t K = 4096;   // user-defined
         constexpr uint32_t B = 1;     // user-defined
 
         uint32_t Mt = M / TILE_HEIGHT;

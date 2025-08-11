@@ -93,7 +93,7 @@ using HostCodeFunctionPtr = void (*)(
 
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
-    {bsr_spmm_multicore_reuse_merge_blocks, "bsr_spmm_multicore_reuse_merge_blocks"},
+    // {bsr_spmm_multicore_reuse_merge_blocks, "bsr_spmm_multicore_reuse_merge_blocks"}, // pausing development of this
     {bsr_spmm_multicore_reuse_many_blocks_per_core, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // 0
     {bsr_spmm_multicore_reuse, "bsr_spmm_multicore_reuse"}, // 1
     {bsr_spmm_multicore_reuse_naive, "bsr_spmm_multicore_reuse_naive"}, // 2

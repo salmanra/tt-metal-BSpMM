@@ -32,7 +32,9 @@ int main(int argc, char** argv) {
     const int test_id = 0;
     const int host_code_id = 0;
 
-    // uhhh pick a host function pick a test and run it ten times.
+    // let's make the test registry and test index required arguments
+    // and the host code index
+    // then let num_iters be optional
     int test_num = argc > 1 ? std::stoi(argv[1]) : test_id;
     int host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
     int num_iters = argc > 3 ? std::stoi(argv[3]) : 10;
@@ -41,6 +43,7 @@ int main(int argc, char** argv) {
     HostCodeFunctionPtr host_function = HostCodeRegistry[host_code_num].first;
     std::string host_function_name = HostCodeRegistry[host_code_num].second;
     auto [a, b, test_name] = ProfileCaseRegistry[test_num]();
+    ProfileDenseAblationRegistry[test_num]();
 
 
     // set up command strings to direct and capture the trace (and its csv file)

@@ -77,16 +77,29 @@ int main(int argc, char** argv) {
     // uhhh pick a host function pick a test and run it ten times.
     int test_num = argc > 1 ? std::stoi(argv[1]) : big_test_id;
     int host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
-    int num_iters = argc > 3 ? std::stoi(argv[3]) : 10;
+    int registry_number = argc > 3 ? std::stoi(argv[3]) : 0;
+    int num_iters = argc > 4 ? std::stoi(argv[3]) : 10;
 
+    ProfileCaseFunctionPtr *Registry;
+    std::string registry_name;
+    switch (registry_number) {
+        case 0:
+            Registry = ProfileCaseRegistry;
+            registry_name = "ProfileSuite";
+            break;
+        case 1:
+            Registry = ProfileDenseAblationRegistry;
+            registry_name = "DenseAblationKProfileSuite";
+            break;
+    }
     DenseHostCodeFunctionPtr host_function = DenseHostCodeRegistry[host_code_num].first;
     std::string host_function_name = DenseHostCodeRegistry[host_code_num].second;
-    auto [tmp, b, test_name] = ProfileCaseRegistry[test_num]();
+    auto [tmp, b, test_name] = Registry[test_num]();
     dense_matrix<bfloat16> a = tmp.to_dense();
 
     // set up command strings to direct and capture the trace
     char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/profiles/dense/%s/", host_function_name.c_str());
+    size_t n = sprintf(buf, "/home/user/tt-metal/profiles/dense/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
     std::string trace_file_location = trace_directory + test_name + ".tracy";
 

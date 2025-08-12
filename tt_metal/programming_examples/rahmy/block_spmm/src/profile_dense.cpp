@@ -109,7 +109,7 @@ int main(int argc, char** argv) {
     n = sprintf(buf, "./capture-release -f -o %s &", trace_file_location.c_str());
     std::string capture_trace_command(buf, n);
 
-    n = sprintf(buf, "/home/user/tt-metal/profiles/csvs/dense/%s/", host_function_name.c_str());
+    n = sprintf(buf, "/home/user/tt-metal/profiles/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string csv_directory(buf);
     std::string csv_file_location = csv_directory + test_name + ".csv";
 
@@ -143,6 +143,9 @@ int main(int argc, char** argv) {
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Output file: " << trace_file_location << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
+
+    // std::system(csvexport_command.c_str());
+
     return 0;
 }
 

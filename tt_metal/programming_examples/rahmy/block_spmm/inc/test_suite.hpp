@@ -1239,9 +1239,6 @@ namespace profiling_suite {
     ////////////////////////////////////////////////////////////////////////////
     using ProfileCaseFunctionPtr = ProfileCaseReturnType (*)();
     static ProfileCaseFunctionPtr ProfileCaseRegistry[] = {
-        profile_case_dense_square<512>, // 0
-        profile_case_dense_tall, // 1
-        profile_case_dense_wide, // 2
         profile_case_sparse_single_input_block<32, 32>, // 3
         profile_case_sparse_single_input_block<64, 64>, // 4
         profile_case_sparse_single_input_block<128, 128>, // 5
@@ -1257,7 +1254,6 @@ namespace profiling_suite {
         profile_case_sparse_fill_random<32, 32>, // 15
         profile_case_sparse_fill_random<64, 64>, // 16
         profile_case_sparse_fill_random<128, 128>, // 17
-        profile_case_sanity_check, // 18
     };
 
     static ProfileCaseFunctionPtr ProfileDenseAblationRegistry[] = {
@@ -1317,7 +1313,7 @@ namespace profiling_suite {
     }
 
     inline ProfileCaseReturnType profile_case_dense_tall() {
-        uint32_t M = 8192;
+        uint32_t M = 4096;
         uint32_t N = 1024;
         uint32_t K = 512;
         dense_matrix<float> tmp(M, K, RAND);
@@ -1331,7 +1327,7 @@ namespace profiling_suite {
 
     inline ProfileCaseReturnType profile_case_dense_wide() {
         uint32_t M = 1024;
-        uint32_t N = 8192;
+        uint32_t N = 4096;
         uint32_t K = 512;
 
         dense_matrix<float> tmp(M, K, RAND);
@@ -1354,9 +1350,9 @@ namespace profiling_suite {
     template <uint32_t R = 32, uint32_t C = 32>
     inline ProfileCaseReturnType profile_case_sparse_single_input_block() {
         // matmul params setup
-        uint32_t M = 8192;
-        uint32_t N = 2048;
-        uint32_t K = 256;
+        uint32_t M = 1024;
+        uint32_t N = 1024;
+        uint32_t K = 1024;
         // block params setup
         uint32_t nblocks = 1;
         uint32_t block_matrix_height = M / R;
@@ -1378,9 +1374,9 @@ namespace profiling_suite {
     template <uint32_t R = 32, uint32_t C = 32>
     inline ProfileCaseReturnType profile_case_sparse_diagonal() {
         // matmul params setup
-        uint32_t M = 2048;
-        uint32_t N = 2048;
-        uint32_t K = 2048;
+        uint32_t M = 1024;
+        uint32_t N = 1024;
+        uint32_t K = 1024;
         // block params setup
         uint32_t block_matrix_height = M / R;
         uint32_t nblocks = block_matrix_height;
@@ -1402,9 +1398,9 @@ namespace profiling_suite {
     template <uint32_t R = 32, uint32_t C = 32>
     inline ProfileCaseReturnType profile_case_sparse_fill_column() {
         // matmul params setup
-        uint32_t M = 4096;
-        uint32_t N = 4096;
-        uint32_t K = 4096;
+        uint32_t M = 1024;
+        uint32_t N = 1024;
+        uint32_t K = 1024;
         // block params setup
         uint32_t block_matrix_height = M / R;
         uint32_t nblocks = block_matrix_height;
@@ -1426,9 +1422,9 @@ namespace profiling_suite {
     template <uint32_t R = 32, uint32_t C = 32>
     inline ProfileCaseReturnType profile_case_sparse_fill_row() {
         // matmul params setup
-        uint32_t M = 4096;
-        uint32_t N = 4096;
-        uint32_t K = 4096;
+        uint32_t M = 1024;
+        uint32_t N = 1024;
+        uint32_t K = 1024;
         // block params setup
         uint32_t block_matrix_height = M / R;
         uint32_t nblocks = block_matrix_height;
@@ -1450,9 +1446,9 @@ namespace profiling_suite {
     template <uint32_t R = 32, uint32_t C = 32>
     inline ProfileCaseReturnType profile_case_sparse_fill_random() {
         // matmul params setup
-        uint32_t M = 2048;
-        uint32_t N = 2048;
-        uint32_t K = 2048;
+        uint32_t M = 1024;
+        uint32_t N = 1024;
+        uint32_t K = 1024;
         // block params setup
         uint32_t block_matrix_height = M / R;
         uint32_t nblocks = block_matrix_height;

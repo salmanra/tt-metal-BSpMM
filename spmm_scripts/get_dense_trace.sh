@@ -1,7 +1,7 @@
 #!/usr/bin/bash
 
 function capture_all_one_host {
-    num_tests=17 # size of ProfileCaseRegistry
+    num_tests=14 # size of ProfileCaseRegistry
     host_program_index=0
     profile_case_registry_index=0
     if [[ "$#" -eq 1 ]]; then

@@ -1,0 +1,44 @@
+[
+    {
+        "profile_case_dense_square_K1024.csv": {
+            "Program Loop total ns": 89695605
+        },
+        "profile_case_dense_square_K2048.csv": {
+            "Program Loop total ns": 127066641
+        },
+        "profile_case_dense_square_K4096.csv": {
+            "Program Loop total ns": 178732908
+        },
+        "profile_case_dense_square_K512.csv": {
+            "Program Loop total ns": 74498240
+        }
+    },
+    {
+        "profile_case_dense_square_K1024.csv": {
+            "Program Loop total ns": 62687686
+        },
+        "profile_case_dense_square_K2048.csv": {
+            "Program Loop total ns": 97448429
+        },
+        "profile_case_dense_square_K4096.csv": {
+            "Program Loop total ns": 173512473
+        },
+        "profile_case_dense_square_K512.csv": {
+            "Program Loop total ns": 45508224
+        }
+    },
+    {
+        "profile_case_dense_square_K1024.csv": {
+            "Program Loop total ns": 88439508
+        },
+        "profile_case_dense_square_K2048.csv": {
+            "Program Loop total ns": 115357613
+        },
+        "profile_case_dense_square_K4096.csv": {
+            "Program Loop total ns": 150767247
+        },
+        "profile_case_dense_square_K512.csv": {
+            "Program Loop total ns": 68813387
+        }
+    }
+]

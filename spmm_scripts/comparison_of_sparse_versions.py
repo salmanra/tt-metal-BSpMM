@@ -11,11 +11,11 @@ csv_dir = profiles_dir + "csvs/"
 json_output_dir = profiles_dir + "jsons/"
 png_output_dir = profiles_dir + "pngs/"
 
-csv_dir_spmm = csv_dir + "ProfileSuite/bsr_spmm_multicore_reuse_many_blocks_per_core"
-csv_dir_basic = csv_dir + "ProfileSuite/matmul_multicore_reuse"
-csv_dir_mcast = csv_dir + "ProfileSuite/matmul_multicore_reuse_mcast"
+csv_dir_v3 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_many_blocks_per_core"
+csv_dir_v2 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse"
+csv_dir_v1 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_naive"
 
-csv_data_dirs = [csv_dir_spmm, csv_dir_basic, csv_dir_mcast]
+csv_data_dirs = [csv_dir_v3, csv_dir_v2, csv_dir_v1]
 
 test_cases = [        
         "profile_case_sparse_single_block_R32_C32.csv",
@@ -43,18 +43,17 @@ test_cases = [
 #       add {,} some other pairs if you feel it now
 #       add Zone dict to csv file name dict
 
-spmm_data = {}
-gemm_basic_data = {}
-gemm_mcast_data = {}
+v3_data = {}
+v2_data = {}
+v1_data = {}
 
-data_dicts = [spmm_data, gemm_basic_data, gemm_mcast_data]
+data_dicts = [v3_data, v2_data, v1_data]
 
 for i, csv_data_dir in enumerate(csv_data_dirs):
     # csv_file_names = sorted(os.listdir(csv_data_dir))
     # csv_file_names = os.listdir(csv_data_dir)
     csv_files = [os.path.join(csv_data_dir, f) for f in test_cases]
     for j, csv_file in enumerate(csv_files):
-        print(csv_file)
         df = pd.read_csv(csv_file)
         # print(f'We are in the {j}th csv file of the {i}th host')
         # print(df[df["name"] == "Program Loop"].size) # what do you mean not all of these dfs have a Program Loop?
@@ -66,9 +65,14 @@ for i, csv_data_dir in enumerate(csv_data_dirs):
         else:
             zones_data["Program Loop total ns"] = int(df.loc[df["name"] == "Program Loop", "total_ns"].array[0])
 
+        # print(type(df[df["name"] == "Program Loop"]))
+        # print(type(df[df["name"] == "Program Loop"]["total_ns"]))
+        # total_ns = df.get("total_ns")["Program Loop"]
+        # zones_data["Program Loop total ns"] = total_ns
+
         data_dicts[i][test_cases[j]] = zones_data
 
-pprint.pp(data_dicts)
+# pprint.pp(data_dicts)
 with open(json_output_dir + "data_dicts.json", "w") as f:
     json.dump(data_dicts, f, indent=4)
 # Now we can make a simple bar chart? And we could write this to a more easily readable JSON file.
@@ -87,16 +91,12 @@ for d in data_dicts:
 bar_values = np.array(bar_values)  # shape: (n_dicts, n_groups)
 max_val = np.nanmax(bar_values) * 1.05
 
-group_names = ['Block SpMM', 'Dense Matmul Basic', 'Dense Matmul Multicast']
-group_colors = ["steelblue", "darkorange", "green"]
-
 # Plotting
 fig, ax = plt.subplots(figsize=(10, 6))
 bar_width = 0.25
 x = np.arange(n_groups)
 
-# for i in range(n_dicts):
-#     ax.bar(x + i * bar_width, bar_values[i], width=bar_width, label=f'Dict {i+1}')
+group_colors = ["steelblue", "mediumblue", "midnightblue"]
 
 for i in range(n_dicts):
     mask_ok = ~np.isnan(bar_values[i])
@@ -104,7 +104,7 @@ for i in range(n_dicts):
            bar_values[i, mask_ok], 
            width=bar_width, 
            color=group_colors[i],
-           label=f'{group_names[i]}')
+           label=f'SpMM V{3-i}')
     
     mask_nan = np.isnan(bar_values[i])
     if mask_nan.sum() == 0:
@@ -115,13 +115,14 @@ for i in range(n_dicts):
                           color=group_colors[i],
                           hatch="//",
                           alpha=0.2,
-                          label=f'{group_names[i]} Fail')
+                          label=f'SpMM V{3-i} Fail')
 
 ax.set_xlabel('Test Case')
 ax.set_ylabel('Execution Time in Nanoseconds (10 iterations)')
-ax.set_title('Sparse Test Cases Runtime Comparison')
+ax.set_title('Sparse Algorithms Runtime Comparison')
 ax.set_xticks(x + bar_width)
 ax.set_xticklabels(group_labels, rotation=45, ha='right')
+ax.legend()
 box = ax.get_position()
 ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
 
@@ -131,4 +132,4 @@ ax.legend(loc='center right', bbox_to_anchor=(-0.1, 0.5))
 plt.tight_layout()
 plt.show()
 
-plt.savefig(png_output_dir + "fig1.png")
+plt.savefig(png_output_dir + "fig2.png")

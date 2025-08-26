@@ -106,7 +106,7 @@ namespace bsr_test_suite {
     };
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_diag() {
 
-            // matmul params setup
+        // matmul params setup
         uint32_t M = 2048;
         uint32_t N = 2048;
         uint32_t K = 2048;

@@ -1,4 +1,10 @@
 # SpMM in BSR format
+In this readme:
+
+1. Directory Structure
+2. Specifying which version of the SpMM algorithm you want to run
+3. How to add a test case
+4. How to build and run the test suite 
 
 ### Directory structure
 ```

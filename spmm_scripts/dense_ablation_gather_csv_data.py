@@ -80,16 +80,16 @@ bar_values = np.array(bar_values)  # shape: (n_dicts, n_groups)
 fig, ax = plt.subplots(figsize=(10, 6))
 bar_width = 0.25
 x = np.arange(n_groups)
-
+colors = ['darkorange', 'green']
 for i in range(n_dicts):
-    ax.bar(x + i * bar_width, bar_values[i], width=bar_width, label=f'Dict {i+1}')
+    ax.bar(x + i * bar_width, bar_values[i], width=bar_width, color=colors[i], label=f'Dict {i+1}')
 
 ax.set_xlabel('Reduction Dimension Size')
 ax.set_ylabel('Nanoseconds elapsed (10 iterations)')
-ax.set_title('Basic vs Multicasting Dense Matmul runtime')
+ax.set_title('Basic vs Multicasting Dense Matmul Runtime')
 ax.set_xticks(x + bar_width)
 ax.set_xticklabels([f'K={k}' for k in k_vals], rotation=45, ha='right')
-ax.legend(['gemm_basic', 'gemm_mcast'])
+ax.legend(['Dense Matmul Basic', 'Dense Matmul Multicast'])
 
 plt.tight_layout()
 plt.show()

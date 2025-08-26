@@ -1,5 +1,6 @@
 #pragma once
 
+#include <sys/types.h>
 #include <algorithm>
 #include <cstdint>
 
@@ -93,7 +94,7 @@ using HostCodeFunctionPtr = void (*)(
 
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
-    // {bsr_spmm_multicore_reuse_merge_blocks, "bsr_spmm_multicore_reuse_merge_blocks"}, // pausing development of this
+    {bsr_spmm_multicore_reuse_merge_blocks, "bsr_spmm_multicore_reuse_merge_blocks"}, // resuming development of this
     {bsr_spmm_multicore_reuse_many_blocks_per_core, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // 0
     {bsr_spmm_multicore_reuse, "bsr_spmm_multicore_reuse"}, // 1
     {bsr_spmm_multicore_reuse_naive, "bsr_spmm_multicore_reuse_naive"}, // 2
@@ -233,11 +234,12 @@ void bsr_spmm_multicore_reuse_merge_blocks(
         folded_index++;
     }
     uint32_t height_of_folded_matrix = Rt * nnz_rows;
+    // the utils function doesn't respect BSR blocks. So it chooses subblock size bigger than BSR block size
     auto matmul_params = bmm_op_utils::get_large_matmul_params(height_of_folded_matrix, Nt, num_cores_y, num_cores_x, in0_block_w);
     uint32_t per_core_M = std::get<0>(matmul_params);
     uint32_t per_core_N = std::get<1>(matmul_params);
-    uint32_t out_subblock_h = std::get<2>(matmul_params);
-    uint32_t out_subblock_w = std::get<3>(matmul_params);
+    uint32_t out_subblock_h = std::min(Rt, std::get<2>(matmul_params));
+    uint32_t out_subblock_w = std::min(Ct, std::get<3>(matmul_params));
     
     // pick the largest subblock size that fits within the block size
     // uint32_t out_subblock_h, out_subblock_w;
@@ -378,6 +380,16 @@ void bsr_spmm_multicore_reuse_merge_blocks(
 
     auto indptr_cb_index = CBIndex::c_3; // 3
     auto cb_indptr = MakeCircularBuffer(program, all_cores, indptr_cb_index, dram_buffer_indptr_size, std::min(indexing_data_single_tile_size, dram_buffer_indptr_size), tt::DataFormat::Int32);
+
+
+    // now we have some thread-to-thread communication to do per core. 
+    // Let this circular buffer be the mediator for that. 
+    // Notice its size and page size are small (16 bytes)
+    // TODO: add page size and CB index as compile time parameters to three kernels
+    auto per_core_sync_CB_index = CBIndex::c_4;
+    uint32_t bytes_for_sync =  (per_core_M / per_block_M) * sizeof(uint32_t); 
+    uint32_t per_core_sync_CB_size = 2 * bytes_for_sync;
+    auto cb_sync = MakeCircularBuffer(program, all_cores, per_core_sync_CB_index, per_core_sync_CB_size, bytes_for_sync, tt::DataFormat::UInt32);
 
      /*
      * Compile time arguments

@@ -385,7 +385,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     // now we have some thread-to-thread communication to do per core. 
     // Let this circular buffer be the mediator for that. 
     // Notice its size and page size are small (16 bytes)
-    // TODO: add page size and CB index as compile time parameters to three kernels
+    // TODO: add page size compile time parameter to the three kernels
     auto per_core_sync_CB_index = CBIndex::c_4;
     uint32_t bytes_for_sync =  (per_core_M / per_block_M) * sizeof(uint32_t); 
     uint32_t per_core_sync_CB_size = 2 * bytes_for_sync;
@@ -397,6 +397,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     bool src0_is_dram = src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool src1_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool Noc_args_is_dram = column_indices_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+
     std::vector<uint32_t> reader_compile_time_args = {
         (std::uint32_t)src0_is_dram,
         (std::uint32_t)src1_is_dram,
@@ -420,11 +421,29 @@ void bsr_spmm_multicore_reuse_merge_blocks(
 
         (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
         (std::uint32_t)indptr_dram_buffer->address(),
+
+        (std::uint32_t)bytes_for_sync, // page size of synchronization CB
         
         // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
         // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x 
         // col indices start of row obtained by // a.indptr[output_idx_y],    
         // col indices end of row obtained by //  a.indptr[output_idx_y + 1],
+    };
+
+    std::vector<uint32_t> compute_kernel_compile_time_args = {
+        (std::uint32_t)in0_block_w,
+        (std::uint32_t)in0_num_subblocks,
+        (std::uint32_t)in0_block_w * per_block_M, // in0_block_num_tiles
+        (std::uint32_t)in0_subblock_num_tiles,
+        (std::uint32_t)in1_num_subblocks,
+        (std::uint32_t)in1_block_num_tiles,
+        (std::uint32_t)in1_per_core_w,
+        // (std::uint32_t)nnz_blocks_in_row, // num_blocks
+        (std::uint32_t)out_subblock_h,
+        (std::uint32_t)out_subblock_w,
+        (std::uint32_t)out_subblock_num_tiles,
+        (std::uint32_t)B,
+        (std::uint32_t)bytes_for_sync, // page size of synchronization CB
     };
 
     if (verbose){
@@ -447,6 +466,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
             "in1_block_num_tiles",
             "column_indices_addr",
             "indptr_dram_buffer->address()",
+            "bytes_for_sync"
         };
         for (size_t i = 0; i < reader_compile_time_args.size(); ++i) {
             log_info(tt::LogVerif, "comptime_reader_arg[{}] ({}) = {}", i, reader_arg_names[i], reader_compile_time_args[i]);
@@ -454,7 +474,10 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     }
 
     bool dst_is_dram = true;
-    std::vector<uint32_t> writer_compile_time_args = {(uint32_t)dst_is_dram};
+    std::vector<uint32_t> writer_compile_time_args = {
+        (std::uint32_t)dst_is_dram,
+        (std::uint32_t)bytes_for_sync, // page size of synchronization CB
+    };
 
     /*
      * Create Kernels (Reader, Writer, Compute)
@@ -483,7 +506,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
         program,
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm_merge_blocks.cpp",
         all_cores,
-        tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = {}});
+        tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = compute_kernel_compile_time_args});
 
     // iterate over all the cores in the core spec
     if (verbose){
@@ -520,7 +543,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
         // Write runtime args to device
         std::vector<uint32_t> mm_reader_args = {
             (std::uint32_t)num_out_blocks_per_this_core,
-            output_idx_x,
+            (std::uint32_t)output_idx_x,
         };
 
         for (uint32_t i = 0; i < num_out_blocks_per_this_core; i++){
@@ -558,24 +581,8 @@ void bsr_spmm_multicore_reuse_merge_blocks(
             (std::uint32_t)1 // nonzero, tells writer whether it has values to read
         };
 
-        std::vector<uint32_t> compute_args = {
-            (std::uint32_t)in0_block_w,
-            (std::uint32_t)in0_num_subblocks,
-            (std::uint32_t)in0_block_w * per_block_M, // in0_block_num_tiles
-            (std::uint32_t)in0_subblock_num_tiles,
-            (std::uint32_t)in1_num_subblocks,
-            (std::uint32_t)in1_block_num_tiles,
-            (std::uint32_t)in1_per_core_w,
-            // (std::uint32_t)nnz_blocks_in_row, // num_blocks
-            (std::uint32_t)out_subblock_h,
-            (std::uint32_t)out_subblock_w,
-            (std::uint32_t)out_subblock_num_tiles,
-            (std::uint32_t)B
-        };
-
         tt_metal::SetRuntimeArgs(program, reader_id, core, mm_reader_args);
         tt_metal::SetRuntimeArgs(program, writer_id, core, writer_args);
-        tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_args);
         nnz_output_blocks_read++;
         
         if (verbose && folded_output_idx_y_start == 0 && output_idx_x == 0) {
@@ -621,9 +628,6 @@ void bsr_spmm_multicore_reuse_merge_blocks(
                 "out_subblock_num_tiles",
                 "B"
             };
-            for (size_t i = 0; i < compute_args.size(); ++i) {
-                log_info(tt::LogVerif, "compute_arg[{}] ({}) = {}", i, compute_arg_names[i], compute_args[i]);
-            }
         }
     
     }

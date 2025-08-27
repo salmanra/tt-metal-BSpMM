@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <cstdint>
+#include "hostdevcommon/kernel_structs.h"
+
 
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
@@ -40,6 +42,22 @@ void MAIN {
     uint32_t out_subblock_w = get_arg_val<uint32_t>(8);           // inner column block size in tiles
     uint32_t out_subblock_num_tiles = get_arg_val<uint32_t>(9);  // out_subblock_h * out_subblock_w;
     uint32_t batch = get_arg_val<uint32_t>(10);                   // batch dim
+
+
+    const uint32_t cb_id_in0 = tt::CBIndex::c_0;
+    const uint32_t cb_id_in1 = tt::CBIndex::c_1;
+    const uint32_t cb_id_NoC_Args = tt::CBIndex::c_2;
+    const uint32_t cb_id_indptr = tt::CBIndex::c_3;
+
+    uint32_t l1_write_addr_in0;
+    uint32_t l1_write_addr_in1;
+    uint32_t l1_write_addr_NoC_Args;
+    uint32_t l1_write_addr_indptr;
+
+
+    cb_wait_front(cb_id_NoC_Args, 1);
+    l1_write_addr_NoC_Args = get_read_ptr(cb_id_NoC_Args);
+
 
     mm_init();
     //DPRINT_MATH(DPRINT << "Math core waiting on " << num_blocks << " blocks." << ENDL());

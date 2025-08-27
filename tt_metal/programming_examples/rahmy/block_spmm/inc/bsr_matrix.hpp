@@ -258,7 +258,6 @@ public:
         data.reserve(nblocks * R * C);
         std::fill(indptr.begin(), indptr.end(), 0);
 
-        // TODO: test this b
         // if Fill_row, fill the matrix with blocks in a row-wise manner
         // if Fill_col, fill the matrix with blocks in a column-wise manner
         if (fill_type == FILL_ROW) {
@@ -399,6 +398,7 @@ public:
         data = std::move(tilized_input);
     }
 
+    // construct from custom data members. Most flexible constructor. 
     bsr_matrix(
         std::vector<T> data,
         std::vector<int> indptr,

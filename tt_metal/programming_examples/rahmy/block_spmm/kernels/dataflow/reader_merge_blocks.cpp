@@ -135,19 +135,17 @@ void kernel_main(){
     cb_push_back(cb_id_indptr, 1);
 
     indptr = (uint32_t*)l1_write_addr_indptr; // this might not be right... what's the datatype of indptr?
-    // we might want to explicitly define the datatype (uint16, uint32) instead of just int.
 
-    // Now the idea is to pass the number of output blocks as a runtime arg, 
-    // then let the reader grab the rows as needed since if there is more than one
-    // output block assigned to a core, each output block is in its own row. 
+    // TODO: before reading any matrix data from DRAM, determine which blocks the kernel will 
+    //       read and which are duplicates
+    //       ... wait. col indices is in SRAM. the compute kernel can access that directly!!!
+    uint32_t index_into_dense_matrix = 0;
+    for (uint32_t output_block = 0; output_block < num_output_blocks; output_block++){
+        uint32_t bsr_col_index = column_indices[block];
+        // if not a duplicate, increment index
+        // push index to cb sync
+    }
 
-    // Now, iterate over the blocks in the row
-    // We could either:
-    //    1. NoC the entire col indices array to each core, and then read the blocks indexing with the indptr values
-    //    2. NoC just the col indices for each core's block row, and then read zero indexed
-    // I choose 1. because it's simpler for now!
-    // TODO: wrap this in a for loop over the number of output blocks being processed by this core, 
-    //        accessing/indexing the sparse indexing DSes
     for (uint32_t output_block = 0; output_block < num_output_blocks; output_block++){
         uint32_t output_idx_y = y_coords[output_block]; 
         uint32_t block_row_start = indptr[output_idx_y];
@@ -174,10 +172,7 @@ void kernel_main(){
                 in0_tensor_row_start_tile_id += in0_tensor_stride_h;
             }
             // Read in1 block
-            // We should start however many columns deep the corresponding output block is.
-            // Ah. The terms are confusing.
-            // --- "column_indices" gets us the column indices of the BSR matrix, which are the row indices of the dense matrix
-            // --- "in1_tensor_start_tile_id" will be the top of a column, and bsr_col_index gets us the row in the dense matrix
+            // TODO: check if this bsr_col_index matches the last one, and omit the NoC if so
             uint32_t bsr_col_index = column_indices[block];
             uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
             uint32_t in1_tensor_row_start_tile_id = in1_tensor_start_tile_id + bsr_col_index * in1_block_stride;

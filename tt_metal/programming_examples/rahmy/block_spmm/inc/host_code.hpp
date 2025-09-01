@@ -6,6 +6,7 @@
 
 #include "include_me.hpp"
 #include "tt-metalium/bfloat16.hpp"
+#include "tt-metalium/circular_buffer_types.hpp"
 #include "tt-metalium/host_api.hpp"
 
 using namespace tt;
@@ -202,16 +203,6 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     uint32_t Rt = R / TILE_HEIGHT;
     uint32_t Ct = C / TILE_WIDTH;
 
-
-    // okay i get it: getting the matmul params is easy in the dense case because you need params in terms of tiles, and tiles have 
-    // a fixed size for every possible matrix pair. But for us, we want the matmul params in terms of BSR blocks, which have variable size.
-    // But it's also still tiles. Let's focus on our current test suite (with block size a multiple of tile size). This is still very useful in 
-    // the dense case, and in prototyping the overhead analysis. 
-    // Ohh... OPPORTUNITY: we can max out on Npc, then iterate over Mpc{Rt}.
-    //                      This lets us reuse the SRAM buffers, meaning we can 
-    //                      actually handle more data per core than the dense case!!!
-    //                      we peakin. 
-
     // We admit flexible per_core_M while maintaining rigid per_block_M
     uint32_t per_block_M = Rt;
     uint32_t in0_block_w = Ct;
@@ -228,7 +219,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     uint32_t folded_index = 0;
     for (uint32_t i = 0; i < a.indptr.size() - 1; i++) {
         if (a.indptr[i+1] - a.indptr[i] > 0){
-            folded_bsr_matrix_indices.push_back(nnz_rows);
+            folded_bsr_matrix_indices.push_back(folded_index);
             nnz_rows++;
         }
         folded_index++;
@@ -379,17 +370,32 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     auto cb_column_indices = tt_metal::CreateCircularBuffer(program, all_cores, cb_column_indices_config);
 
     auto indptr_cb_index = CBIndex::c_3; // 3
-    auto cb_indptr = MakeCircularBuffer(program, all_cores, indptr_cb_index, dram_buffer_indptr_size, std::min(indexing_data_single_tile_size, dram_buffer_indptr_size), tt::DataFormat::Int32);
-
+    CircularBufferConfig cb_indptr_config = CircularBufferConfig(dram_buffer_indptr_size, {{indptr_cb_index, tt::DataFormat::UInt32}}).set_page_size(indptr_cb_index, std::min(indexing_data_single_tile_size, dram_buffer_indptr_size));
+    auto cb_indptr = tt_metal::CreateCircularBuffer(program, all_cores, cb_indptr_config);
 
     // now we have some thread-to-thread communication to do per core. 
     // Let this circular buffer be the mediator for that. 
     // Notice its size and page size are small (16 bytes)
-    // TODO: add page size compile time parameter to the three kernels
     auto per_core_sync_CB_index = CBIndex::c_4;
     uint32_t bytes_for_sync =  (per_core_M / per_block_M) * sizeof(uint32_t); 
     uint32_t per_core_sync_CB_size = 2 * bytes_for_sync;
-    auto cb_sync = MakeCircularBuffer(program, all_cores, per_core_sync_CB_index, per_core_sync_CB_size, bytes_for_sync, tt::DataFormat::UInt32);
+    CircularBufferConfig cb_sync_config = CircularBufferConfig(per_core_sync_CB_size, {{per_core_sync_CB_index, tt::DataFormat::UInt32}}).set_page_size(per_core_sync_CB_index, bytes_for_sync);
+    auto cb_sync = tt_metal::CreateCircularBuffer(program, all_cores, cb_sync_config);
+
+
+    if (verbose) {
+        // print the addresses of the CBs
+        log_info(tt::LogVerif, " -- CB Addresses --");
+        log_info(
+            tt::LogVerif,
+            " -- Src0 CB= {} -- Src1 CB= {} -- Out CB={} -- Col Indices CB={} -- Indptr CB={} -- Sync CB={} --",
+            cb_src0_config.globally_allocated_address(),
+            cb_src1_config.globally_allocated_address(),
+            cb_output_config.globally_allocated_address(),
+            cb_column_indices_config.globally_allocated_address(),
+            cb_indptr_config.globally_allocated_address(),
+            cb_sync_config.globally_allocated_address());
+    }
 
      /*
      * Compile time arguments
@@ -442,7 +448,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
         (std::uint32_t)out_subblock_h,
         (std::uint32_t)out_subblock_w,
         (std::uint32_t)out_subblock_num_tiles,
-        (std::uint32_t)B,
+        (std::uint32_t)per_core_M / per_block_M,
         (std::uint32_t)bytes_for_sync, // page size of synchronization CB
     };
 
@@ -525,7 +531,6 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     // out_idx_y = 
     // out_idx_x = current-work-region % per_core_N
 
-    uint32_t nnz_output_blocks_read = 0;
     uint32_t num_empty_rows_so_far = 0;
     for (int work_region = 0; work_region < num_output_work_regions_total; work_region++){
         int core_idx_x = work_region % num_cores_x;
@@ -545,22 +550,19 @@ void bsr_spmm_multicore_reuse_merge_blocks(
             (std::uint32_t)num_out_blocks_per_this_core,
             (std::uint32_t)output_idx_x,
         };
-
+        std::vector<uint32_t> mm_compute_args = {};
+        uint32_t max_row_size = 0;
         for (uint32_t i = 0; i < num_out_blocks_per_this_core; i++){
-            // pushback to compute args the y coord of this block
-            // pushback to compute args the x coord of this block
-            // TODO: figure out what to actually push here.
             mm_reader_args.push_back(folded_bsr_matrix_indices[folded_output_idx_y_start + i]);
 
-            // What is the work distribution?
-            // up to load balancing, it's just a dense matrix with some rows missing.
-            // 
-            // output blocks are still generally "wide", so we're always operating within the same 
-            //  output block columm within a single core
-            // the series of y-coordinates is trying to be Mpc/Mpb input row indices that are contiguous/
-            // With all nonzero rows, this is just contiguous rows
-            // but with any empty rows, this is "skipping" the empty rows
+            uint32_t output_idx_y = mm_reader_args[2 + i];
+            uint32_t block_row_start = a.indptr[output_idx_y];
+            uint32_t block_row_end = a.indptr[output_idx_y + 1];
+            mm_compute_args.push_back(block_row_end - block_row_start);
+            max_row_size = std::max(max_row_size, block_row_end - block_row_start);
         }
+        mm_reader_args.push_back(max_row_size);
+        mm_compute_args.push_back(max_row_size);
 
         std::vector<uint32_t> writer_args = {
             (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
@@ -574,16 +576,15 @@ void bsr_spmm_multicore_reuse_merge_blocks(
             (std::uint32_t)out_subblock_h,                     // out_subblock_h
             (std::uint32_t)(out_subblock_w * out_subblock_h),  // out_subblocks_w * out_subblocks_h
             (std::uint32_t)(per_core_N / out_subblock_w),      // out_num_subblocks_w
-            (std::uint32_t)(per_block_M / out_subblock_h),      // out_num_subblocks_h
+            (std::uint32_t)(per_core_M / out_subblock_h),      // out_num_subblocks_h
 
-            (std::uint32_t)Mt * Nt,  // MtNt... only used in the batch impl...
-            (std::uint32_t)B,        // batch
-            (std::uint32_t)1 // nonzero, tells writer whether it has values to read
+            (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
+            (std::uint32_t)num_out_blocks_per_this_core,        // batch
         };
 
         tt_metal::SetRuntimeArgs(program, reader_id, core, mm_reader_args);
         tt_metal::SetRuntimeArgs(program, writer_id, core, writer_args);
-        nnz_output_blocks_read++;
+        tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, mm_compute_args);
         
         if (verbose && folded_output_idx_y_start == 0 && output_idx_x == 0) {
             a.pretty_print();
@@ -593,6 +594,8 @@ void bsr_spmm_multicore_reuse_merge_blocks(
             for (size_t i = 0; i < num_out_blocks_per_this_core; ++i) {
                 log_info(tt::LogVerif, "reader_arg[{}] (y_coord) = {}", i + 2, mm_reader_args[i+2]);
             }
+            log_info(tt::LogVerif, "reader_arg[{}] (max_row_size) = {}", num_out_blocks_per_this_core + 2, mm_reader_args[num_out_blocks_per_this_core+2]);
+
             log_info(tt::LogVerif, " -- Writer Args --");
             const char* writer_arg_names[] = {
                 "out_buffer_addr",
@@ -606,64 +609,46 @@ void bsr_spmm_multicore_reuse_merge_blocks(
                 "out_subblock_w * out_subblock_h",
                 "out_num_subblocks_w",
                 "out_num_subblocks_h",
-                "MtNt",
-                "batch",
-                "nonzero"
+                "RtNt",
+                "num_out_blocks_per_this_core",
             };
             for (size_t i = 0; i < writer_args.size(); ++i) {
                 log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_args[i]);
             }
+            // TODO: print the runtime compute args
+            // See the reader args above as a hint
             log_info(tt::LogVerif, " -- Compute Args --");
-            const char* compute_arg_names[] = {
-                "in0_block_w",
-                "in0_num_subblocks",
-                "in0_block_num_tiles",
-                "in0_subblock_num_tiles",
-                "in1_num_subblocks",
-                "in1_block_num_tiles",
-                "in1_per_core_w",
-                "nnz_blocks_in_row",
-                "out_subblock_h",
-                "out_subblock_w",
-                "out_subblock_num_tiles",
-                "B"
-            };
+            for (size_t i = 0; i < num_out_blocks_per_this_core; ++i) {
+                log_info(tt::LogVerif, "compute_arg[{}] (row_size) = {}", i, mm_compute_args[i]);
+            }
+            log_info(tt::LogVerif, "compute_arg[{}] (max_row_size) = {}", num_out_blocks_per_this_core, mm_compute_args[num_out_blocks_per_this_core]);
+
         }
-    
     }
 
-    if (verbose){
-        log_info(tt::LogVerif, " -- Runtime Args set --");
-        log_info(
-            tt::LogVerif,
-            " -- nnz output blocks= {}",
-            nnz_output_blocks_read);
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
+    EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
+
+    if (verbose)
+        log_info(tt::LogVerif, " -- All data moved to DRAM --");
+
+    EnqueueProgram(cq, program, false);
+
+    if (verbose)
+        log_info(tt::LogVerif, " -- Program enqueued --");
+
+    // we index into host data by row_index,
+    // and we index into DRAM data by "folded" row index
+    uint32_t nonzero_row_index = 0;
+    for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
+        if (a.indptr[row_index+1] - a.indptr[row_index] == 0) 
+            continue;
+        BufferRegion DRAM_row(nonzero_row_index * dram_buffer_dst_row_size, dram_buffer_dst_row_size);
+        EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, true);
+        nonzero_row_index++;
     }
-
-
-    // EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
-    // EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
-    // EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
-    // EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
-
-    // if (verbose)
-    //     log_info(tt::LogVerif, " -- All data moved to DRAM --");
-
-    // EnqueueProgram(cq, program, false);
-
-    // if (verbose)
-    //     log_info(tt::LogVerif, " -- Program enqueued --");
-
-    // // we index into host data by row_index,
-    // // and we index into DRAM data by "folded" row index
-    // uint32_t nonzero_row_index = 0;
-    // for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
-    //     if (a.indptr[row_index+1] - a.indptr[row_index] == 0) 
-    //         continue;
-    //     BufferRegion DRAM_row(nonzero_row_index * dram_buffer_dst_row_size, dram_buffer_dst_row_size);
-    //     EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, true);
-    //     nonzero_row_index++;
-    // }
 
     Finish(cq);
 }

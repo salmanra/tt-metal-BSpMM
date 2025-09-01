@@ -55,6 +55,12 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_empty_rows();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_dense_2_blocks_per_core();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_diag();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_top_row_many_nonsquare();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_many_nonsquare();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_square();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_square_one_block();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_square_one_block_v2();
+    
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
@@ -78,8 +84,8 @@ namespace bsr_test_suite {
         test_2_blocks_diag, // 16
         test_off_diag_first_row, // 17
         test_diag_first_row, // 18
-        test_2_blocks_fill_col, // 19
-        test_2_blocks_fill_row, // 20
+        test_2_blocks_fill_row, // 19
+        test_2_blocks_fill_col, // 20
         test_4_blocks, // 21
         test_diag_times_wide, // 22
         test_simplified_times_wide, // 23
@@ -103,6 +109,11 @@ namespace bsr_test_suite {
         test_big_dense, // 41
         test_dense_2_blocks_per_core, // 42
         test_huge_diag, // 43
+        test_top_row_many_nonsquare, // 44
+        test_bottom_row_many_nonsquare, // 45
+        test_bottom_row_square, // 46 FAIL -- simplest test that fails. figure it out alexander
+        test_bottom_row_square_one_block, // 47
+        test_bottom_row_square_one_block_v2, // 48
     };
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_diag() {
 
@@ -660,11 +671,100 @@ namespace bsr_test_suite {
 
         dense_matrix<float> dense(K, N, RAND);
 
-        
-
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_simplified_tall_times_wide_v2");
+    }
+
+    
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_square() {
+        // matmul params setup
+        uint32_t M = 64;
+        uint32_t N = 64;
+        uint32_t K = 64;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t nblocks = 2;
+        uint32_t block_matrix_height = M / R;
+
+        std::vector<float> data(R*C*nblocks);
+        for (int k = 0; k < nblocks; k++){
+            for (int i = 0; i < R*C; i++){
+                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+            }
+        }
+        std::vector<int> indptr = {0, 0, 2};
+        std::vector<int> indices = {0, 1};
+
+        // all nz on one row
+        bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
+
+        dense_matrix<float> dense(K, N, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_bottom_row_square");
+    }
+
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_square_one_block() {
+        // matmul params setup
+        uint32_t M = 64;
+        uint32_t N = 64;
+        uint32_t K = 64;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t nblocks = 1;
+        uint32_t block_matrix_height = M / R;
+
+        std::vector<float> data(R*C*nblocks);
+        for (int k = 0; k < nblocks; k++){
+            for (int i = 0; i < R*C; i++){
+                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+            }
+        }
+        std::vector<int> indptr = {0, 0, 1};
+        std::vector<int> indices = {0};
+
+        // all nz on one row
+        bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
+
+        dense_matrix<float> dense(K, N, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_bottom_row_square_one_block");
+    }
+
+        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_square_one_block_v2() {
+        // matmul params setup
+        uint32_t M = 64;
+        uint32_t N = 64;
+        uint32_t K = 64;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t nblocks = 1;
+        uint32_t block_matrix_height = M / R;
+
+        std::vector<float> data(R*C*nblocks);
+        for (int k = 0; k < nblocks; k++){
+            for (int i = 0; i < R*C; i++){
+                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+            }
+        }
+        std::vector<int> indptr = {0, 0, 1};
+        std::vector<int> indices = {1};
+
+        // all nz on one row
+        bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
+
+        dense_matrix<float> dense(K, N, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_bottom_row_square_one_block_v2");
     }
 
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_block_times_wide() {
@@ -1038,6 +1138,56 @@ namespace bsr_test_suite {
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_many_nonsquare");
+    }
+
+        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_top_row_many_nonsquare() {
+        // matmul params setup
+        uint32_t M = 64;
+        uint32_t N = 32;
+        uint32_t K = 128;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 64;
+        uint32_t nblocks = 2;
+        uint32_t block_matrix_height = M / R;
+
+        // all nz on one row
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_top_row_many_nonsquare");
+    }
+
+        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_many_nonsquare() {
+        // matmul params setup
+        uint32_t M = 64;
+        uint32_t N = 32;
+        uint32_t K = 128;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 64;
+        uint32_t nblocks = 2;
+        uint32_t block_matrix_height = M / R;
+
+        // all nz on one row
+        std::vector<int> indptr = {0, 0, 2};
+        std::vector<int> indices = {0, 1};
+        std::vector<float> data(R*C*nblocks);
+        for (int k = 0; k < nblocks; k++){
+            for (int i = 0; i < R*C; i++){
+                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+            }
+        }
+
+        bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
+
+        dense_matrix<float> dense(K, N, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_bottom_row_many_nonsquare");
     }
 
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_nonsquare_stacked() {

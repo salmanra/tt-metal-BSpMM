@@ -6,6 +6,7 @@
 #include <cstring>
 #include "dataflow_api.h"
 #include "debug/dprint.h"  // required in all kernels using DPRINT
+// #include "tt-metalium/bfloat16.hpp"
 
 
 
@@ -82,6 +83,19 @@ void kernel_main() {
                                             // have to use noc_async_write_barrier() at
                                             // least once at the end of data movement kernel
                                             // to make sure all writes are done.
+                // TODO: 
+                // DPRINT the entire tile from the CB.... 
+                // we need to make a char buffer and just start pushing...
+                // uint32_t* CB_values = (uint32_t*)l1_read_addr;
+                // for (size_t idx = 0; idx < single_tile_size_bytes / 4; idx+=32){
+                //     for (size_t inner = 0; inner < 32; inner++){
+                //         float top_bits = (float)(CB_values[idx + inner] >> 16);
+                //         float bottom_bits = (float)(CB_values[idx + inner] & 0xFFFF);
+                //         DPRINT_DATA1(DPRINT << top_bits << ' ' << bottom_bits << ' ');
+                //     }
+                //     DPRINT_DATA1(DPRINT << ENDL());
+                // }
+
                 cb_pop_front(cb_id_out0, out_subblock_tile_count);
                 DPRINT_DATA1(DPRINT << "Writer popped a subblock!" << ENDL());
                 out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;

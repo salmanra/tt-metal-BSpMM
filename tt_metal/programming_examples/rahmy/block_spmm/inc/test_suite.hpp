@@ -71,7 +71,7 @@ namespace bsr_test_suite {
         test_2_blocks_col_simplified, // 3
         test_2_blocks_row_simplified, // 4
         test_2_blocks_nonsquare, // 5
-        test_many_nonsquare, // 6
+        test_many_nonsquare, // 6 FAIL Deadlock
         test_nonsquare_diag_blocks, // 7
         test_nonsquare_tall, // 8
         test_2_blocks_nonsquare_tall, // 9
@@ -172,7 +172,7 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
             }
         }
         std::vector<int> indptr = {0, 4, 4, 8, 8};
@@ -357,7 +357,7 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
             }
         }
         std::vector<int> indptr = {0, 2, 4, 6, 8};
@@ -586,7 +586,7 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
             }
         }
         std::vector<int> indptr = {0, 1};
@@ -660,7 +660,7 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
             }
         }
         std::vector<int> indptr = {0, 0, 1};
@@ -680,7 +680,7 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_square() {
         // matmul params setup
         uint32_t M = 64;
-        uint32_t N = 64;
+        uint32_t N = 32;
         uint32_t K = 64;
         // block params setup
         uint32_t R = 32;
@@ -691,7 +691,7 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
             }
         }
         std::vector<int> indptr = {0, 0, 2};
@@ -699,6 +699,15 @@ namespace bsr_test_suite {
 
         // all nz on one row
         bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
+        for (int i = 0; i < data.size(); i+=32) {
+            for (int j = 0; j < 32; j++){
+                std::cout << data[i + j] << ' ';
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+        std::cout << std::endl;
+        std::cout << std::endl;
 
         dense_matrix<float> dense(K, N, RAND);
 
@@ -721,7 +730,7 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
             }
         }
         std::vector<int> indptr = {0, 0, 1};
@@ -751,7 +760,7 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
             }
         }
         std::vector<int> indptr = {0, 0, 1};
@@ -869,7 +878,7 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
             }
         }
         std::vector<int> indptr = {0, 1};
@@ -899,7 +908,7 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
             }
         }
         std::vector<int> indptr = {0, 1};
@@ -1052,8 +1061,8 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-                // data[k*nblocks + i] = i;
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                // data[k*R*C + i] = i;
             }
         }
         std::vector<int> indptr = {0, 1};
@@ -1083,8 +1092,8 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-                // data[k*nblocks + i] = i;
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                // data[k*R*C + i] = i;
             }
         }
         std::vector<int> indptr = {0, 1};
@@ -1177,7 +1186,7 @@ namespace bsr_test_suite {
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
-                data[k*nblocks + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
             }
         }
 

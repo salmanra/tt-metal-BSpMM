@@ -65,6 +65,16 @@ TestResult run_test(
     tilize(a.data, R, C);
     tilize(b.data, K, N);
 
+    // for (int i = 0; i < a.data.size(); i+=32) {
+    //     for (int j = 0; j < 32; j++){
+    //         std::cout << a.data[i + j] << ' ';
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // std::cout << std::endl;
+    // std::cout << std::endl;
+    // std::cout << std::endl;
+
     // run bsr_spmm_multicore_reuse
     host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device, verbose);
 

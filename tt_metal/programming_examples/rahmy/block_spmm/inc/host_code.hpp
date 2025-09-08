@@ -564,6 +564,9 @@ void bsr_spmm_multicore_reuse_merge_blocks(
         mm_reader_args.push_back(max_row_size);
         mm_compute_args.push_back(max_row_size);
 
+        // major problems with current arg setup:
+        // 1. out_num_subblocks_h should relate to Mpb, not Mpc
+        // 2. ... that's it?
         std::vector<uint32_t> writer_args = {
             (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
             (std::uint32_t)((folded_output_idx_y_start) * Rt * Nt) + output_idx_x * per_core_N,  // out_tensor_start_tile_id

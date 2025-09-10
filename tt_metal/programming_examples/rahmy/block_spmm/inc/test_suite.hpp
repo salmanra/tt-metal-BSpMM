@@ -71,8 +71,8 @@ namespace bsr_test_suite {
         test_2_blocks_col_simplified, // 3
         test_2_blocks_row_simplified, // 4
         test_2_blocks_nonsquare, // 5
-        test_many_nonsquare, // 6 FAIL Deadlock
-        test_nonsquare_diag_blocks, // 7
+        test_many_nonsquare, // 6 FAIL 
+        test_nonsquare_diag_blocks, // 7 FAIL
         test_nonsquare_tall, // 8
         test_2_blocks_nonsquare_tall, // 9
         test_nonsquare, // 10
@@ -81,7 +81,7 @@ namespace bsr_test_suite {
         test_nonsquare_diag_first_row, // 13
         test_nonsquare_off_diag_first_row, // 14
         test_simplified_off_diag_first_row, // 15
-        test_2_blocks_diag, // 16
+        test_2_blocks_diag, // 16 FAIL Deadlock
         test_off_diag_first_row, // 17
         test_diag_first_row, // 18
         test_2_blocks_fill_row, // 19
@@ -111,7 +111,7 @@ namespace bsr_test_suite {
         test_huge_diag, // 43
         test_top_row_many_nonsquare, // 44
         test_bottom_row_many_nonsquare, // 45
-        test_bottom_row_square, // 46 FAIL -- simplest test that fails. figure it out alexander
+        test_bottom_row_square, // 46
         test_bottom_row_square_one_block, // 47
         test_bottom_row_square_one_block_v2, // 48
     };
@@ -699,15 +699,15 @@ namespace bsr_test_suite {
 
         // all nz on one row
         bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
-        for (int i = 0; i < data.size(); i+=32) {
-            for (int j = 0; j < 32; j++){
-                std::cout << data[i + j] << ' ';
-            }
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
-        std::cout << std::endl;
-        std::cout << std::endl;
+        // for (int i = 0; i < data.size(); i+=32) {
+        //     for (int j = 0; j < 32; j++){
+        //         std::cout << data[i + j] << ' ';
+        //     }
+        //     std::cout << std::endl;
+        // }
+        // std::cout << std::endl;
+        // std::cout << std::endl;
+        // std::cout << std::endl;
 
         dense_matrix<float> dense(K, N, RAND);
 

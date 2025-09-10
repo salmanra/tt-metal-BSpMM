@@ -45,12 +45,12 @@ void kernel_main(){
     uint32_t y_coords[num_output_blocks];
     for (uint32_t i = 0; i < num_output_blocks; i++){
         y_coords[i] = get_arg_val<uint32_t>(2 + i);
-        // DPRINT_DATA0(DPRINT << "y_coord i: " << y_coords[i] << ENDL());
+        // //DPRINT_DATA0(DPRINT << "y_coord i: " << y_coords[i] << ENDL());
 
     }
     uint32_t max_row_size = get_arg_val<uint32_t>(2 + num_output_blocks);
 
-    DPRINT_DATA0(DPRINT << "Runtime args obtained. num output blocks to compute: " << num_output_blocks << ENDL());
+    //DPRINT_DATA0(DPRINT << "Runtime args obtained. num output blocks to compute: " << num_output_blocks << ENDL());
 
 
     constexpr bool in0_is_dram = get_compile_time_arg_val(0) == 1;
@@ -234,34 +234,34 @@ void kernel_main(){
 
             noc_async_read_barrier();
 
-            DPRINT_DATA0(DPRINT << "block " << output_idx_y << ", " << column_indices[block_row_start + reduction_block] << " read" << ENDL());
+            //DPRINT_DATA0(DPRINT << "block " << output_idx_y << ", " << column_indices[block_row_start + reduction_block] << " read" << ENDL());
 
-            uint32_t* CB_values = (uint32_t*)l1_write_addr_in0;
-            for (size_t idx = 0; idx < in0_single_tile_size_bytes / 4; idx+=32){
-                for (size_t inner = 0; inner < 32; inner++){
-                    float top_bits = (float)(CB_values[idx + inner] >> 16);
-                    float bottom_bits = (float)(CB_values[idx + inner] & 0xFFFF);
-                    DPRINT_DATA0(DPRINT << top_bits << ' ' << bottom_bits << ' ');
-                }
-                DPRINT_DATA0(DPRINT << ENDL());
-            }
-            DPRINT_DATA0(DPRINT << ENDL());
-            DPRINT_DATA0(DPRINT << ENDL());
-            DPRINT_DATA0(DPRINT << ENDL());
-            uint32_t* dense_CB_values = (uint32_t*)l1_write_addr_in1;
-            for (size_t idx = 0; idx < in0_single_tile_size_bytes / 4; idx+=32){
-                for (size_t inner = 0; inner < 32; inner++){
-                    float top_bits = (float)(dense_CB_values[idx + inner] >> 16);
-                    float bottom_bits = (float)(dense_CB_values[idx + inner] & 0xFFFF);
-                    DPRINT_DATA0(DPRINT << top_bits << ' ' << bottom_bits << ' ');
-                }
-                DPRINT_DATA0(DPRINT << ENDL());
-            }
+            // uint32_t* CB_values = (uint32_t*)l1_write_addr_in0;
+            // for (size_t idx = 0; idx < in0_single_tile_size_bytes / 4; idx+=32){
+            //     for (size_t inner = 0; inner < 32; inner++){
+            //         float top_bits = (float)(CB_values[idx + inner] >> 16);
+            //         float bottom_bits = (float)(CB_values[idx + inner] & 0xFFFF);
+            //         //DPRINT_DATA0(DPRINT << top_bits << ' ' << bottom_bits << ' ');
+            //     }
+            //     //DPRINT_DATA0(DPRINT << ENDL());
+            // }
+            // //DPRINT_DATA0(DPRINT << ENDL());
+            // //DPRINT_DATA0(DPRINT << ENDL());
+            // //DPRINT_DATA0(DPRINT << ENDL());
+            // uint32_t* dense_CB_values = (uint32_t*)l1_write_addr_in1;
+            // for (size_t idx = 0; idx < in0_single_tile_size_bytes / 4; idx+=32){
+            //     for (size_t inner = 0; inner < 32; inner++){
+            //         float top_bits = (float)(dense_CB_values[idx + inner] >> 16);
+            //         float bottom_bits = (float)(dense_CB_values[idx + inner] & 0xFFFF);
+            //         //DPRINT_DATA0(DPRINT << top_bits << ' ' << bottom_bits << ' ');
+            //     }
+            //     //DPRINT_DATA0(DPRINT << ENDL());
+            // }
             cb_push_back(cb_id_in0, in0_block_num_tiles);
             cb_push_back(cb_id_in1, in1_block_num_tiles);
         }
     }
 
-    DPRINT_DATA0(DPRINT << "Reader kernel complete!" << ENDL());
+    //DPRINT_DATA0(DPRINT << "Reader kernel complete!" << ENDL());
 
 }

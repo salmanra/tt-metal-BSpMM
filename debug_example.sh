@@ -31,4 +31,4 @@ fi
 example_name="$1"
 executable_name="./build/programming_examples/rahmy/$example_name"
 
-./$executable_name 4 0
+./$executable_name 6 0

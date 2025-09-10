@@ -74,24 +74,24 @@ void MAIN {
     for (uint32_t i = 0; i < num_output_blocks; i++){
         row_sizes[i] = get_arg_val<uint32_t>(i);
         max_row_size = std::max(max_row_size, row_sizes[i]);
-        // DPRINT_MATH(DPRINT << "Row" << i << " size:" << row_sizes[i] << ENDL());
+        //DPRINT_MATH(DPRINT << "Row" << i << " size:" << row_sizes[i] << ENDL());
     }
     // uint32_t max_row_size = get_arg_val<uint32_t>(num_output_blocks);
     uint32_t num_blocks = max_row_size;
 
-    // DPRINT_MATH(DPRINT << "Math core waiting on a max of  " << num_blocks << " blocks." << ENDL());
+    //DPRINT_MATH(DPRINT << "Math core waiting on a max of " << num_blocks << " blocks." << ENDL());
     // output CB is MpcxNpc, which means we aren't batching. 
     // The outermost loop now has a different interpretation. 
+    bool enable_reload = false;
+    bool spill = num_blocks > 1;
     for (uint32_t reduction_block = 0; reduction_block < max_row_size; reduction_block++){
-        bool spill = num_blocks > 1;
         uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;
-        bool enable_reload = false;
         for (uint32_t output_block = 0; output_block < num_output_blocks; output_block++){
             if (reduction_block > row_sizes[output_block]){
                 // this row is dropped
                 // 1. index into next output block 
                 // 2. continue
-                DPRINT_MATH(DPRINT << "Math core SKIPPING" << ENDL());
+                //DPRINT_MATH(DPRINT << "Math core SKIPPING" << ENDL());
 
                 // QUESTION: What breaks if there's no special indexing into output blocks?
                 //             Test 6. Test 6 breaks. 
@@ -101,9 +101,9 @@ void MAIN {
 
             // maybe this region does a single block of matmul ...
             cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
-            // DPRINT_MATH(DPRINT << "Math core done waiting 0" << ENDL());
+            //DPRINT_MATH(DPRINT << "Math core done waiting 0" << ENDL());
             cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
-            // DPRINT_MATH(DPRINT << "Math core done waiting 0 and 1" << ENDL());
+            //DPRINT_MATH(DPRINT << "Math core done waiting 0 and 1" << ENDL());
 
 
             int in0_index_subblock_offset = 0;
@@ -114,7 +114,7 @@ void MAIN {
 
                     if (enable_reload) {
                         copy_tile_to_dst_init_short(tt::CBIndex::c_24);
-                        DPRINT_MATH(DPRINT << "Reload begins: " << output_block << " " << reduction_block << ENDL());
+                        //DPRINT_MATH(DPRINT << "Reload begins: " << output_block << " " << reduction_block << ENDL());
                         // The last iter (1, 1) fails here, it deadlocks here. 
                         cb_wait_front(tt::CBIndex::c_24, out_subblock_num_tiles);
                         for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
@@ -122,7 +122,7 @@ void MAIN {
                         }
                         cb_pop_front(tt::CBIndex::c_24, out_subblock_num_tiles);
                         mm_init_short();
-                        DPRINT_MATH(DPRINT << "Reload done" << ENDL());
+                        //DPRINT_MATH(DPRINT << "Reload done" << ENDL());
                     }
 
                     // Compute output sub-block from in0_subblock x in1_subblock
@@ -156,9 +156,9 @@ void MAIN {
                             pack_tile(i, tt::CBIndex::c_16);
                         }
                         cb_push_back(tt::CBIndex::c_16, out_subblock_num_tiles);
-                        DPRINT_MATH(DPRINT << "Last out and it's done!" << ENDL());
+                        //DPRINT_MATH(DPRINT << "Last out and it's done!" << ENDL());
                     } else {
-                        DPRINT_MATH(DPRINT << "NOT last out, ob={" << output_block << "} rb={" << reduction_block << '}' << ENDL());
+                        //DPRINT_MATH(DPRINT << "NOT last out, ob={" << output_block << "} rb={" << reduction_block << '}' << ENDL());
                         // Wait for tiles in output buffer to be written out since interm and output share memory
                         if (reduction_block == 0) {
                             cb_reserve_back(tt::CBIndex::c_16, out_num_tiles_to_wait);
@@ -181,13 +181,18 @@ void MAIN {
             if (spill) {
                 enable_reload = true;
             }
+            if (last_out){
+                // now, last_out refers to the end of a row, not to the end of the program
+                // so when we move on, we need to disable reloading
+                enable_reload = false;
+            }
 
             cb_pop_front(tt::CBIndex::c_0, in0_block_num_tiles);
             cb_pop_front(tt::CBIndex::c_1, in1_block_num_tiles);
-            DPRINT_MATH(DPRINT << "Math core popped" << ENDL());
+            //DPRINT_MATH(DPRINT << "Math core popped" << ENDL());
         }
         // ... and this region indexes into the next output block.
-        DPRINT_MATH(DPRINT << "NEXT BLOCKS PLEASE" << ENDL());
+        //DPRINT_MATH(DPRINT << "NEXT BLOCKS PLEASE" << ENDL());
     }
     DPRINT_MATH(DPRINT << "Math core received " << num_blocks << " blocks." << ENDL());
 }

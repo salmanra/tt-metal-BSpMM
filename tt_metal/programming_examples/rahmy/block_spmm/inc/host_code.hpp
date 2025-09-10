@@ -579,7 +579,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
             (std::uint32_t)out_subblock_h,                     // out_subblock_h
             (std::uint32_t)(out_subblock_w * out_subblock_h),  // out_subblocks_w * out_subblocks_h
             (std::uint32_t)(per_core_N / out_subblock_w),      // out_num_subblocks_w
-            (std::uint32_t)(per_core_M / out_subblock_h),      // out_num_subblocks_h
+            (std::uint32_t)(per_block_M / out_subblock_h),      // out_num_subblocks_h
 
             (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
             (std::uint32_t)num_out_blocks_per_this_core,        // batch

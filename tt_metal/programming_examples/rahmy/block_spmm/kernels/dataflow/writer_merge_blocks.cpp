@@ -50,7 +50,7 @@ void kernel_main() {
 
     // cb_reserve_back(cb_id_sync, 1);
     // l1_read_addr_sync = get_read_ptr(cb_id_sync);
-    // DPRINT_DATA1(DPRINT << "Writer CB Sync Address:  " << l1_read_addr_sync << ENDL());
+    // //DPRINT_DATA1(DPRINT << "Writer CB Sync Address:  " << l1_read_addr_sync << ENDL());
 
     bool one_time_profile = true;
     for (uint32_t b = 0; b < num_output_blocks; b++) {
@@ -91,9 +91,9 @@ void kernel_main() {
                 //     for (size_t inner = 0; inner < 32; inner++){
                 //         float top_bits = (float)(CB_values[idx + inner] >> 16);
                 //         float bottom_bits = (float)(CB_values[idx + inner] & 0xFFFF);
-                //         DPRINT_DATA1(DPRINT << top_bits << ' ' << bottom_bits << ' ');
+                //         //DPRINT_DATA1(DPRINT << top_bits << ' ' << bottom_bits << ' ');
                 //     }
-                //     DPRINT_DATA1(DPRINT << ENDL());
+                //     //DPRINT_DATA1(DPRINT << ENDL());
                 // }
 
                 cb_pop_front(cb_id_out0, out_subblock_tile_count);

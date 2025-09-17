@@ -18,21 +18,27 @@ csv_dir_v1 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_na
 csv_data_dirs = [csv_dir_v3, csv_dir_v2, csv_dir_v1]
 
 test_cases = [        
-        "profile_case_sparse_single_block_R32_C32.csv",
-        "profile_case_sparse_single_block_R64_C64.csv",
-        "profile_case_sparse_single_block_R128_C128.csv",
-        "profile_case_sparse_diagonal_R32_C32.csv", 
-        "profile_case_sparse_diagonal_R64_C64.csv", 
-        "profile_case_sparse_diagonal_R128_C128.csv",
-        "profile_case_sparse_fill_column_R32_C32.csv", 
-        "profile_case_sparse_fill_column_R64_C64.csv", 
-        "profile_case_sparse_fill_column_R128_C128.csv",
-        "profile_case_sparse_fill_row_R32_C32.csv", 
-        "profile_case_sparse_fill_row_R64_C64.csv", 
-        "profile_case_sparse_fill_row_R128_C128.csv",
-        "profile_case_sparse_fill_random_R32_C32.csv",
-        "profile_case_sparse_fill_random_R64_C64.csv", 
+        # "profile_case_sparse_single_block_R32_C32.csv",
+        # "profile_case_sparse_single_block_R64_C64.csv",
+        # "profile_case_sparse_single_block_R128_C128.csv",
+        f"profile_case_sparse_diagonal_R32_C32.csv\n(NNZ Blocks = 32)", 
+        f"profile_case_sparse_diagonal_R64_C64.csv\n(NNZ Blocks = 16)", 
+        f"profile_case_sparse_diagonal_R128_C128.csv\n(NNZ Blocks = 8)",
+        f"profile_case_sparse_fill_column_R32_C32.csv\n(NNZ Blocks = 32)", 
+        f"profile_case_sparse_fill_column_R64_C64.csv\n(NNZ Blocks = 16)", 
+        f"profile_case_sparse_fill_column_R128_C128.csv\n(NNZ Blocks = 8)",
+        f"profile_case_sparse_fill_row_R32_C32.csv\n(NNZ Blocks = 32)", 
+        f"profile_case_sparse_fill_row_R64_C64.csv\n(NNZ Blocks = 16)", 
+        f"profile_case_sparse_fill_row_R128_C128.csv\n(NNZ Blocks = 8)",
+        f"profile_case_sparse_fill_random_R32_C32.csv\n(NNZ Blocks = 32)",
+        f"profile_case_sparse_fill_random_R64_C64.csv\n(NNZ Blocks = 16)", 
     ]
+
+test_case_files = [name.split(".csv")[0] + ".csv" for name in test_cases]
+
+test_cases_short = [name.replace("profile_case_sparse_", "") for name in test_cases]
+test_cases_short = [name.replace(".csv", "") for name in test_cases_short]
+test_cases_short = [name.replace("fill_", "") for name in test_cases_short]
 
 # for each host program
 #   make dict of {csv file name, dict} pairs (empty)
@@ -52,7 +58,7 @@ data_dicts = [v3_data, v2_data, v1_data]
 for i, csv_data_dir in enumerate(csv_data_dirs):
     # csv_file_names = sorted(os.listdir(csv_data_dir))
     # csv_file_names = os.listdir(csv_data_dir)
-    csv_files = [os.path.join(csv_data_dir, f) for f in test_cases]
+    csv_files = [os.path.join(csv_data_dir, f) for f in test_case_files]
     for j, csv_file in enumerate(csv_files):
         df = pd.read_csv(csv_file)
         # print(f'We are in the {j}th csv file of the {i}th host')
@@ -70,7 +76,7 @@ for i, csv_data_dir in enumerate(csv_data_dirs):
         # total_ns = df.get("total_ns")["Program Loop"]
         # zones_data["Program Loop total ns"] = total_ns
 
-        data_dicts[i][test_cases[j]] = zones_data
+        data_dicts[i][test_cases_short[j]] = zones_data
 
 # pprint.pp(data_dicts)
 with open(json_output_dir + "data_dicts.json", "w") as f:
@@ -105,17 +111,14 @@ for i in range(n_dicts):
            width=bar_width, 
            color=group_colors[i],
            label=f'SpMM V{3-i}')
-    
+
     mask_nan = np.isnan(bar_values[i])
-    if mask_nan.sum() == 0:
-        continue
-    missing_bars = ax.bar(x[mask_nan] + i * bar_width,
-                          np.full(mask_nan.sum(), max_val),
-                          width=bar_width,
-                          color=group_colors[i],
-                          hatch="//",
-                          alpha=0.2,
-                          label=f'SpMM V{3-i} Fail')
+    if mask_nan.sum() > 0:
+        # Plot a red X at the center of where the bar would be, but center vertically (y axis)
+        for idx in np.where(mask_nan)[0]:
+            xpos = x[idx] + i * bar_width + bar_width / 2
+            ypos = max_val / 5
+            ax.plot(xpos, ypos, marker='x', color='red', markersize=12, markeredgewidth=3, label=None if i != 0 or idx != np.where(mask_nan)[0][0] else 'Missing')
 
 ax.set_xlabel('Test Case')
 ax.set_ylabel('Execution Time in Nanoseconds (10 iterations)')
@@ -127,7 +130,8 @@ box = ax.get_position()
 ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
 
 # Put a legend to the right of the current axis
-ax.legend(loc='center right', bbox_to_anchor=(-0.1, 0.5))
+# ax.legend(loc='center right', bbox_to_anchor=(-0.1, 0.5))
+ax.legend()
 
 plt.tight_layout()
 plt.show()

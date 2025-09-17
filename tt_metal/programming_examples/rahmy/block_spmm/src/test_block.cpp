@@ -1,4 +1,5 @@
 
+#include <cstdio>
 #include <string>
 #include "../inc/include_me.hpp"
 #include "../inc/test_suite.hpp"
@@ -11,6 +12,23 @@ using namespace tt::tt_metal;
 
 using namespace bsr_test_suite;
 using namespace bsr_host_code;
+
+// Print to the *original* console, regardless of where stdout is redirected
+void console_printf(const char* fmt, ...) {
+    static int console_fd = -1;
+    if (console_fd == -1) {
+        // If not initialized, we fail-safe to /dev/tty (works when a TTY is present),
+        // but you could also inject the saved fd via a setter if you prefer.
+        console_fd = ::open("/dev/tty", O_WRONLY | O_CLOEXEC);
+        // If /dev/tty isn't available (e.g. no controlling terminal), this will be -1.
+    }
+    if (console_fd == -1) return; // quietly drop if no console is available
+
+    va_list ap;
+    va_start(ap, fmt);
+    ::vdprintf(console_fd, fmt, ap);
+    va_end(ap);
+}
 
 struct TestResult {
     std::string test_name;
@@ -67,13 +85,13 @@ TestResult run_test(
 
     // for (int i = 0; i < a.data.size(); i+=32) {
     //     for (int j = 0; j < 32; j++){
-    //         std::cout << a.data[i + j] << ' ';
+    //         console_printf(a.data[i + j] << ' ';
     //     }
-    //     std::cout << std::endl;
+    //     console_printf(std::endl;
     // }
-    // std::cout << std::endl;
-    // std::cout << std::endl;
-    // std::cout << std::endl;
+    // console_printf(std::endl;
+    // console_printf(std::endl;
+    // console_printf(std::endl;
 
     // run bsr_spmm_multicore_reuse
     host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device, verbose);
@@ -152,11 +170,13 @@ void add_and_run_test(
 }
 
 bool print_and_assess_results(std::vector<TestResult> &test_results, std::string& host_code_function_name){
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Test results ----------------------------------------------------------------" << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Host code function: " << host_code_function_name << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    console_printf("---------------------------------------------------------------------------------\n");
+    console_printf("--- Test results ----------------------------------------------------------------\n");
+    console_printf("---------------------------------------------------------------------------------\n");
+    console_printf("--- Host code function: ");
+    console_printf(host_code_function_name.c_str());
+    console_printf("\n");
+    console_printf("---------------------------------------------------------------------------------\n");
 
 
     // assume there are <1000 tests.
@@ -181,15 +201,27 @@ bool print_and_assess_results(std::vector<TestResult> &test_results, std::string
         sprintf(buf, "w/ PCC=%.2f", p.pearson);
         result += std::string(buf);
         result += p.pearson > 0.99 ? " ✅ ": " ❌ ";
-        std::cout << "Test #" << count << ": " << spacing << result << " " << count << ' ' << spacing << p.test_name << std::endl;
+        // console_printf("Test #" << count << ": " << spacing << result << " " << count << ' ' << spacing << p.test_name << std::endl;
+        console_printf("Test #");
+        console_printf(std::to_string(count).c_str());
+        console_printf(": ");
+        console_printf(spacing.c_str());
+        console_printf(result.c_str());
+        console_printf(" ");
+        console_printf(std::to_string(count).c_str());
+        console_printf(" ");
+        console_printf(spacing.c_str());
+        console_printf(p.test_name.c_str());
+        console_printf("\n");
         count++;
     }
 
     std::string result = all_pass ? "✅✅✅ PASS ✅✅✅" : "❌❌❌ FAIL ❌❌❌";
 
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << result << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
+    console_printf("---------------------------------------------------------------------------------\n");
+    console_printf(result.c_str());
+    console_printf("\n");
+    console_printf("---------------------------------------------------------------------------------\n");
 
 
     return all_pass;
@@ -202,30 +234,76 @@ void test_suite(uint32_t host_code_function_index = 0){
     3. iter over vector and pretty print passes and fails to the console
     */
 
-    
     auto [host_function_ptr, host_function_name] = HostCodeRegistry[host_code_function_index];
-    std::vector<TestResult> test_results;
     size_t num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
+    // 1. Print Header
+    // 
+    console_printf("---------------------------------------------------------------------------------\n");
+    console_printf("--- Test results ----------------------------------------------------------------\n");
+    console_printf("---------------------------------------------------------------------------------\n");
+    console_printf("--- Host code function: ");
+    console_printf(host_function_name.c_str());
+    console_printf("\n");
+    console_printf("---------------------------------------------------------------------------------\n");
+    console_printf("Testing ");
+    console_printf(std::to_string(num_tests).c_str());
+    console_printf(" tests\n");
+    
+    std::vector<TestResult> test_results;
+    std::string spacing = "  ";
+    char buf[12];
+    bool all_pass = true;
+    uint32_t count_pass = 0;
     for (size_t i = 0; i < num_tests; i++) {
+        if (i >= 10 && i < 100)
+            spacing = " ";
+        if (i >= 100)
+            spacing = "";
         add_and_run_test(host_function_ptr, TestRegistry[i], test_results);
+        auto res = test_results[i];
+        bool pass = res.pearson >= 0.99;
+        count_pass += pass;
+        if (!pass){
+            all_pass = false;
+        }
+        std::string result = pass ? "✅ PASS " : "❌ FAIL ";
+        
+        sprintf(buf, "w/ PCC=%.2f", res.pearson);
+        result += std::string(buf);
+        result += res.pearson > 0.99 ? " ✅ ": " ❌ ";
+        console_printf("Test #");
+        console_printf(std::to_string(i).c_str());
+        console_printf(": ");
+        console_printf(spacing.c_str());
+        console_printf(result.c_str());
+        console_printf(" ");
+        console_printf(std::to_string(i).c_str());
+        console_printf(" ");
+        console_printf(spacing.c_str());
+        console_printf(res.test_name.c_str());
+        console_printf("\n");
     }
-    bool pass = print_and_assess_results(test_results, host_function_name);
+    std::string result = all_pass ? "✅✅✅ PASS ✅✅✅" : "❌❌❌ FAIL ❌❌❌";
+    std::string count_result = std::to_string(count_pass) + "/" + std::to_string(num_tests) + " tests passed!\n";
+    console_printf("---------------------------------------------------------------------------------\n");
+    console_printf(result.c_str());
+    console_printf("\n");
+    console_printf(count_result.c_str());
+    console_printf("---------------------------------------------------------------------------------\n");
 
-    /*
-    For later, 
-    can we add tests at runtime, ie not having to rebuild this function each time we add a test?
-    */
 }
 
 void run_verbose_test(int host_code_num, int test_num){
     auto [a, b, test_name] = TestRegistry[test_num]();
     TestResult res = run_test(HostCodeRegistry[host_code_num].first, a, b, test_name, true, true);
 
-    std::cout << "--------------------------------------------------------" << std::endl;
-    std::cout << "--- Single Test results --------------------------------" << std::endl;
-    std::cout << "--------------------------------------------------------" << std::endl;
-    std::cout << "--- Host Code function: " << HostCodeRegistry[host_code_num].second << std::endl;
-    std::cout << "--------------------------------------------------------" << std::endl;
+    console_printf("--------------------------------------------------------\n");
+    console_printf("--- Single Test results --------------------------------\n");
+    console_printf("--------------------------------------------------------\n");
+    console_printf("--- Host Code function: ");
+    console_printf(HostCodeRegistry[host_code_num].second.c_str());
+    console_printf("\n");
+    console_printf("--------------------------------------------------------\n");
 
     bool pass = true;
     if (res.pearson < 0.99){
@@ -237,13 +315,25 @@ void run_verbose_test(int host_code_num, int test_num){
     sprintf(buf, "w/ PCC=%.2f", res.pearson);
     result += std::string(buf);
     result += res.pearson > 0.99 ? " ✅ ": " ❌ ";
-    std::cout << "Test #" << test_num << ": " << result << " " << test_num << ' ' << res.test_name << std::endl;
-    std::cout << "--------------------------------------------------------" << std::endl;
-    std::cout << "--------------------------------------------------------" << std::endl;
-    std::cout << "--------------------------------------------------------" << std::endl;
+    // console_printf("Test #" << test_num << ": " << result << " " << test_num << ' ' << res.test_name << std::endl;
+    console_printf("Test #");
+    console_printf(std::to_string(test_num).c_str());
+    console_printf(": ");
+    console_printf(result.c_str());
+    console_printf(" ");
+    console_printf(std::to_string(test_num).c_str());
+    console_printf(" ");
+    console_printf(res.test_name.c_str());
+    console_printf("\n");
+    console_printf("--------------------------------------------------------\n");
+    console_printf("--------------------------------------------------------\n");
+    console_printf("--------------------------------------------------------\n");
 }
 
 int main(int argc, char** argv) {
+
+
+
 
     bool test_all = true;
     int host_code_index = 0;
@@ -256,12 +346,38 @@ int main(int argc, char** argv) {
 
 
     if (test_all) {
+        // 
+        // Redirect TT-Metal output to some file.
+        // Let only our print statements go to stdout
+        // 
+        // 1) Save the original stdout (the real console)
+        int saved_stdout = ::dup(STDOUT_FILENO);
+        if (saved_stdout == -1) {
+            std::perror("dup");
+            return 1;
+        }
+
+        // 2) Redirect stdout to a log file (affects std::cout and printf)
+        int log_fd = ::open("std.out.log", O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        if (log_fd == -1) {
+            std::perror("open");
+            return 1;
+        }
+        if (::dup2(log_fd, STDOUT_FILENO) == -1) {
+            std::perror("dup2");
+            return 1;
+        }
+        ::close(log_fd); // not needed after dup2
+        // 
+        //
         test_suite(host_code_index);
     }
     else {
+        //
+        //
         int test_num = argc > 1 ? std::stoi(argv[1]) : -1;
         if (test_num == -1) {
-            std::cout << "No test specified. Returning." << std::endl;
+            console_printf("No test specified. Returning.\n");
             return 0;
         }
         run_verbose_test(host_code_index, test_num);

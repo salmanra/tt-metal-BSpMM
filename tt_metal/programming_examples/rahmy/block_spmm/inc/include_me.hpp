@@ -1,5 +1,8 @@
 #pragma once
-
+#include <fcntl.h>    // open
+#include <unistd.h>   // dup, dup2, close, STDOUT_FILENO, vdprintf
+#include <cstdarg>    // va_list, va_start, va_end
+#include <cstdio>     // printf
 #include <cstdint>
 #include <memory>
 #include <tt-metalium/host_api.hpp>

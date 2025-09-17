@@ -1,133 +1,106 @@
 [
     {
-        "profile_case_sparse_single_block_R32_C32.csv": {
-            "Program Loop total ns": 5691603
-        },
-        "profile_case_sparse_single_block_R64_C64.csv": {
-            "Program Loop total ns": 6125751
-        },
-        "profile_case_sparse_single_block_R128_C128.csv": {
-            "Program Loop total ns": 6113361
-        },
-        "profile_case_sparse_diagonal_R32_C32.csv": {
+        "diagonal_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": 19511278
         },
-        "profile_case_sparse_diagonal_R64_C64.csv": {
+        "diagonal_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": 14068493
         },
-        "profile_case_sparse_diagonal_R128_C128.csv": {
+        "diagonal_R128_C128\n(NNZ Blocks = 8)": {
             "Program Loop total ns": 13537077
         },
-        "profile_case_sparse_fill_column_R32_C32.csv": {
+        "column_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": 7626355
         },
-        "profile_case_sparse_fill_column_R64_C64.csv": {
+        "column_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": 10181562
         },
-        "profile_case_sparse_fill_column_R128_C128.csv": {
+        "column_R128_C128\n(NNZ Blocks = 8)": {
             "Program Loop total ns": 8830518
         },
-        "profile_case_sparse_fill_row_R32_C32.csv": {
+        "row_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": 8686760
         },
-        "profile_case_sparse_fill_row_R64_C64.csv": {
+        "row_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": 9466926
         },
-        "profile_case_sparse_fill_row_R128_C128.csv": {
+        "row_R128_C128\n(NNZ Blocks = 8)": {
             "Program Loop total ns": 8824319
         },
-        "profile_case_sparse_fill_random_R32_C32.csv": {
+        "random_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": 16013385
         },
-        "profile_case_sparse_fill_random_R64_C64.csv": {
+        "random_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": 11891214
         }
     },
     {
-        "profile_case_sparse_single_block_R32_C32.csv": {
-            "Program Loop total ns": 10374813
-        },
-        "profile_case_sparse_single_block_R64_C64.csv": {
-            "Program Loop total ns": 8234332
-        },
-        "profile_case_sparse_single_block_R128_C128.csv": {
-            "Program Loop total ns": 8356521
-        },
-        "profile_case_sparse_diagonal_R32_C32.csv": {
+        "diagonal_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": NaN
         },
-        "profile_case_sparse_diagonal_R64_C64.csv": {
+        "diagonal_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": NaN
         },
-        "profile_case_sparse_diagonal_R128_C128.csv": {
+        "diagonal_R128_C128\n(NNZ Blocks = 8)": {
             "Program Loop total ns": 14721821
         },
-        "profile_case_sparse_fill_column_R32_C32.csv": {
+        "column_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": 9167499
         },
-        "profile_case_sparse_fill_column_R64_C64.csv": {
+        "column_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": 7961353
         },
-        "profile_case_sparse_fill_column_R128_C128.csv": {
+        "column_R128_C128\n(NNZ Blocks = 8)": {
             "Program Loop total ns": 9341076
         },
-        "profile_case_sparse_fill_row_R32_C32.csv": {
+        "row_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": 9747424
         },
-        "profile_case_sparse_fill_row_R64_C64.csv": {
+        "row_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": 9068378
         },
-        "profile_case_sparse_fill_row_R128_C128.csv": {
+        "row_R128_C128\n(NNZ Blocks = 8)": {
             "Program Loop total ns": 7923363
         },
-        "profile_case_sparse_fill_random_R32_C32.csv": {
+        "random_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": NaN
         },
-        "profile_case_sparse_fill_random_R64_C64.csv": {
+        "random_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": NaN
         }
     },
     {
-        "profile_case_sparse_single_block_R32_C32.csv": {
+        "diagonal_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": NaN
         },
-        "profile_case_sparse_single_block_R64_C64.csv": {
+        "diagonal_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": NaN
         },
-        "profile_case_sparse_single_block_R128_C128.csv": {
-            "Program Loop total ns": 13678686
-        },
-        "profile_case_sparse_diagonal_R32_C32.csv": {
-            "Program Loop total ns": NaN
-        },
-        "profile_case_sparse_diagonal_R64_C64.csv": {
-            "Program Loop total ns": NaN
-        },
-        "profile_case_sparse_diagonal_R128_C128.csv": {
+        "diagonal_R128_C128\n(NNZ Blocks = 8)": {
             "Program Loop total ns": 14111644
         },
-        "profile_case_sparse_fill_column_R32_C32.csv": {
+        "column_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": NaN
         },
-        "profile_case_sparse_fill_column_R64_C64.csv": {
+        "column_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": NaN
         },
-        "profile_case_sparse_fill_column_R128_C128.csv": {
+        "column_R128_C128\n(NNZ Blocks = 8)": {
             "Program Loop total ns": 15502251
         },
-        "profile_case_sparse_fill_row_R32_C32.csv": {
+        "row_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": NaN
         },
-        "profile_case_sparse_fill_row_R64_C64.csv": {
+        "row_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": NaN
         },
-        "profile_case_sparse_fill_row_R128_C128.csv": {
+        "row_R128_C128\n(NNZ Blocks = 8)": {
             "Program Loop total ns": 14874920
         },
-        "profile_case_sparse_fill_random_R32_C32.csv": {
+        "random_R32_C32\n(NNZ Blocks = 32)": {
             "Program Loop total ns": NaN
         },
-        "profile_case_sparse_fill_random_R64_C64.csv": {
+        "random_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": NaN
         }
     }

@@ -60,6 +60,8 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_square();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_square_one_block();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_square_one_block_v2();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_mid_diag();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_no_cheat();
     
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
@@ -114,6 +116,8 @@ namespace bsr_test_suite {
         test_bottom_row_square, // 46
         test_bottom_row_square_one_block, // 47
         test_bottom_row_square_one_block_v2, // 48
+        test_mid_diag, // 49
+        // test_big_dense_no_cheat, // 50
     };
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_diag() {
 
@@ -134,6 +138,26 @@ namespace bsr_test_suite {
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_huge_diag");
+    }
+        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_mid_diag() {
+
+        // matmul params setup
+        uint32_t M = 1024;
+        uint32_t N = 1024;
+        uint32_t K = 1024;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t block_matrix_height = M / R;
+        uint32_t nblocks = block_matrix_height;
+
+        // nz blocks fill the diagonal
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_DIAG, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_mid_diag");
     }
 
     // this case should expose the performance difference between the naive and new versions
@@ -409,6 +433,26 @@ namespace bsr_test_suite {
         
         dense_matrix<float> tmp(M, K, RAND);
         bsr_matrix<float> bsr(tmp, N);
+        dense_matrix<float> dense(K, N, RAND);
+
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_big_dense");
+    }
+
+        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_no_cheat() {
+        // matmul params setup
+        uint32_t M = 4096;
+        uint32_t N = 4096;
+        uint32_t K = 512;
+        // block params setup
+        uint32_t R = 64;
+        uint32_t C = 64;
+        uint32_t nblocks = 256;
+        uint32_t block_matrix_height = M / R;
+        
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
 

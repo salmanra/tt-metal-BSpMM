@@ -204,7 +204,7 @@ public:
         } else if (fill_type == FILL_COL) {
             for (size_t j = 0; j < blocked_matrix_width; j++) {
                 for (size_t i = 0; i < blocked_matrix_height; i++) {
-                    if (i * blocked_matrix_width + j < nblocks) {
+                    if (i + (j * blocked_matrix_height) < nblocks) {
                         indptr[i + 1]++;
                         indices.push_back(j);
                         for (size_t k = 0; k < R * C; k++) {

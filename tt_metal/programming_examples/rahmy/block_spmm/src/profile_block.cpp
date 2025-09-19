@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
     std::cout << "--- Output file: " << trace_file_location << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
-    // // run ./capture-release to allow the profiler to listen for the program 
+    // run ./capture-release to allow the profiler to listen for the program 
     // std::system(mkdir_command.c_str());
     // std::system(capture_trace_command.c_str());
 

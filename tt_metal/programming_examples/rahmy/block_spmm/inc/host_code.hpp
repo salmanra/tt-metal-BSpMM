@@ -7,6 +7,7 @@
 #include "include_me.hpp"
 #include "tt-metalium/bfloat16.hpp"
 #include "tt-metalium/circular_buffer_types.hpp"
+#include "tt-metalium/core_coord.hpp"
 #include "tt-metalium/host_api.hpp"
 
 using namespace tt;
@@ -213,8 +214,11 @@ void bsr_spmm_multicore_reuse_iteration(
     uint32_t indexing_data_single_tile_size = detail::TileSize(indexing_data_format);
 
     auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
+    // for testing :P
+    // CoreCoord compute_with_storage_grid_size = {4, 4};
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
+    
     uint32_t num_cores_total = num_cores_x * num_cores_y;
 
     uint32_t Mt = M / TILE_HEIGHT;
@@ -252,15 +256,12 @@ void bsr_spmm_multicore_reuse_iteration(
     uint32_t per_iter_M = Rt;
     uint32_t in0_block_w = Ct;
 
-
     // 
     // .. We can't determine the per core workload until we have the folded matrix size. 
     //
     // TODO: get the number of tiles used for the new NoC args and add to this calc 
     int32_t num_tiles_for_col_indices = (indexing_data_single_tile_size - 1 + sizeof(int) * nnz_blocks) / indexing_data_single_tile_size;
     uint32_t per_core_N = get_Npc_from_BSR_block_size(Nt, per_iter_M, in0_block_w, num_cores_x, num_tiles_for_col_indices);
-    // uint32_t per_core_M = _get_maximum_block_dim_with_NoC_args(per_core_N, Ct, num_tiles_for_col_indices);
-    // per_core_M = std::min(Rt * (per_core_M / Rt), height_of_folded_matrix); // TODO: this is wrong. 
 
     uint32_t num_blocks_x = Nt / per_core_N;
     uint32_t nnz_output_blocks_total = num_blocks_x * nnz_rows; // blocks per row * nnz rows
@@ -368,11 +369,12 @@ void bsr_spmm_multicore_reuse_iteration(
         log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
         log_info(
             tt::LogVerif,
-            " -- Mt= {} -- Nt= {} -- nnz_output_blocks={} -- num_output_work_regions={} -- num_cores_used={} -- num_cores_available_x={} -- num_cores_available_y={} --",
+            " -- Mt= {} -- Nt= {} -- nnz_output_blocks={} -- num_output_work_regions={} -- num_iters={}-- num_cores_used={} -- num_cores_available_x={} -- num_cores_available_y={} --",
             Mt,
             Nt,
             nnz_output_blocks_total,
             num_output_work_regions_total,
+            num_iters,
             all_cores.num_cores(),
             num_cores_x,
             num_cores_y);

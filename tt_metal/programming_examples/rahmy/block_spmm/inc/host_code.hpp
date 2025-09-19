@@ -522,16 +522,18 @@ void bsr_spmm_multicore_reuse_iteration(
         all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity, .compile_args = compute_kernel_compile_time_args});
 
-   uint32_t num_empty_rows_so_far = 0;
+    // num_work_regions is always capped by num cores. just a little fun fact for you
+    uint32_t num_empty_rows_so_far = 0;
     for (int work_region = 0; work_region < num_output_work_regions_total; work_region++){
         int core_idx_x = work_region % num_cores_x;
         int core_idx_y = work_region / num_cores_x;
         CoreCoord core = {(std::size_t)core_idx_x, (std::size_t)core_idx_y};
 
-        int output_idx_x = work_region % num_blocks_x;
+        // TODO: test :P
+        int output_idx_x = (work_region * num_iters) % num_blocks_x;
 
         // this should start somewhere and iterate down the folded matrix
-        int folded_output_idx_y_start = work_region / num_blocks_x;
+        int folded_output_idx_y_start = (work_region * num_iters) / num_blocks_x;
         // int output_idx_y_start = folded_bsr_matrix_indices[work_region / num_blocks_x];
 
         uint32_t num_out_blocks_per_core = per_core_M / per_iter_M;

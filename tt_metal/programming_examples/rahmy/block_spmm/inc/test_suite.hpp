@@ -63,6 +63,7 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_mid_diag();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_no_cheat();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_col();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_col_v2();
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
@@ -119,8 +120,28 @@ namespace bsr_test_suite {
         test_mid_diag, // 49
         test_big_dense_no_cheat, // 50
         test_huge_col, // 51
+        test_huge_col_v2, // 52
     };
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_col_v2() {
 
+        // matmul params setup
+        uint32_t M = 4096;
+        uint32_t N = 4096;
+        uint32_t K = 32;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t block_matrix_height = M / R;
+        uint32_t nblocks = block_matrix_height;
+
+        // nz blocks fill the diagonal
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_huge_col_v2");
+    }
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_col() {
 
         // matmul params setup

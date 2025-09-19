@@ -52,7 +52,6 @@ TestResult run_test(
     Returns the PCC between the sequential matmul of a and b and the multicore matmul of a and b.
     */
 
-
     // device setup
     constexpr int device_id = 0;
     IDevice* device = CreateDevice(device_id);
@@ -94,11 +93,12 @@ TestResult run_test(
     // console_printf(std::endl;
 
     // run bsr_spmm_multicore_reuse
+    console_printf("Do we seg fault before...");
     host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device, verbose);
+    console_printf("... or after running the program?\n");
 
 
     if (emit_output) {
-
         // it makes 1000x more sense to print the tilized result. That's what these are!... bruh moment
         // let's write the output vectors to a file
         std::string local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm/" + test_name;

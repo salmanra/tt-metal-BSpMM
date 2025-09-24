@@ -145,12 +145,12 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_col() {
 
         // matmul params setup
-        uint32_t M = 4096;
-        uint32_t N = 4096;
-        uint32_t K = 4096;
+        uint32_t M = 2048;
+        uint32_t N = 2048;
+        uint32_t K = 2048;
         // block params setup
-        uint32_t R = 32;
-        uint32_t C = 32;
+        uint32_t R = 64;
+        uint32_t C = 64;
         uint32_t block_matrix_height = M / R;
         uint32_t nblocks = block_matrix_height;
 

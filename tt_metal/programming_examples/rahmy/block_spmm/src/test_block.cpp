@@ -93,9 +93,9 @@ TestResult run_test(
     // console_printf(std::endl;
 
     // run bsr_spmm_multicore_reuse
-    console_printf("Do we seg fault before...");
+    // console_printf("Do we seg fault before...");
     host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device, verbose);
-    console_printf("... or after running the program?\n");
+    // console_printf("... or after running the program?\n");
 
 
     if (emit_output) {
@@ -331,10 +331,6 @@ void run_verbose_test(int host_code_num, int test_num){
 }
 
 int main(int argc, char** argv) {
-
-
-
-
     bool test_all = true;
     int host_code_index = 0;
     if (argc > 1) {
@@ -344,30 +340,29 @@ int main(int argc, char** argv) {
         host_code_index = std::stoi(argv[2]);
     }
 
-
     if (test_all) {
         // 
         // Redirect TT-Metal output to some file.
         // Let only our print statements go to stdout
         // 
         // 1) Save the original stdout (the real console)
-        int saved_stdout = ::dup(STDOUT_FILENO);
-        if (saved_stdout == -1) {
-            std::perror("dup");
-            return 1;
-        }
+        // int saved_stdout = ::dup(STDOUT_FILENO);
+        // if (saved_stdout == -1) {
+        //     std::perror("dup");
+        //     return 1;
+        // }
 
-        // 2) Redirect stdout to a log file (affects std::cout and printf)
-        int log_fd = ::open("std.out.log", O_CREAT | O_WRONLY | O_TRUNC, 0644);
-        if (log_fd == -1) {
-            std::perror("open");
-            return 1;
-        }
-        if (::dup2(log_fd, STDOUT_FILENO) == -1) {
-            std::perror("dup2");
-            return 1;
-        }
-        ::close(log_fd); // not needed after dup2
+        // // 2) Redirect stdout to a log file (affects std::cout and printf)
+        // int log_fd = ::open("std.out.log", O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        // if (log_fd == -1) {
+        //     std::perror("open");
+        //     return 1;
+        // }
+        // if (::dup2(log_fd, STDOUT_FILENO) == -1) {
+        //     std::perror("dup2");
+        //     return 1;
+        // }
+        // ::close(log_fd); // not needed after dup2
         // 
         //
         test_suite(host_code_index);

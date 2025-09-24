@@ -92,7 +92,7 @@ void bsr_spmm_multicore_reuse_iteration(
     uint32_t B,
     IDevice* device,
     bool verbose);
-    
+
 
 using HostCodeFunctionPtr = void (*)(
     bsr_matrix<bfloat16>& a,
@@ -107,7 +107,7 @@ using HostCodeFunctionPtr = void (*)(
     uint32_t C,
     uint32_t B,
     IDevice* device,
-    bool verbose); 
+    bool verbose);
 
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
@@ -213,12 +213,12 @@ void bsr_spmm_multicore_reuse_iteration(
     tt::DataFormat indexing_data_format = tt::DataFormat::Int32;
     uint32_t indexing_data_single_tile_size = detail::TileSize(indexing_data_format);
 
-    auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
+    // auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     // for testing :P
-    // CoreCoord compute_with_storage_grid_size = {4, 4};
+    CoreCoord compute_with_storage_grid_size = {2, 2};
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
-    
+
     uint32_t num_cores_total = num_cores_x * num_cores_y;
 
     uint32_t Mt = M / TILE_HEIGHT;
@@ -228,16 +228,16 @@ void bsr_spmm_multicore_reuse_iteration(
     uint32_t Rt = R / TILE_HEIGHT;
     uint32_t Ct = C / TILE_WIDTH;
 
- 
+
 
     // ... look at test case 42.
     // the entire matmul gets mapped to one Tensix tile becase Rt=1 and Nt is small.
     // We should rethink how we use Npc, Mpi to create Mpc.
     // They should be a guideline, a starting point.
-    // If they are small, and NumIters is big, we can distribute "iters" across many cores. 
+    // If they are small, and NumIters is big, we can distribute "iters" across many cores.
     // If they are small, and NumIters is small, we can keep iters all on one core.
     // If they are big (when?), and NumIters is big, we must distribute.
-    // If they are big (when?), and NumIters is small, we can keep on one core.  
+    // If they are big (when?), and NumIters is small, we can keep on one core.
 
 
     // just call this, but use (Mt / num_block_rows) * num_nonzero_block_rows
@@ -256,10 +256,10 @@ void bsr_spmm_multicore_reuse_iteration(
     uint32_t per_iter_M = Rt;
     uint32_t in0_block_w = Ct;
 
-    // 
-    // .. We can't determine the per core workload until we have the folded matrix size. 
     //
-    // TODO: get the number of tiles used for the new NoC args and add to this calc 
+    // .. We can't determine the per core workload until we have the folded matrix size.
+    //
+    // TODO: get the number of tiles used for the new NoC args and add to this calc
     int32_t num_tiles_for_col_indices = (indexing_data_single_tile_size - 1 + sizeof(int) * nnz_blocks) / indexing_data_single_tile_size;
     uint32_t per_core_N = get_Npc_from_BSR_block_size(Nt, per_iter_M, in0_block_w, num_cores_x, num_tiles_for_col_indices);
 
@@ -270,7 +270,7 @@ void bsr_spmm_multicore_reuse_iteration(
 
     uint32_t num_output_work_regions_total = (nnz_output_blocks_total + (per_core_M / per_iter_M) - 1) / (per_core_M / per_iter_M); // multiple blocks per core, so we reflect that
 
-    // 1. given Rt&Ct as Mpi and in0_block_w, find Npc 
+    // 1. given Rt&Ct as Mpi and in0_block_w, find Npc
     // 2. find the number of work regions (output blocks to compute) (determined by Mpi, Npc)
     // 3. if number of work regions is greater than number of cores, let each core iterate
     // per_core_M = Rt;
@@ -295,7 +295,7 @@ void bsr_spmm_multicore_reuse_iteration(
         log_info(
             tt::LogVerif,
             " -- per_core_M={} -- per_iter_M= {} -- per_core_N= {} -- out_subblock_h= {} -- out_subblock_w= {} --",
-            per_core_M, 
+            per_core_M,
             per_iter_M,
             per_core_N,
             out_subblock_h,
@@ -318,7 +318,7 @@ void bsr_spmm_multicore_reuse_iteration(
 
     uint32_t in0_num_subblocks = (per_iter_M / out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
-    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct. 
+    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct.
 
     uint32_t in1_num_subblocks = (per_core_N / out_subblock_w);
     uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w * in1_num_subblocks;
@@ -331,7 +331,7 @@ void bsr_spmm_multicore_reuse_iteration(
      * Create DRAM Buffers for input and output vectors
      * Writing data from input vectors to source buffers
      */
-    uint32_t dram_buffer_dst_row_size = 
+    uint32_t dram_buffer_dst_row_size =
         single_tile_size * Rt * Nt;
     uint32_t dram_buffer_dst_total_size = 0;
     dram_buffer_dst_total_size = dram_buffer_dst_row_size * nnz_rows;
@@ -348,7 +348,7 @@ void bsr_spmm_multicore_reuse_iteration(
     if (dram_buffer_D_size > indexing_data_single_tile_size)
         dram_buffer_D_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_D_size) / (indexing_data_single_tile_size));
 
-    uint32_t dram_buffer_indptr_size = 
+    uint32_t dram_buffer_indptr_size =
         sizeof(int) * ((M / R) + 1);
     if (dram_buffer_indptr_size > indexing_data_single_tile_size)
         dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
@@ -380,7 +380,7 @@ void bsr_spmm_multicore_reuse_iteration(
             num_cores_y);
     }
 
-
+    std::cout << "Num iters: " << num_iters << std::endl;
     /*
     SRAM Circular Buffers
     */
@@ -445,8 +445,8 @@ void bsr_spmm_multicore_reuse_iteration(
         (std::uint32_t)indptr_dram_buffer->address(),
 
         // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
-        // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x 
-        // col indices start of row obtained by // a.indptr[output_idx_y],    
+        // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x
+        // col indices start of row obtained by // a.indptr[output_idx_y],
         // col indices end of row obtained by //  a.indptr[output_idx_y + 1],
     };
     std::vector<uint32_t> compute_kernel_compile_time_args = {
@@ -489,7 +489,7 @@ void bsr_spmm_multicore_reuse_iteration(
             "bytes_for_sync"
         };
         for (size_t i = 0; i < reader_compile_time_args.size(); ++i) {
-            log_info(tt::LogVerif, "comptime_reader_arg[{}] ({}) = {}", i, reader_arg_names[i], reader_compile_time_args[i]);
+            log_info(tt::LogVerif, "comptime_reader_arg[{}/{}] ({}) = {}", i, reader_compile_time_args.size(), reader_arg_names[i], reader_compile_time_args[i]);
         }
     }
 
@@ -545,14 +545,20 @@ void bsr_spmm_multicore_reuse_iteration(
         };
         std::vector<uint32_t> mm_compute_args = {};
         uint32_t max_row_size = 0;
+        // std::cout << "num folded indices " << folded_bsr_matrix_indices.size() << std::endl;
         for (uint32_t i = 0; i < num_out_blocks_per_core; i++){
             mm_reader_args.push_back(folded_bsr_matrix_indices[folded_output_idx_y_start + i]);
+            // // std::cout << "Print " << i << "/" << num_out_blocks_per_core << " times" << std::endl;
+            // std::cout << "folded indices [start + i]" << folded_bsr_matrix_indices[folded_output_idx_y_start + i] << std::endl;
+            // std::cout << "output_idx_y " << mm_reader_args[i+2] << std::endl;
+
 
             uint32_t output_idx_y = mm_reader_args[2 + i];
             uint32_t block_row_start = a.indptr[output_idx_y];
             uint32_t block_row_end = a.indptr[output_idx_y + 1];
             mm_compute_args.push_back(block_row_end - block_row_start);
             max_row_size = std::max(max_row_size, block_row_end - block_row_start);
+            // std::cout << "      Matching print" << i << "/" << num_out_blocks_per_core << " times" << std::endl;
         }
         mm_reader_args.push_back(max_row_size);
         mm_compute_args.push_back(max_row_size);
@@ -581,7 +587,7 @@ void bsr_spmm_multicore_reuse_iteration(
         tt_metal::SetRuntimeArgs(program, reader_id, core, mm_reader_args);
         tt_metal::SetRuntimeArgs(program, writer_id, core, writer_args);
         tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, mm_compute_args);
-        
+
         if (verbose && folded_output_idx_y_start == 0 && output_idx_x == 0) {
             a.pretty_print();
             log_info(tt::LogVerif, " -- Reader Args --");
@@ -639,7 +645,7 @@ void bsr_spmm_multicore_reuse_iteration(
     // and we index into DRAM data by "folded" row index
     uint32_t nonzero_row_index = 0;
     for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
-        if (a.indptr[row_index+1] - a.indptr[row_index] == 0) 
+        if (a.indptr[row_index+1] - a.indptr[row_index] == 0)
             continue;
         BufferRegion DRAM_row(nonzero_row_index * dram_buffer_dst_row_size, dram_buffer_dst_row_size);
         EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, true);
@@ -690,7 +696,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     uint32_t per_block_M = Rt;
     uint32_t in0_block_w = Ct;
 
-    // TODO: get the number of tiles used for the new NoC args and add to this calc 
+    // TODO: get the number of tiles used for the new NoC args and add to this calc
     int32_t num_tiles_for_col_indices = (indexing_data_single_tile_size - 1 + sizeof(int) * nnz_blocks) / indexing_data_single_tile_size;
     // uint32_t per_core_N = get_Npc_from_BSR_block_size(Nt, per_block_M, in0_block_w, num_cores_x, num_tiles_for_col_indices);
     // uint32_t per_core_M = _get_maximum_block_dim_with_NoC_args(per_core_N, Ct, num_tiles_for_col_indices);
@@ -714,7 +720,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     uint32_t per_core_N = std::get<1>(matmul_params);
     uint32_t out_subblock_h = std::min(Rt, std::get<2>(matmul_params));
     uint32_t out_subblock_w = std::min(Ct, std::get<3>(matmul_params));
-    
+
     // pick the largest subblock size that fits within the block size
     // uint32_t out_subblock_h, out_subblock_w;
     // for (auto& subblock_hw : bmm_op_utils::SUBBLOCK_HW_CHOICES) {
@@ -733,7 +739,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
             " -- Mt={} -- Nt={} -- per_core_M={} -- per_block_M= {} -- per_core_N= {} -- out_subblock_h= {} -- out_subblock_w= {} --",
             Mt,
             Nt,
-            per_core_M, 
+            per_core_M,
             per_block_M,
             per_core_N,
             out_subblock_h,
@@ -756,7 +762,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
 
     uint32_t in0_num_subblocks = (per_block_M / out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
-    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct. 
+    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct.
 
     uint32_t in1_num_subblocks = (per_core_N / out_subblock_w);
     uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w * in1_num_subblocks;
@@ -770,7 +776,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
      * Writing data from input vectors to source buffers
      */
     uint32_t num_blocks_x = Nt / per_core_N;
-    uint32_t dram_buffer_dst_row_size = 
+    uint32_t dram_buffer_dst_row_size =
         single_tile_size * Rt * Nt;
 
     uint32_t dram_buffer_dst_total_size = 0;
@@ -788,7 +794,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     if (dram_buffer_D_size > indexing_data_single_tile_size)
         dram_buffer_D_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_D_size) / (indexing_data_single_tile_size));
 
-    uint32_t dram_buffer_indptr_size = 
+    uint32_t dram_buffer_indptr_size =
         sizeof(int) * (M / R);
     if (dram_buffer_indptr_size > indexing_data_single_tile_size)
         dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
@@ -856,11 +862,11 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     CircularBufferConfig cb_indptr_config = CircularBufferConfig(dram_buffer_indptr_size, {{indptr_cb_index, tt::DataFormat::UInt32}}).set_page_size(indptr_cb_index, std::min(indexing_data_single_tile_size, dram_buffer_indptr_size));
     auto cb_indptr = tt_metal::CreateCircularBuffer(program, all_cores, cb_indptr_config);
 
-    // now we have some thread-to-thread communication to do per core. 
-    // Let this circular buffer be the mediator for that. 
+    // now we have some thread-to-thread communication to do per core.
+    // Let this circular buffer be the mediator for that.
     // Notice its size and page size are small (16 bytes)
     auto per_core_sync_CB_index = CBIndex::c_4;
-    uint32_t bytes_for_sync =  (per_core_M / per_block_M) * sizeof(uint32_t); 
+    uint32_t bytes_for_sync =  (per_core_M / per_block_M) * sizeof(uint32_t);
     uint32_t per_core_sync_CB_size = 2 * bytes_for_sync;
     CircularBufferConfig cb_sync_config = CircularBufferConfig(per_core_sync_CB_size, {{per_core_sync_CB_index, tt::DataFormat::UInt32}}).set_page_size(per_core_sync_CB_index, bytes_for_sync);
     auto cb_sync = tt_metal::CreateCircularBuffer(program, all_cores, cb_sync_config);
@@ -912,10 +918,10 @@ void bsr_spmm_multicore_reuse_merge_blocks(
         (std::uint32_t)indptr_dram_buffer->address(),
 
         (std::uint32_t)bytes_for_sync, // page size of synchronization CB
-        
+
         // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
-        // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x 
-        // col indices start of row obtained by // a.indptr[output_idx_y],    
+        // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x
+        // col indices start of row obtained by // a.indptr[output_idx_y],
         // col indices end of row obtained by //  a.indptr[output_idx_y + 1],
     };
 
@@ -1003,7 +1009,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
         for (size_t core_x = cores_box.start_coord.x; core_x <= cores_box.end_coord.x; core_x++){
             for (size_t core_y = cores_box.start_coord.y; core_y <= cores_box.end_coord.y; core_y++){
                 log_info(tt::LogVerif, "Core ({}, {})", core_x, core_y);
-            } 
+            }
         }
         log_info(tt::LogVerif, "CoreRange: {}", cores_box);
     }
@@ -1011,7 +1017,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     // for each work region
     //      get the x and y output coordinates
     //      use them?
-    // out_idx_y = 
+    // out_idx_y =
     // out_idx_x = current-work-region % per_core_N
 
     uint32_t num_empty_rows_so_far = 0;
@@ -1071,7 +1077,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
         tt_metal::SetRuntimeArgs(program, reader_id, core, mm_reader_args);
         tt_metal::SetRuntimeArgs(program, writer_id, core, writer_args);
         tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, mm_compute_args);
-        
+
         if (verbose && folded_output_idx_y_start == 0 && output_idx_x == 0) {
             a.pretty_print();
             log_info(tt::LogVerif, " -- Reader Args --");
@@ -1129,7 +1135,7 @@ void bsr_spmm_multicore_reuse_merge_blocks(
     // and we index into DRAM data by "folded" row index
     uint32_t nonzero_row_index = 0;
     for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
-        if (a.indptr[row_index+1] - a.indptr[row_index] == 0) 
+        if (a.indptr[row_index+1] - a.indptr[row_index] == 0)
             continue;
         BufferRegion DRAM_row(nonzero_row_index * dram_buffer_dst_row_size, dram_buffer_dst_row_size);
         EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, true);
@@ -1195,20 +1201,20 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     //
 
 
-    // okay i get it: getting the matmul params is easy in the dense case because you need params in terms of tiles, and tiles have 
+    // okay i get it: getting the matmul params is easy in the dense case because you need params in terms of tiles, and tiles have
     // a fixed size for every possible matrix pair. But for us, we want the matmul params in terms of BSR blocks, which have variable size.
-    // But it's also still tiles. Let's focus on our current test suite (with block size a multiple of tile size). This is still very useful in 
-    // the dense case, and in prototyping the overhead analysis. 
+    // But it's also still tiles. Let's focus on our current test suite (with block size a multiple of tile size). This is still very useful in
+    // the dense case, and in prototyping the overhead analysis.
     // Ohh... OPPORTUNITY: we can max out on Npc, then iterate over Mpc{Rt}.
-    //                      This lets us reuse the SRAM buffers, meaning we can 
+    //                      This lets us reuse the SRAM buffers, meaning we can
     //                      actually handle more data per core than the dense case!!!
-    //                      we peakin. 
+    //                      we peakin.
 
     // We admit flexible per_core_M while maintaining rigid per_block_M
     uint32_t per_block_M = Rt;
     uint32_t in0_block_w = Ct;
 
-    // TODO: get the number of tiles used for the new NoC args and add to this calc 
+    // TODO: get the number of tiles used for the new NoC args and add to this calc
     int32_t num_tiles_for_col_indices = (indexing_data_single_tile_size - 1 + sizeof(int) * nnz_blocks) / indexing_data_single_tile_size;
     uint32_t per_core_N = get_Npc_from_BSR_block_size(Nt, per_block_M, in0_block_w, num_cores_x, num_tiles_for_col_indices);
     uint32_t per_core_M = _get_maximum_block_dim_with_NoC_args(per_core_N, Ct, num_tiles_for_col_indices);
@@ -1229,7 +1235,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
         log_info(
             tt::LogVerif,
             " -- per_core_M={} -- per_block_M= {} -- per_core_N= {} -- out_subblock_h= {} -- out_subblock_w= {} --",
-            per_core_M, 
+            per_core_M,
             per_block_M,
             per_core_N,
             out_subblock_h,
@@ -1252,7 +1258,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
 
     uint32_t in0_num_subblocks = (per_block_M / out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
-    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct. 
+    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct.
 
     uint32_t in1_num_subblocks = (per_core_N / out_subblock_w);
     uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w * in1_num_subblocks;
@@ -1266,7 +1272,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
      * Writing data from input vectors to source buffers
      */
     uint32_t num_blocks_x = Nt / per_core_N;
-    uint32_t dram_buffer_dst_row_size = 
+    uint32_t dram_buffer_dst_row_size =
         single_tile_size * Rt * Nt;
     uint32_t dram_buffer_dst_total_size = 0;
     uint32_t nnz_rows = 0;
@@ -1289,7 +1295,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     if (dram_buffer_D_size > indexing_data_single_tile_size)
         dram_buffer_D_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_D_size) / (indexing_data_single_tile_size));
 
-    uint32_t dram_buffer_indptr_size = 
+    uint32_t dram_buffer_indptr_size =
         sizeof(int) * (M / R);
     if (dram_buffer_indptr_size > indexing_data_single_tile_size)
         dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
@@ -1411,7 +1417,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
             // Write runtime args to device
             std::vector<uint32_t> mm_reader_args = {
                 (std::uint32_t)src0_dram_buffer->address(),     // in0_tensor_addr
-                (std::uint32_t)a.indptr[output_idx_y] * Rt * Ct,// in0_tensor_start_tile_id 
+                (std::uint32_t)a.indptr[output_idx_y] * Rt * Ct,// in0_tensor_start_tile_id
                 (std::uint32_t)1,                               // in0_tensor_stride_w
                 (std::uint32_t)Ct,                              // in0_tensor_stride_h
 
@@ -1420,7 +1426,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
                 (std::uint32_t)in0_block_w * Rt,  // in0_block_num_tiles
 
                 (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
-                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id 
+                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id
                 (std::uint32_t)1,                            // in1_tensor_stride_w
                 (std::uint32_t)Nt,                           // in1_tensor_stride_h
 
@@ -1476,7 +1482,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
             tt_metal::SetRuntimeArgs(program, writer_id, core, writer_args);
             tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_args);
             nnz_output_blocks_read++;
-            
+
             if (verbose && output_idx_y == 0 && output_idx_x == 0) {
                 a.pretty_print();
                 log_info(tt::LogVerif, " -- Reader Args --");
@@ -1575,7 +1581,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     // and we index into DRAM data by "folded" row index
     uint32_t nonzero_row_index = 0;
     for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
-        if (a.indptr[row_index+1] - a.indptr[row_index] == 0) 
+        if (a.indptr[row_index+1] - a.indptr[row_index] == 0)
             continue;
         BufferRegion DRAM_row(nonzero_row_index * dram_buffer_dst_row_size, dram_buffer_dst_row_size);
         EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, true);
@@ -1643,7 +1649,7 @@ void bsr_spmm_multicore_reuse(
 
     int32_t num_tiles_for_col_indices = (col_indices_single_tile_size - 1 + sizeof(int) * nnz_blocks) / col_indices_single_tile_size;
     uint32_t per_core_N = _get_maximum_block_dim_with_NoC_args(per_core_M, in0_block_w, num_tiles_for_col_indices);
-    per_core_N = std::min({per_core_N, Ct, Nt}); 
+    per_core_N = std::min({per_core_N, Ct, Nt});
 
 
     // pick the largest subblock size that fits within the block size
@@ -1684,7 +1690,7 @@ void bsr_spmm_multicore_reuse(
 
     uint32_t in0_num_subblocks = (per_core_M / out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
-    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct. 
+    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct.
 
     uint32_t in1_num_subblocks = (per_core_N / out_subblock_w);
     uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w * in1_num_subblocks;
@@ -1706,10 +1712,10 @@ void bsr_spmm_multicore_reuse(
     uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
     TT_ASSERT(num_blocks_total <= num_cores_x * num_cores_y);
 
-    uint32_t dram_buffer_dst_row_size = 
+    uint32_t dram_buffer_dst_row_size =
         single_tile_size * Rt * Nt;
 
-    std::unordered_map<uint32_t, std::shared_ptr<Buffer>> dst_dram_buffers; 
+    std::unordered_map<uint32_t, std::shared_ptr<Buffer>> dst_dram_buffers;
     for (uint32_t i = 0; i < a.indptr.size() - 1; i++) {
         if (a.indptr[i+1] - a.indptr[i] > 0)
             dst_dram_buffers[i] = MakeBuffer(device, dram_buffer_dst_row_size, single_tile_size);
@@ -1831,8 +1837,8 @@ void bsr_spmm_multicore_reuse(
     // into account the zero rows.
     // ^^ This was good, but  now we have to go back to thinking about cores since we want to be able to assign many output blocks to a single core.
     //    ... it's not clear whether doing this first and then working on the multicast impl is better
-    //          Yes it is clear: i'm already thinking about this, and the depth of reasoning I'm practicing will help 
-    //          me with whatever I decide to do afterwards. 
+    //          Yes it is clear: i'm already thinking about this, and the depth of reasoning I'm practicing will help
+    //          me with whatever I decide to do afterwards.
 
     TT_ASSERT(nnz_output_blocks_total <= num_cores_x * num_cores_y);
 
@@ -1850,7 +1856,7 @@ void bsr_spmm_multicore_reuse(
             // Write runtime args to device
             std::vector<uint32_t> mm_reader_args = {
                 (std::uint32_t)src0_dram_buffer->address(),     // in0_tensor_addr
-                (std::uint32_t)a.indptr[output_idx_y] * Rt * Ct,// in0_tensor_start_tile_id 
+                (std::uint32_t)a.indptr[output_idx_y] * Rt * Ct,// in0_tensor_start_tile_id
                 (std::uint32_t)1,                               // in0_tensor_stride_w
                 (std::uint32_t)Ct,                              // in0_tensor_stride_h
 
@@ -1859,7 +1865,7 @@ void bsr_spmm_multicore_reuse(
                 (std::uint32_t)in0_block_w * per_core_M,  // in0_block_num_tiles
 
                 (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
-                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id 
+                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id
                 (std::uint32_t)1,                            // in1_tensor_stride_w
                 (std::uint32_t)Nt,                           // in1_tensor_stride_h
 
@@ -1912,7 +1918,7 @@ void bsr_spmm_multicore_reuse(
             tt_metal::SetRuntimeArgs(program, writer_id, core, writer_args);
             tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_args);
             nnz_output_blocks_read++;
-            
+
             if (verbose && output_idx_y == 0 && output_idx_x == 0) {
                 a.pretty_print();
                 log_info(tt::LogVerif, " -- Reader Args --");
@@ -2069,7 +2075,7 @@ void bsr_spmm_multicore_reuse_naive(
 
     int32_t num_tiles_for_col_indices = (col_indices_single_tile_size - 1 + sizeof(int) * nnz_blocks) / col_indices_single_tile_size;
     uint32_t per_core_N = _get_maximum_block_dim_with_NoC_args(per_core_M, in0_block_w, num_tiles_for_col_indices);
-    per_core_N = std::min(std::min(per_core_N, Ct), Nt); 
+    per_core_N = std::min(std::min(per_core_N, Ct), Nt);
 
 
     // pick the largest subblock size that fits within the block size
@@ -2110,7 +2116,7 @@ void bsr_spmm_multicore_reuse_naive(
 
     uint32_t in0_num_subblocks = (per_core_M / out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
-    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct. 
+    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct.
 
     uint32_t in1_num_subblocks = (per_core_N / out_subblock_w);
     uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w * in1_num_subblocks;
@@ -2289,7 +2295,7 @@ void bsr_spmm_multicore_reuse_naive(
             // Write runtime args to device
             std::vector<uint32_t> mm_reader_args = {
                 (std::uint32_t)src0_dram_buffer->address(),     // in0_tensor_addr
-                (std::uint32_t)a.indptr[output_idx_y] * Rt * Ct,// in0_tensor_start_tile_id 
+                (std::uint32_t)a.indptr[output_idx_y] * Rt * Ct,// in0_tensor_start_tile_id
                 (std::uint32_t)1,                               // in0_tensor_stride_w
                 (std::uint32_t)Ct,                              // in0_tensor_stride_h
 
@@ -2298,7 +2304,7 @@ void bsr_spmm_multicore_reuse_naive(
                 (std::uint32_t)in0_block_w * per_core_M,  // in0_block_num_tiles
 
                 (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
-                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id 
+                (std::uint32_t)per_core_N * output_idx_x,    // in1_tensor_start_tile_id
                 (std::uint32_t)1,                            // in1_tensor_stride_w
                 (std::uint32_t)Nt,                           // in1_tensor_stride_h
 
@@ -2353,7 +2359,7 @@ void bsr_spmm_multicore_reuse_naive(
             num_blocks_read++;
             if (num_blocks > 0)
                 num_nnz_output_blocks++;
-            
+
             if (verbose && output_idx_y == 0 && output_idx_x == 1) {
                 a.pretty_print();
                 log_info(tt::LogVerif, " -- Reader Args --");
@@ -2456,14 +2462,14 @@ namespace dense_host_code {
     void matmul_multicore_reuse(
         std::vector<bfloat16>& a,
         std::vector<bfloat16>& b,
-        std::vector<bfloat16>& output, 
-        bool bcast_batch, uint32_t M, uint32_t N, uint32_t K, uint32_t B, IDevice* device); 
+        std::vector<bfloat16>& output,
+        bool bcast_batch, uint32_t M, uint32_t N, uint32_t K, uint32_t B, IDevice* device);
 
     void matmul_multicore_reuse_mcast(
         std::vector<bfloat16>& a,
         std::vector<bfloat16>& b,
-        std::vector<bfloat16>& output, 
-        bool bcast_batch, uint32_t M, uint32_t N, uint32_t K, uint32_t B, IDevice* device); 
+        std::vector<bfloat16>& output,
+        bool bcast_batch, uint32_t M, uint32_t N, uint32_t K, uint32_t B, IDevice* device);
 
     using DenseHostCodeFunctionPtr = void (*)(
         std::vector<bfloat16>& a,
@@ -2474,7 +2480,7 @@ namespace dense_host_code {
         uint32_t N,
         uint32_t K,
         uint32_t B,
-        IDevice* device); 
+        IDevice* device);
 
 
 static std::pair<DenseHostCodeFunctionPtr, std::string> DenseHostCodeRegistry[] = {
@@ -2790,32 +2796,32 @@ static std::pair<DenseHostCodeFunctionPtr, std::string> DenseHostCodeRegistry[] 
         // ReadFromBuffer(dst_dram_buffer, output);
         // ReadFromBuffer(src0_dram_buffer, output);
 
-        // if we actually want this zone to mean anything, it has to capture the time 
-        // between beginning the Writes and the first succesful reader kernel NoC. 
+        // if we actually want this zone to mean anything, it has to capture the time
+        // between beginning the Writes and the first succesful reader kernel NoC.
         /*
         Could the behavior be:
             1. The reader kernel blocks on its NoC call until the entire write buffer is filled
             OR
             2. The reader kernel can NoC tiles as they are ready individually
-        I have a feeling it's the second one, in which case the meaningful times will be a 
+        I have a feeling it's the second one, in which case the meaningful times will be a
         little harder to squeeze out. If it is the second one, then the nonblocking h2d/d2h will
         result in runtime which is somewhat resilient to input matrix size (compute can begin at the same
         time regardless of input matrix size)
         Then there are deeper possibilities;
-        1. nonblocking write writes contiguously, thus the first cores to get data are those 
-            asking for the first tiles of data, thus the cores begin their computations in a 
+        1. nonblocking write writes contiguously, thus the first cores to get data are those
+            asking for the first tiles of data, thus the cores begin their computations in a
             cascading manner.
         2. nonblocking write writes "randomly", or in some other less predictable manner, and
-            the cores follow some other pattern of beginning their computation, or none at all. 
-        But DRAM is banked, and the core placement is potentially unoptimized for the banking, 
+            the cores follow some other pattern of beginning their computation, or none at all.
+        But DRAM is banked, and the core placement is potentially unoptimized for the banking,
         so the first available DRAM tiles may or may not be far away from their target Tensix cores,
-        which introduces a second layer of difficulty in assessing the behavior of non-blocking dram writes. 
+        which introduces a second layer of difficulty in assessing the behavior of non-blocking dram writes.
 
         TODO: figure out how to relate the core ids in Tracy's (x, y) pairs to the metalium grid (logical and physical).
-        
+
         */
 
-        // for learning how the code operates, let's  make all these calls block. 
+        // for learning how the code operates, let's  make all these calls block.
         {
             ZoneScopedNC("Data Movement and Device code.", tracy::Color::Brown4);
             EnqueueWriteBuffer(cq, src0_dram_buffer, a.data(), false);

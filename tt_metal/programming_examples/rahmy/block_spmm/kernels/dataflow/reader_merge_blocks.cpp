@@ -45,7 +45,6 @@ void kernel_main(){
     uint32_t y_coords[num_output_blocks];
     for (uint32_t i = 0; i < num_output_blocks; i++){
         y_coords[i] = get_arg_val<uint32_t>(2 + i);
-        // //DPRINT_DATA0(DPRINT << "y_coord i: " << y_coords[i] << ENDL());
 
     }
     uint32_t max_row_size = get_arg_val<uint32_t>(2 + num_output_blocks);

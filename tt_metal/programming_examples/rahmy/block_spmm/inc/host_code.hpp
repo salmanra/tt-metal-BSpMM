@@ -511,6 +511,74 @@ void bsr_spmm_multicore_reuse_iteration(
         (std::uint32_t)num_iters_y,
     };
 
+    if (verbose) {
+        auto print_args = [](const std::string& name, const std::vector<uint32_t>& args, const std::vector<std::string>& arg_names) {
+            std::cout << "==== " << name << " ====" << std::endl;
+            for (size_t i = 0; i < args.size(); ++i) {
+                if (i < arg_names.size())
+                    std::cout << "  [" << i << "] " << arg_names[i] << " = " << args[i] << std::endl;
+                else
+                    std::cout << "  [" << i << "] = " << args[i] << std::endl;
+            }
+            std::cout << std::endl;
+        };
+
+        print_args("reader_compile_time_args", reader_compile_time_args, {
+            "src0_is_dram",
+            "src1_is_dram",
+            "col_indices_is_dram",
+            "indptr_is_dram",
+            "src0_dram_buffer->address()",
+            "in0_tensor_stride_w",
+            "in0_tensor_stride_h",
+            "in0_block_w",
+            "in0_block_h",
+            "in0_block_num_tiles",
+            "src1_dram_buffer->address()",
+            "in1_tensor_stride_w",
+            "in1_tensor_stride_h",
+            "in1_block_w",
+            "in1_block_h",
+            "in1_block_num_tiles",
+            "column_indices_dram_buffer->address()",
+            "indptr_dram_buffer->address()",
+            "num_tiles_for_col_indices",
+            "num_tiles_for_indptr"
+        });
+
+        print_args("compute_kernel_compile_time_args", compute_kernel_compile_time_args, {
+            "in0_block_w",
+            "in0_num_subblocks",
+            "in0_block_num_tiles",
+            "in0_subblock_num_tiles",
+            "in1_num_subblocks",
+            "in1_block_num_tiles",
+            "in1_per_core_w",
+            "out_subblock_h",
+            "out_subblock_w",
+            "out_subblock_num_tiles",
+            "num_iters_x",
+            "num_iters_y"
+        });
+
+        print_args("writer_compile_time_args", writer_compile_time_args, {
+            "out_is_dram",
+            "dst_dram_buffer->address()",
+            "out_tensor_stride_w",
+            "out_tensor_stride_h",
+            "out_tensor_next_subblock_stride_w",
+            "out_tensor_next_subblock_stride_h",
+            "out_subblock_w",
+            "out_subblock_h",
+            "out_subblock_w * out_subblock_h",
+            "out_num_subblocks_w",
+            "out_num_subblocks_h",
+            "Rt * Nt",
+            "num_iters_x",
+            "num_iters_y"
+        });
+    }
+
     // Create Kernels
     auto reader_id = tt_metal::CreateKernel(
         program,
@@ -543,12 +611,12 @@ void bsr_spmm_multicore_reuse_iteration(
     auto start = bbox.start_coord;
     uint32_t num_work_regions_x = num_blocks_x / num_iters_x;
     uint32_t num_work_regions_y = num_blocks_y / num_iters_y;
-    // TODO: fix this!!! We are never entering this loop!
-    // We need a correct way to iterate over the cores we chose!
     for (int core_idx_y = start.y; core_idx_y <= end.y; core_idx_y++){
         for (int core_idx_x = start.x; core_idx_x <= end.x; core_idx_x++){
             CoreCoord core = {(std::size_t)core_idx_x, (std::size_t)core_idx_y};
-
+            if (verbose)
+              log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
+                
             uint32_t output_idx_x_start = core_idx_x * num_iters_x;
             uint32_t folded_output_idx_y_start = core_idx_y * num_iters_y;
 
@@ -602,14 +670,19 @@ void bsr_spmm_multicore_reuse_iteration(
     EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
     EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
     // EnqueueProgram
+    log_info(tt::LogVerif, " -- Program enqueueing program --");
+
     EnqueueProgram(cq, program, false);
+
+    if (verbose)
+        log_info(tt::LogVerif, " -- Program enqueued --");
     // EnqueueReadSubBuffers
     uint32_t nonzero_row_index = 0;
     for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
         if (a.indptr[row_index+1] - a.indptr[row_index] == 0)
             continue;
         BufferRegion DRAM_row(nonzero_row_index * dram_buffer_dst_row_size, dram_buffer_dst_row_size);
-        EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, false);
+        EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, true);
         nonzero_row_index++;
     }
     Finish(cq);

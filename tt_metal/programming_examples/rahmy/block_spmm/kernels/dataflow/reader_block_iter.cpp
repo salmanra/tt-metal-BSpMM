@@ -96,24 +96,26 @@ void kernel_main(){
         .data_format = indptr_data_format};
 
     cb_reserve_back(cb_id_col_indices, col_indices_num_tiles);
-    l1_write_addr_col_indices = get_write_ptr(cb_id_indptr);
+    l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
     uint32_t col_indices_dram_start_id = 0;
     for (uint32_t i = 0; i < col_indices_num_tiles; i++){
         noc_async_read_tile(col_indices_dram_start_id, s2, l1_write_addr_col_indices);
         col_indices_dram_start_id++;
         l1_write_addr_col_indices += col_indices_single_tile_size_bytes;
     }
+    l1_write_addr_col_indices -= col_indices_single_tile_size_bytes * col_indices_num_tiles;
     noc_async_read_barrier();
     cb_push_back(cb_id_col_indices, col_indices_num_tiles);
 
     cb_reserve_back(cb_id_indptr, indptr_num_tiles);
     l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
     uint32_t indptr_dram_start_id = 0;
-    for (uint32_t i = 0; i < col_indices_num_tiles; i++){
-        noc_async_read_tile(indptr_dram_start_id, s2, l1_write_addr_indptr);
+    for (uint32_t i = 0; i < indptr_num_tiles; i++){
+        noc_async_read_tile(indptr_dram_start_id, s3, l1_write_addr_indptr);
         indptr_dram_start_id++;
         l1_write_addr_indptr += indptr_single_tile_size_bytes;
     }
+    l1_write_addr_indptr -= indptr_single_tile_size_bytes * indptr_num_tiles;
     noc_async_read_barrier();
     cb_push_back(cb_id_indptr, indptr_num_tiles);
     
@@ -128,6 +130,7 @@ void kernel_main(){
         output_idx_y = y_coords[iter_y];
         uint32_t block_row_start = indptr[output_idx_y];
         uint32_t block_row_end = indptr[output_idx_y + 1];
+        DPRINT_DATA0(DPRINT << "output_idx_y: " << output_idx_y << " block_row_start: " << block_row_start << " block_row_end: " << block_row_end << ENDL());
 
         uint32_t in0_tensor_start_tile_id = block_row_start * in0_block_num_tiles;
         for (uint32_t iter_x = 0; iter_x < num_iters_x; iter_x++){
@@ -199,6 +202,7 @@ void kernel_main(){
             }
         }
     }
+    DPRINT_DATA0(DPRINT << "Reader kernel complete!" << ENDL());
 }
 
 

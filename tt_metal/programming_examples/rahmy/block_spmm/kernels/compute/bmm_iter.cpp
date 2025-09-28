@@ -136,5 +136,6 @@ void MAIN {
             }
         }
     }
+    DPRINT_MATH(DPRINT << "Math core done." << ENDL());
 }
 }

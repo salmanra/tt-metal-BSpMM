@@ -346,23 +346,23 @@ int main(int argc, char** argv) {
         // Let only our print statements go to stdout
         // 
         // 1) Save the original stdout (the real console)
-        // int saved_stdout = ::dup(STDOUT_FILENO);
-        // if (saved_stdout == -1) {
-        //     std::perror("dup");
-        //     return 1;
-        // }
+        int saved_stdout = ::dup(STDOUT_FILENO);
+        if (saved_stdout == -1) {
+            std::perror("dup");
+            return 1;
+        }
 
         // // 2) Redirect stdout to a log file (affects std::cout and printf)
-        // int log_fd = ::open("std.out.log", O_CREAT | O_WRONLY | O_TRUNC, 0644);
-        // if (log_fd == -1) {
-        //     std::perror("open");
-        //     return 1;
-        // }
-        // if (::dup2(log_fd, STDOUT_FILENO) == -1) {
-        //     std::perror("dup2");
-        //     return 1;
-        // }
-        // ::close(log_fd); // not needed after dup2
+        int log_fd = ::open("std.out.log", O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        if (log_fd == -1) {
+            std::perror("open");
+            return 1;
+        }
+        if (::dup2(log_fd, STDOUT_FILENO) == -1) {
+            std::perror("dup2");
+            return 1;
+        }
+        ::close(log_fd); // not needed after dup2
         // 
         //
         test_suite(host_code_index);

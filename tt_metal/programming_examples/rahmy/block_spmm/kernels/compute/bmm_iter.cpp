@@ -8,6 +8,7 @@ CK is neutral to order, but it's probably worth naming loop vars
 #include "hostdevcommon/kernel_structs.h"
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
+#include "circular_buffer.h"
 
 
 namespace NAMESPACE {
@@ -49,6 +50,8 @@ void MAIN {
     ///////////////////////////////////////////////////////////////////////
     /// PROGRAM BODY //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
+    mm_init();
+
     for (uint32_t iter_y = 0; iter_y < num_iters_y; iter_y++){
         uint32_t num_blocks = row_sizes[iter_y];
         for (uint32_t iter_x = 0; iter_x < num_iters_x; iter_x++){
@@ -137,5 +140,5 @@ void MAIN {
         }
     }
     DPRINT_MATH(DPRINT << "Math core done." << ENDL());
-}
+};
 }

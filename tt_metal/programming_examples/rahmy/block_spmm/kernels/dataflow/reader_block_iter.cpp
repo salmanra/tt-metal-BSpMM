@@ -1,7 +1,7 @@
-// includes
 #include <stdint.h>
 #include <cstdint>
 #include "dataflow_api.h"
+#include "hostdevcommon/kernel_structs.h"
 #include "debug/dprint.h"  // required in all kernels using DPRINT
 
 void kernel_main(){
@@ -202,19 +202,7 @@ void kernel_main(){
             }
         }
     }
+    cb_pop_front(cb_id_col_indices, indptr_num_tiles);
+    cb_pop_front(cb_id_indptr, indptr_num_tiles);
     DPRINT_DATA0(DPRINT << "Reader kernel complete!" << ENDL());
 }
-
-
-
-// copy-paste reader many-blocks-per-core
-/*
-We're naive, so order of iter doesn't matter
-
-for num_iters_x:
-    in1_tensor_start_tile_id += in1_block_w
-    for num_iters_y:
-        grab y_coord
-        business as usual
-
-*/

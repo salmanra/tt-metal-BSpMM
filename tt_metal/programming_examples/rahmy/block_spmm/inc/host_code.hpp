@@ -606,60 +606,63 @@ void bsr_spmm_multicore_reuse_iteration(
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity,
                                        .compile_args = compute_kernel_compile_time_args});
     // Runtime arguments
-    auto bbox = all_cores.bounding_box();
-    auto end = bbox.end_coord;
-    auto start = bbox.start_coord;
-    uint32_t num_work_regions_x = num_blocks_x / num_iters_x;
-    uint32_t num_work_regions_y = num_blocks_y / num_iters_y;
-    for (int core_idx_y = start.y; core_idx_y <= end.y; core_idx_y++){
-        for (int core_idx_x = start.x; core_idx_x <= end.x; core_idx_x++){
-            CoreCoord core = {(std::size_t)core_idx_x, (std::size_t)core_idx_y};
-            if (verbose)
+    auto core_coords_vec = corerange_to_cores(all_cores);
+    uint32_t work_region = 0;
+    for (auto & core : core_coords_vec){
+        uint32_t core_idx_x = core.x;
+        uint32_t core_idx_y = core.y;
+        if (verbose)
               log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
                 
-            uint32_t output_idx_x_start = core_idx_x * num_iters_x;
-            uint32_t folded_output_idx_y_start = core_idx_y * num_iters_y;
+        // uint32_t output_idx_x_start = core_idx_x * num_iters_x;
+        // uint32_t folded_output_idx_y_start = core_idx_y * num_iters_y;
 
-            std::vector<uint32_t> reader_runtime_args;
-            std::vector<uint32_t> compute_runtime_args;
-            std::vector<uint32_t> writer_runtime_args;
+        // TODO: test :P
+        int output_idx_x_start = (work_region * num_iters_x) % num_blocks_x;
 
-            reader_runtime_args.push_back(num_iters_x);
-            reader_runtime_args.push_back(num_iters_y);
-            reader_runtime_args.push_back(output_idx_x_start);
-            for (int iter_y = 0; iter_y < num_iters_y; iter_y++) {
-                uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y_start + iter_y];
-                reader_runtime_args.push_back(output_idx_y);
-                compute_runtime_args.push_back(a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
+        // this should start somewhere and iterate down the folded matrix
+        int folded_output_idx_y_start = (work_region * num_iters_y) % num_blocks_y;
+        work_region++;
+
+        std::vector<uint32_t> reader_runtime_args;
+        std::vector<uint32_t> compute_runtime_args;
+        std::vector<uint32_t> writer_runtime_args;
+
+        reader_runtime_args.push_back(num_iters_x);
+        reader_runtime_args.push_back(num_iters_y);
+        reader_runtime_args.push_back(output_idx_x_start);
+        for (int iter_y = 0; iter_y < num_iters_y; iter_y++) {
+            uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y_start + iter_y];
+            reader_runtime_args.push_back(output_idx_y);
+            compute_runtime_args.push_back(a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
+        }
+
+        writer_runtime_args.push_back((folded_output_idx_y_start * Rt * Nt) + (output_idx_x_start * in1_block_w));
+
+        tt_metal::SetRuntimeArgs(program, reader_id, core, reader_runtime_args);
+        tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_runtime_args);
+        tt_metal::SetRuntimeArgs(program, writer_id, core, writer_runtime_args);
+
+        if (verbose && core_idx_x == 0 && core_idx_y == 0) {
+            a.pretty_print();
+            log_info(tt::LogVerif, " -- Reader Args --");
+            log_info(tt::LogVerif, "reader_arg[0] (num_iters_x) = {}", reader_runtime_args[0]);
+            log_info(tt::LogVerif, "reader_arg[1] (num_iters_y) = {}",  reader_runtime_args[1]);
+            log_info(tt::LogVerif, "reader_arg[2] (output_idx_x_start) = {}",  reader_runtime_args[2]);
+            for (size_t i = 0; i < num_iters_y; ++i) {
+                log_info(tt::LogVerif, "reader_arg[{}] (y_coord) = {}", i + 3, reader_runtime_args[i+3]);
             }
 
-            writer_runtime_args.push_back((folded_output_idx_y_start * Rt * Nt) + (output_idx_x_start * in1_block_w));
-
-            tt_metal::SetRuntimeArgs(program, reader_id, core, reader_runtime_args);
-            tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_runtime_args);
-            tt_metal::SetRuntimeArgs(program, writer_id, core, writer_runtime_args);
-
-            if (verbose && core_idx_x == 0 && core_idx_y == 0) {
-                a.pretty_print();
-                log_info(tt::LogVerif, " -- Reader Args --");
-                log_info(tt::LogVerif, "reader_arg[0] (num_iters_x) = {}", reader_runtime_args[0]);
-                log_info(tt::LogVerif, "reader_arg[1] (num_iters_y) = {}",  reader_runtime_args[1]);
-                log_info(tt::LogVerif, "reader_arg[2] (output_idx_x_start) = {}",  reader_runtime_args[2]);
-                for (size_t i = 0; i < num_iters_y; ++i) {
-                    log_info(tt::LogVerif, "reader_arg[{}] (y_coord) = {}", i + 3, reader_runtime_args[i+3]);
-                }
-
-                log_info(tt::LogVerif, " -- Writer Args --");
-                const char* writer_arg_names[] = {
-                    "out_tensor_start_tile_id",
-                };
-                for (size_t i = 0; i < writer_runtime_args.size(); ++i) {
-                    log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_runtime_args[i]);
-                }
-                log_info(tt::LogVerif, " -- Compute Args --");
-                for (size_t i = 0; i < num_iters_y; ++i) {
-                    log_info(tt::LogVerif, "compute_arg[{}] (row_size) = {}", i, compute_runtime_args[i]);
-                }
+            log_info(tt::LogVerif, " -- Writer Args --");
+            const char* writer_arg_names[] = {
+                "out_tensor_start_tile_id",
+            };
+            for (size_t i = 0; i < writer_runtime_args.size(); ++i) {
+                log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_runtime_args[i]);
+            }
+            log_info(tt::LogVerif, " -- Compute Args --");
+            for (size_t i = 0; i < num_iters_y; ++i) {
+                log_info(tt::LogVerif, "compute_arg[{}] (row_size) = {}", i, compute_runtime_args[i]);
             }
         }
     }
@@ -670,12 +673,12 @@ void bsr_spmm_multicore_reuse_iteration(
     EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
     EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
     // EnqueueProgram
-    log_info(tt::LogVerif, " -- Program enqueueing program --");
+    log_info(tt::LogVerif, " -- enqueueing program --");
 
-    EnqueueProgram(cq, program, false);
+    EnqueueProgram(cq, program, true);
 
     if (verbose)
-        log_info(tt::LogVerif, " -- Program enqueued --");
+        log_info(tt::LogVerif, " -- Program returned --");
     // EnqueueReadSubBuffers
     uint32_t nonzero_row_index = 0;
     for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
@@ -685,6 +688,9 @@ void bsr_spmm_multicore_reuse_iteration(
         EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, true);
         nonzero_row_index++;
     }
+
+    if (verbose)
+        log_info(tt::LogVerif, " -- Finished reading output --");
     Finish(cq);
 }
 

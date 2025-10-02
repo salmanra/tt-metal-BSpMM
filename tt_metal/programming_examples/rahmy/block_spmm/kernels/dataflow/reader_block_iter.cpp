@@ -174,7 +174,7 @@ void kernel_main(){
 
                 noc_async_read_barrier();
 
-                DPRINT_DATA0(DPRINT << "block " << output_idx_y << ", " << col_indices[block_row_start + reduction_iter] << " read" << ENDL());
+                DPRINT_DATA0(DPRINT << "block " << output_idx_y << ", " << col_indices[reduction_iter] << " read" << ENDL());
 
                 // uint32_t* CB_values = (uint32_t*)l1_write_addr_in0;
                 // for (size_t idx = 0; idx < in0_single_tile_size_bytes / 4; idx+=32){

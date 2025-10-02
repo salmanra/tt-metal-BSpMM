@@ -290,7 +290,10 @@ void test_suite(uint32_t host_code_function_index = 0){
     console_printf("\n");
     console_printf(count_result.c_str());
     console_printf("---------------------------------------------------------------------------------\n");
-
+    console_printf("--- Host code function: ");
+    console_printf(host_function_name.c_str());
+    console_printf("\n");
+    console_printf("---------------------------------------------------------------------------------\n");
 }
 
 void run_verbose_test(int host_code_num, int test_num){

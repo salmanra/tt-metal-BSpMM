@@ -258,6 +258,7 @@ void bsr_spmm_multicore_reuse_iteration(
 
     // Core Grid detection
     auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
+    // auto compute_with_storage_grid_size = CoreCoord(3, 1);
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
     uint32_t num_cores_total = num_cores_x * num_cores_y;
@@ -301,15 +302,15 @@ void bsr_spmm_multicore_reuse_iteration(
     uint32_t num_iters_y = (num_blocks_y + num_cores_y - 1) / num_cores_y;
 
 
-    uint32_t num_work_regions;
+    uint32_t target_num_cores;
     if (num_blocks_total < num_cores_total)
-        num_work_regions = num_blocks_total;
+        target_num_cores = num_blocks_total;
     else 
-        num_work_regions = num_cores_total;
+        target_num_cores = num_cores_total;
 
     
     CoreRangeSet all_cores(
-        tt::tt_metal::num_cores_to_corerangeset(num_work_regions, compute_with_storage_grid_size, true));
+        tt::tt_metal::num_cores_to_corerangeset(target_num_cores, compute_with_storage_grid_size, true));
     
     uint32_t out_subblock_h, out_subblock_w;
     for (auto& subblock_hw : bmm_op_utils::SUBBLOCK_HW_CHOICES) {
@@ -394,10 +395,10 @@ void bsr_spmm_multicore_reuse_iteration(
         log_info(tt::LogVerif, " -- Metalium Core Grid Sizing --");
         log_info(
             tt::LogVerif,
-            " -- Mt= {} -- Nt= {} -- num_work_regions= {} -- num_cores_used={} -- num_cores_available_x={} -- num_cores_available_y={} --",
+            " -- Mt= {} -- Nt= {} -- num_output_blocks= {} -- num_cores_used={} -- num_cores_available_x={} -- num_cores_available_y={} --",
             Mt,
             Nt,
-            num_work_regions,
+            num_blocks_total,
             all_cores.num_cores(),
             num_cores_x,
             num_cores_y);
@@ -614,13 +615,7 @@ void bsr_spmm_multicore_reuse_iteration(
         if (verbose)
               log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
                 
-        // uint32_t output_idx_x_start = core_idx_x * num_iters_x;
-        // uint32_t folded_output_idx_y_start = core_idx_y * num_iters_y;
-
-        // TODO: test :P
         int output_idx_x_start = (work_region * num_iters_x) % num_blocks_x;
-
-        // this should start somewhere and iterate down the folded matrix
         int folded_output_idx_y_start = (work_region * num_iters_y) % num_blocks_y;
         work_region++;
 

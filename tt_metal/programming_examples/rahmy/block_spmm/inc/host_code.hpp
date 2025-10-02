@@ -384,11 +384,12 @@ void bsr_spmm_multicore_reuse_iteration(
         log_info(tt::LogVerif, " -- Core Grid Allocaiton Information --");
         log_info(
             tt::LogVerif,
-            " -- num_cores_y={} -- num_cores_x={} -- num_iters_y={} -- num_iters_x={}",
+            " -- num_cores_y={} -- num_cores_x={} -- num_iters_y={} -- num_iters_x={} -- nnz_rows={} --",
             num_cores_y,
             num_cores_x,
             num_iters_y,
-            num_iters_x);
+            num_iters_x, 
+            nnz_rows);
     }
 
     if (verbose) {
@@ -489,7 +490,6 @@ void bsr_spmm_multicore_reuse_iteration(
         (std::uint32_t)out_subblock_w,
         (std::uint32_t)out_subblock_num_tiles,
         (std::uint32_t)num_iters_x,
-        (std::uint32_t)num_iters_y,
     };
 
     bool out_is_dram = dst_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
@@ -509,7 +509,6 @@ void bsr_spmm_multicore_reuse_iteration(
 
         (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
         (std::uint32_t)num_iters_x,
-        (std::uint32_t)num_iters_y,
     };
 
     if (verbose) {
@@ -559,7 +558,6 @@ void bsr_spmm_multicore_reuse_iteration(
             "out_subblock_w",
             "out_subblock_num_tiles",
             "num_iters_x",
-            "num_iters_y"
         });
 
         print_args("writer_compile_time_args", writer_compile_time_args, {
@@ -576,7 +574,6 @@ void bsr_spmm_multicore_reuse_iteration(
             "out_num_subblocks_h",
             "Rt * Nt",
             "num_iters_x",
-            "num_iters_y"
         });
     }
 
@@ -623,16 +620,20 @@ void bsr_spmm_multicore_reuse_iteration(
         std::vector<uint32_t> compute_runtime_args;
         std::vector<uint32_t> writer_runtime_args;
 
-        reader_runtime_args.push_back(num_iters_x);
-        reader_runtime_args.push_back(num_iters_y);
+        uint32_t num_iters_y_this_core = std::min(num_iters_y, num_blocks_y - folded_bsr_matrix_indices[folded_output_idx_y_start] + 1);
+        uint32_t num_iters_x_this_core = std::min(num_iters_x, num_blocks_x - output_idx_x_start + 1);
+        reader_runtime_args.push_back(num_iters_x_this_core);
+        reader_runtime_args.push_back(num_iters_y_this_core);
+        compute_runtime_args.push_back(num_iters_y_this_core);
         reader_runtime_args.push_back(output_idx_x_start);
-        for (int iter_y = 0; iter_y < num_iters_y; iter_y++) {
+        for (int iter_y = 0; iter_y < num_iters_y_this_core; iter_y++) {
             uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y_start + iter_y];
             reader_runtime_args.push_back(output_idx_y);
             compute_runtime_args.push_back(a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
         }
 
         writer_runtime_args.push_back((folded_output_idx_y_start * Rt * Nt) + (output_idx_x_start * in1_block_w));
+        writer_runtime_args.push_back(num_iters_y_this_core);
 
         tt_metal::SetRuntimeArgs(program, reader_id, core, reader_runtime_args);
         tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_runtime_args);
@@ -644,19 +645,20 @@ void bsr_spmm_multicore_reuse_iteration(
             log_info(tt::LogVerif, "reader_arg[0] (num_iters_x) = {}", reader_runtime_args[0]);
             log_info(tt::LogVerif, "reader_arg[1] (num_iters_y) = {}",  reader_runtime_args[1]);
             log_info(tt::LogVerif, "reader_arg[2] (output_idx_x_start) = {}",  reader_runtime_args[2]);
-            for (size_t i = 0; i < num_iters_y; ++i) {
+            for (size_t i = 0; i < num_iters_y_this_core; ++i) {
                 log_info(tt::LogVerif, "reader_arg[{}] (y_coord) = {}", i + 3, reader_runtime_args[i+3]);
             }
 
             log_info(tt::LogVerif, " -- Writer Args --");
             const char* writer_arg_names[] = {
                 "out_tensor_start_tile_id",
+                "num_iters_this_core"
             };
             for (size_t i = 0; i < writer_runtime_args.size(); ++i) {
                 log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_runtime_args[i]);
             }
             log_info(tt::LogVerif, " -- Compute Args --");
-            for (size_t i = 0; i < num_iters_y; ++i) {
+            for (size_t i = 0; i < num_iters_y_this_core; ++i) {
                 log_info(tt::LogVerif, "compute_arg[{}] (row_size) = {}", i, compute_runtime_args[i]);
             }
         }

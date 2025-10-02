@@ -28,7 +28,6 @@ void MAIN {
     constexpr uint32_t out_subblock_w = get_compile_time_arg_val(8);           // inner column block size in tiles
     constexpr uint32_t out_subblock_num_tiles = get_compile_time_arg_val(9);  // out_subblock_h * out_subblock_w;
     constexpr uint32_t num_iters_x = get_compile_time_arg_val(10);
-    constexpr uint32_t num_iters_y = get_compile_time_arg_val(11);
 
     ///////////////////////////////////////////////////////////////////////
     /// END COMPILETIME ARGS //////////////////////////////////////////////
@@ -37,10 +36,10 @@ void MAIN {
     ///////////////////////////////////////////////////////////////////////
     /// RUNTIME ARGS //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
-
+    const uint32_t num_iters_y = get_arg_val<uint32_t>(0);
     uint32_t row_sizes[num_iters_y];
     for (uint32_t i = 0; i < num_iters_y; i++){
-        row_sizes[i] = get_arg_val<uint32_t>(i);
+        row_sizes[i] = get_arg_val<uint32_t>(i+1);
     }
 
     ///////////////////////////////////////////////////////////////////////

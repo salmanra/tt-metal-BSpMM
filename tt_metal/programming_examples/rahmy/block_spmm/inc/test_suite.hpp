@@ -604,7 +604,7 @@ namespace bsr_test_suite {
         // block params setup
         uint32_t R = 64;
         uint32_t C = 64;
-        uint32_t nblocks = 256;
+        uint32_t nblocks = 512;
         uint32_t block_matrix_height = M / R;
         
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);

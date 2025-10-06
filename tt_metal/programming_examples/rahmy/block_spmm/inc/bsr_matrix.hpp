@@ -27,6 +27,8 @@
 template <typename T>
 class dense_matrix {
 public:
+    static std::uniform_real_distribution<> dis(-1000.0, 1000.0);
+
     std::vector<T> data;
     size_t H;
     size_t W;
@@ -36,7 +38,7 @@ public:
     dense_matrix(int rows, int cols, bool random) : H(rows), W(cols) {
         data.resize(rows * cols);
         if (random)
-            std::generate(data.begin(), data.end(), []() { return static_cast<T>(rand()) / static_cast<T>(RAND_MAX); });
+            std::generate(data.begin(), data.end(), []() { return static_cast<T>(dis()); });
         else {
             std::fill(data.begin(), data.end(), 1);
         }
@@ -154,6 +156,8 @@ public:
 template <typename T>
 class bsr_matrix {
 public: // everything is public for now
+    static std::uniform_real_distribution<> dis(-1000.0, 1000.0);
+
     std::vector<int> indptr;
     std::vector<int> indices;
     std::vector<T> data;
@@ -193,7 +197,7 @@ public:
                         indices.push_back(j);
                         for (size_t k = 0; k < R * C; k++) {
                             if (random) {
-                                data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                                data.push_back(static_cast<T>(dis()));
                             } else {
                                 data.push_back(k);
                             }
@@ -209,7 +213,7 @@ public:
                         indices.push_back(j);
                         for (size_t k = 0; k < R * C; k++) {
                             if (random) {
-                                data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                                data.push_back(static_cast<T>(dis()));
                             } else {
                                 data.push_back(k);
                             }
@@ -224,7 +228,7 @@ public:
                 indices.push_back(i);
                 for (size_t k = 0; k < R * C; k++) {
                     if (random) {
-                        data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                        data.push_back(static_cast<T>(dis()));
                     } else {
                         data.push_back(k);
                     }
@@ -267,7 +271,7 @@ public:
                         indptr[i + 1]++;
                         indices.push_back(j);
                         for (size_t k = 0; k < R * C; k++) {
-                            data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                            data.push_back(static_cast<T>(dis()));
                         }
                     }
                 }
@@ -279,7 +283,7 @@ public:
                         indptr[i + 1]++;
                         indices.push_back(i);
                         for (size_t k = 0; k < R * C; k++) {
-                            data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                            data.push_back(static_cast<T>(dis()));
                         }
                     }
                 }
@@ -463,7 +467,7 @@ public:
                 indices.push_back(col);
                 for (size_t j = 0; j < R * C; j++) {
                     if (random) {
-                        data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                        data.push_back(static_cast<T>(dis()));
                     } else {
                         data.push_back(1);
                     }

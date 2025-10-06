@@ -655,7 +655,8 @@ void bsr_spmm_multicore_reuse_iteration(
         std::vector<uint32_t> compute_runtime_args;
         std::vector<uint32_t> writer_runtime_args;
 
-        uint32_t num_iters_y_this_core = std::min(num_iters_y, num_blocks_y - folded_bsr_matrix_indices[folded_output_idx_y_start] + 1);
+        uint32_t num_iters_y_remaining = num_blocks_y - folded_output_idx_y_start;
+        uint32_t num_iters_y_this_core = std::min(num_iters_y, num_iters_y_remaining);
         uint32_t num_iters_x_this_core = std::min(num_iters_x, num_blocks_x - output_idx_x_start + 1);
         reader_runtime_args.push_back(num_iters_x_this_core);
         reader_runtime_args.push_back(num_iters_y_this_core);
@@ -687,7 +688,7 @@ void bsr_spmm_multicore_reuse_iteration(
             log_info(tt::LogVerif, " -- Writer Args --");
             const char* writer_arg_names[] = {
                 "out_tensor_start_tile_id",
-                "num_iters_this_core"
+                "num_iters_y_this_core"
             };
             for (size_t i = 0; i < writer_runtime_args.size(); ++i) {
                 log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_runtime_args[i]);

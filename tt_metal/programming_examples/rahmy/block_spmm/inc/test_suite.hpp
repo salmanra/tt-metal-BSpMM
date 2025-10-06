@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <random>
 #include "include_me.hpp"
 #include "block_spmm/inc/bsr_matrix.hpp"
 #include "tt-metalium/bfloat16.hpp"
@@ -69,6 +70,7 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_num_iters_y_2_odd_empty_rows();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_large_K();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_random_hang();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_random_hang_v2();
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
@@ -131,7 +133,10 @@ namespace bsr_test_suite {
         test_num_iters_y_2_odd_empty_rows, // 55
         test_big_dense_large_K, // 56
         test_random_hang, // 57
+        test_random_hang_v2, // 58
     };
+
+    static std::uniform_real_distribution<> dis(-1000.0, 1000.0);
     
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_row_v2() {
 
@@ -520,6 +525,37 @@ namespace bsr_test_suite {
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_random_hang");
+    }
+
+        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_random_hang_v2() {
+        // matmul params setup
+        uint32_t M = 1024;
+        uint32_t N = 1024;
+        uint32_t K = 1024;
+        // block params setup
+        uint32_t R = 64;
+        uint32_t C = 64;
+        uint32_t nblocks = 32;
+        uint32_t block_matrix_height = M / R;
+        
+        std::vector<float> data(R*C*nblocks);
+        for (int k = 0; k < nblocks; k++){
+            for (int i = 0; i < R*C; i++){
+                data[k*R*C + i] = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+            }
+        }
+        std::vector<int> indptr = {0, 0, 3, 4, 4, 6, 11, 14, 16, 16, 18, 19, 20, 22, 24, 29, 32};
+        std::vector<int> indices = {0, 3, 4, 11, 1, 2, 0, 2, 6, 11, 14, 7, 10, 14, 0, 9, 13, 14, 1, 14, 9, 15, 1, 3, 3, 7, 11, 13, 14, 8, 9, 15};
+
+        // all nz on one row
+        bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
+        
+        dense_matrix<float> dense(K, N, RAND);
+
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_random_hang_v2");
     }
 
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_num_iters_y_2_odd_empty_rows() {

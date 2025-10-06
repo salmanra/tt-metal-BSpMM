@@ -11,7 +11,6 @@ for num_iters_x:
 #include <cstdint>
 #include <cstring>
 #include "dataflow_api.h"
-#include "debug/dprint.h"
 
 void kernel_main() {
     ///////////////////////////////////////////////////////////////////////
@@ -68,11 +67,8 @@ void kernel_main() {
                 uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
                 for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
                     uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
-                    DPRINT_DATA1(DPRINT << "Writer waiting!" << ENDL());
                     cb_wait_front(cb_id_out0, out_subblock_tile_count);
                     uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
-                    DPRINT_DATA1(DPRINT << "Writer ready!" << ENDL());
-
 
                     for (uint32_t h = 0; h < out_subblock_h; h++) {
                         uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
@@ -89,7 +85,6 @@ void kernel_main() {
 
                     cb_pop_front(cb_id_out0, out_subblock_tile_count);
                     out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
-                    DPRINT_DATA1(DPRINT << "Writer popped a subblock!" << ENDL());
                 }
                 out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
             }
@@ -99,5 +94,4 @@ void kernel_main() {
         out_tensor_start_tile_id += RtNt;
         out_tensor_x_coord_offset = 0;
     }
-    DPRINT_DATA1(DPRINT << "Writer core done" << ENDL());
 }

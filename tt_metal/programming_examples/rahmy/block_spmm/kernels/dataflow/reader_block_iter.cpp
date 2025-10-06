@@ -2,7 +2,6 @@
 #include <cstdint>
 #include "dataflow_api.h"
 #include "hostdevcommon/kernel_structs.h"
-#include "debug/dprint.h"  // required in all kernels using DPRINT
 
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
@@ -35,8 +34,6 @@ void kernel_main(){
     constexpr uint32_t col_indices_num_tiles = get_compile_time_arg_val(18);
     constexpr uint32_t indptr_num_tiles = get_compile_time_arg_val(19);
 
-    DPRINT_DATA0(DPRINT << "Comptime args obtained: "  << ENDL());
-
     ///////////////////////////////////////////////////////////////////////
     /// END COMPILETIME ARGS //////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
@@ -52,7 +49,6 @@ void kernel_main(){
     for (uint32_t i = 0; i < num_iters_y; i++){
         y_coords[i] = get_arg_val<uint32_t>(arg_index++);
     }
-    DPRINT_DATA0(DPRINT << "Runtime args obtained. num output blocks to compute: " << num_iters_x * num_iters_y << ENDL());
 
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
@@ -130,7 +126,6 @@ void kernel_main(){
         output_idx_y = y_coords[iter_y];
         uint32_t block_row_start = indptr[output_idx_y];
         uint32_t block_row_end = indptr[output_idx_y + 1];
-        DPRINT_DATA0(DPRINT << "output_idx_y: " << output_idx_y << " block_row_start: " << block_row_start << " block_row_end: " << block_row_end << ENDL());
 
         uint32_t in0_tensor_start_tile_id = block_row_start * in0_block_num_tiles;
         for (uint32_t iter_x = 0; iter_x < num_iters_x; iter_x++){
@@ -150,7 +145,6 @@ void kernel_main(){
                 for (uint32_t h = 0; h < in0_block_h; h++) {
                     uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id; 
                     for (uint32_t w = 0; w < in0_block_w; w++) {
-                        DPRINT_DATA0(DPRINT << "TILE ID: " << in0_tensor_tile_id << ENDL());
                         noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
                         l1_write_addr_in0 += in0_single_tile_size_bytes;
                         in0_tensor_tile_id += in0_tensor_stride_w;
@@ -174,29 +168,7 @@ void kernel_main(){
 
                 noc_async_read_barrier();
 
-                DPRINT_DATA0(DPRINT << "block " << output_idx_y << ", " << col_indices[reduction_iter] << " read" << ENDL());
 
-                // uint32_t* CB_values = (uint32_t*)l1_write_addr_in0;
-                // for (size_t idx = 0; idx < in0_single_tile_size_bytes / 4; idx+=32){
-                //     for (size_t inner = 0; inner < 32; inner++){
-                //         float top_bits = (float)(CB_values[idx + inner] >> 16);
-                //         float bottom_bits = (float)(CB_values[idx + inner] & 0xFFFF);
-                //         //DPRINT_DATA0(DPRINT << top_bits << ' ' << bottom_bits << ' ');
-                //     }
-                //     //DPRINT_DATA0(DPRINT << ENDL());
-                // }
-                // //DPRINT_DATA0(DPRINT << ENDL());
-                // //DPRINT_DATA0(DPRINT << ENDL());
-                // //DPRINT_DATA0(DPRINT << ENDL());
-                // uint32_t* dense_CB_values = (uint32_t*)l1_write_addr_in1;
-                // for (size_t idx = 0; idx < in0_single_tile_size_bytes / 4; idx+=32){
-                //     for (size_t inner = 0; inner < 32; inner++){
-                //         float top_bits = (float)(dense_CB_values[idx + inner] >> 16);
-                //         float bottom_bits = (float)(dense_CB_values[idx + inner] & 0xFFFF);
-                //         //DPRINT_DATA0(DPRINT << top_bits << ' ' << bottom_bits << ' ');
-                //     }
-                //     //DPRINT_DATA0(DPRINT << ENDL());
-                // }
                 cb_push_back(cb_id_in0, in0_block_num_tiles);
                 cb_push_back(cb_id_in1, in1_block_num_tiles);
             }
@@ -204,5 +176,4 @@ void kernel_main(){
     }
     cb_pop_front(cb_id_col_indices, indptr_num_tiles);
     cb_pop_front(cb_id_indptr, indptr_num_tiles);
-    DPRINT_DATA0(DPRINT << "Reader kernel complete!" << ENDL());
 }

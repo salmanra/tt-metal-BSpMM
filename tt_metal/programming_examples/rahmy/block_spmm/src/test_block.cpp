@@ -13,6 +13,12 @@ using namespace tt::tt_metal;
 using namespace bsr_test_suite;
 using namespace bsr_host_code;
 
+#define ESC "\033["
+#define BLACK_BKG "106"
+#define GREEN_TXT "118"
+#define RED_TXT "196"
+#define RESET "\033[m"
+
 // Print to the *original* console, regardless of where stdout is redirected
 void console_printf(const char* fmt, ...) {
     static int console_fd = -1;
@@ -266,6 +272,7 @@ void test_suite(uint32_t host_code_function_index = 0){
         if (!pass){
             all_pass = false;
         }
+        // std::string result = pass ? "\033[0;118m PASS \033[m" : "\033[0;196m FAIL \033[m";
         std::string result = pass ? "✅ PASS " : "❌ FAIL ";
         
         sprintf(buf, "w/ PCC=%.2f", res.pearson);

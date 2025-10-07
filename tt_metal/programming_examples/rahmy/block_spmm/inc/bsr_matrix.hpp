@@ -2,6 +2,7 @@
 #define BSR_MATRIX_HPP
 
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <vector>
 #include <algorithm>
@@ -19,6 +20,9 @@
 #define FILL_COL 2
 #define FILL_DIAG 3 // will require the size to be perfect
 #define TILE_SIZE 32
+#define RAND_DENOM 2 << 10 // trying to control the range...
+#define SIGNED_RAND_MAX RAND_MAX / 2
+
 
 // TODO: if we wanted, we could put this in a namespace,
 //        then we could define gemm() and spmm() to be
@@ -27,6 +31,8 @@
 template <typename T>
 class dense_matrix {
 public:
+
+    
     std::vector<T> data;
     size_t H;
     size_t W;
@@ -36,9 +42,13 @@ public:
     dense_matrix(int rows, int cols, bool random) : H(rows), W(cols) {
         data.resize(rows * cols);
         if (random)
-            std::generate(data.begin(), data.end(), []() { return static_cast<T>(rand()) / static_cast<T>(RAND_MAX); });
+            std::generate(data.begin(), data.end(), []() { return static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM); });
         else {
-            std::fill(data.begin(), data.end(), 1);
+            // std::fill(data.begin(), data.end(), 1);
+            uint32_t k = 0;
+            for (auto it = data.begin(); it != data.end(); it++){
+                *it = static_cast<T>(k++); 
+            }
         }
     }
 
@@ -193,7 +203,7 @@ public:
                         indices.push_back(j);
                         for (size_t k = 0; k < R * C; k++) {
                             if (random) {
-                                data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                                data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
                             } else {
                                 data.push_back(k);
                             }
@@ -209,7 +219,7 @@ public:
                         indices.push_back(j);
                         for (size_t k = 0; k < R * C; k++) {
                             if (random) {
-                                data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                                data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
                             } else {
                                 data.push_back(k);
                             }
@@ -224,7 +234,7 @@ public:
                 indices.push_back(i);
                 for (size_t k = 0; k < R * C; k++) {
                     if (random) {
-                        data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                        data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
                     } else {
                         data.push_back(k);
                     }
@@ -267,7 +277,7 @@ public:
                         indptr[i + 1]++;
                         indices.push_back(j);
                         for (size_t k = 0; k < R * C; k++) {
-                            data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                            data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
                         }
                     }
                 }
@@ -279,7 +289,7 @@ public:
                         indptr[i + 1]++;
                         indices.push_back(i);
                         for (size_t k = 0; k < R * C; k++) {
-                            data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                            data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
                         }
                     }
                 }
@@ -463,9 +473,9 @@ public:
                 indices.push_back(col);
                 for (size_t j = 0; j < R * C; j++) {
                     if (random) {
-                        data.push_back(static_cast<T>(rand()) / static_cast<T>(RAND_MAX));
+                        data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
                     } else {
-                        data.push_back(1);
+                        data.push_back(j);
                     }
                 }
             }

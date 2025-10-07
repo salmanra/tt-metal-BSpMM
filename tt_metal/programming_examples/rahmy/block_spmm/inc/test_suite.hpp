@@ -609,23 +609,15 @@ namespace bsr_test_suite {
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_big_random");
     }
 
-    // TODO: this example is prime for a next-steps sort of thinking for the impl. What to do 
-    //          with nblocks > ncores?
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense() {
         // matmul params setup
         uint32_t M = 4096;
         uint32_t N = 4096;
         uint32_t K = 512;
-        // block params setup
-        // uint32_t R = 64;
-        // uint32_t C = 64;
-        // uint32_t nblocks = 256;
-        // uint32_t block_matrix_height = M / R;
         
         dense_matrix<float> tmp(M, K, RAND);
         bsr_matrix<float> bsr(tmp, N);
         dense_matrix<float> dense(K, N, RAND);
-
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -663,12 +655,13 @@ namespace bsr_test_suite {
         uint32_t nblocks = 32;
         uint32_t block_matrix_height = M / R;
         
-        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
-        dense_matrix<float> dense(K, N, RAND);
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, NO_RAND);
+        dense_matrix<float> dense(K, N, NO_RAND);
 
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_big_dense_large_K");
     }
 

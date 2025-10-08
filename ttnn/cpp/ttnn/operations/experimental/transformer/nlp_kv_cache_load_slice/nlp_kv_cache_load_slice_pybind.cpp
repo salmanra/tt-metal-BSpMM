@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 
 #include "ttnn/operations/experimental/transformer/nlp_kv_cache_load_slice/nlp_kv_cache_load_slice.hpp"
 
@@ -23,17 +23,15 @@ void bind_nlp_kv_cache_load_slice(pybind11::module& module) {
                const uint32_t seq_len_start,
                const uint32_t seq_len_end,
                const std::optional<ttnn::MemoryConfig>& memory_config,
-               std::optional<ttnn::Tensor> optional_output_tensor,
-               uint8_t queue_id) {
-                return self(queue_id, input_tensor, seq_len_start, seq_len_end, memory_config, optional_output_tensor);
+               std::optional<ttnn::Tensor> optional_output_tensor) {
+                return self(input_tensor, seq_len_start, seq_len_end, memory_config, optional_output_tensor);
             },
             pybind11::arg("input_tensor").noconvert(),
             pybind11::kw_only(),
             pybind11::arg("seq_len_start").noconvert(),
             pybind11::arg("seq_len_end").noconvert(),
             pybind11::arg("memory_config") = std::nullopt,
-            pybind11::arg("output_tensor") = std::nullopt,
-            pybind11::arg("queue_id") = 0});
+            pybind11::arg("output_tensor") = std::nullopt});
 }
 
 }  // namespace ttnn::operations::experimental::transformer::detail

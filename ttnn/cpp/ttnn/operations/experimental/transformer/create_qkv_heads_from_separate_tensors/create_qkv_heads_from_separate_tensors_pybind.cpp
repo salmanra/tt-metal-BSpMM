@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 
 #include "ttnn/operations/experimental/transformer/create_qkv_heads_from_separate_tensors/create_qkv_heads_from_separate_tensors.hpp"
 #include "ttnn/operations/experimental/transformer/create_qkv_heads_from_separate_tensors/create_qkv_heads_from_separate_tensors_pybind.hpp"
@@ -26,10 +26,8 @@ void bind_create_qkv_heads_from_separate_tensors_template(
                const std::optional<uint32_t> num_kv_heads,
                const bool transpose_k_heads,
                const std::optional<ttnn::MemoryConfig>& memory_config,
-               std::optional<std::array<Tensor, 3>> optional_output_tensors,
-               uint8_t queue_id) {
+               std::optional<std::array<Tensor, 3>> optional_output_tensors) {
                 return self(
-                    queue_id,
                     input_tensor_q,
                     input_tensor_kv,
                     num_heads,
@@ -45,8 +43,7 @@ void bind_create_qkv_heads_from_separate_tensors_template(
             pybind11::arg("num_kv_heads").noconvert() = std::nullopt,
             pybind11::arg("transpose_k_heads").noconvert() = true,
             pybind11::arg("memory_config").noconvert() = std::nullopt,
-            pybind11::arg("output_tensors").noconvert() = std::nullopt,
-            pybind11::arg("queue_id") = 0});
+            pybind11::arg("output_tensors").noconvert() = std::nullopt});
 };
 
 void bind_create_qkv_heads_from_separate_tensors(pybind11::module& module) {

@@ -4,19 +4,24 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <tuple>
 
-#include "core_coord.hpp"
-#include "buffer_constants.hpp"
-#include "hal.hpp"
+#include <tt-metalium/buffer_types.hpp>
+#include <tt-metalium/core_coord.hpp>
+#include <tt-metalium/hal_types.hpp>
+#include <tt-metalium/mesh_buffer.hpp>
+
+namespace tt {
+namespace tt_metal {
+class IDevice;
+}  // namespace tt_metal
+}  // namespace tt
 
 namespace tt::tt_metal {
-
-inline namespace v0 {
-
-class Buffer;
-class IDevice;
 
 class GlobalSemaphore {
 public:
@@ -38,20 +43,18 @@ public:
 
     void reset_semaphore_value(uint32_t reset_value) const;
 
-    static constexpr auto attribute_names = std::forward_as_tuple("cores");
-    const auto attribute_values() const { return std::make_tuple(this->cores_); }
+    static constexpr auto attribute_names = std::forward_as_tuple("cores", "buffer_type");
+    auto attribute_values() const { return std::make_tuple(this->cores_, this->buffer_.get_buffer()->buffer_type()); }
 
 private:
     void setup_buffer(uint32_t initial_value, BufferType buffer_type);
 
     // GlobalSemaphore is implemented as a wrapper around a sharded buffer
     // This can be updated in the future to be its own container with optimized dispatch functions
-    std::shared_ptr<Buffer> buffer_;
+    distributed::AnyBuffer buffer_;
     IDevice* device_;
     CoreRangeSet cores_;
 };
-
-}  // namespace v0
 
 }  // namespace tt::tt_metal
 

@@ -8,7 +8,7 @@ import torch.optim as optim
 
 import ttnn
 import pytest
-from models.utility_functions import (
+from models.common.utility_functions import (
     comp_allclose_and_pcc,
 )
 from loguru import logger
@@ -102,7 +102,7 @@ def run_moreh_adam(shape, lr, betas, eps, weight_decay, amsgrad, fp32_dest_acc_e
         compute_kernel_config=compute_kernel_config,
     )
 
-    assert dev_param.shape.with_tile_padding() == ttnn.Shape(model.weight.shape)
+    assert dev_param.padded_shape == ttnn.Shape(model.weight.shape)
 
     param_result = dev_param_out.cpu().to(ttnn.ROW_MAJOR_LAYOUT).to_torch().to(torch.bfloat16)
     exp_avg_result = dev_exp_avg_out.cpu().to(ttnn.ROW_MAJOR_LAYOUT).to_torch().to(torch.bfloat16)
@@ -162,7 +162,7 @@ def test_moreh_adam(shape, lr, betas, eps, weight_decay, amsgrad, fp32_dest_acc_
         ([2, 2, 2, 2, 2, 2, 64, 64], 0.0, (0.9, 0.999), 1e-06, 0.0, False, False),
     ),
 )
-def test_moreh_adam_callback(params, device, use_program_cache):
+def test_moreh_adam_callback(params, device):
     torch.manual_seed(2024)
     num_program_cache_entries_list = []
     for i in range(2):
@@ -184,7 +184,7 @@ def test_moreh_adam_callback(params, device, use_program_cache):
         ([2, 2, 2, 2, 2, 2, 64, 64], 0.0, (0.9, 0.999), 1e-06, 0.0, False, False),
     ),
 )
-def test_moreh_adam_caching(params, device, use_program_cache):
+def test_moreh_adam_caching(params, device):
     torch.manual_seed(2024)
     num_program_cache_entries_list = []
     for i in range(1, 5):

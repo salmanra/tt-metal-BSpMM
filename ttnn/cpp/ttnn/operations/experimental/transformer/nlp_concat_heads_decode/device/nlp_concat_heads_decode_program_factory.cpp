@@ -4,7 +4,6 @@
 
 #include <tt-metalium/host_api.hpp>
 #include <tt-metalium/constants.hpp>
-#include <tt-metalium/util.hpp>
 #include "nlp_concat_heads_decode_device_operation.hpp"
 #include <tt-metalium/work_split.hpp>
 
@@ -12,21 +11,20 @@ namespace ttnn::operations::experimental::transformer {
 
 using namespace tt;
 using namespace tt::constants;
-using namespace tt::tt_metal;
 
-operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode(
+tt::tt_metal::operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode(
     const Tensor& input_tensor, Tensor& output, CoreCoord compute_with_storage_grid_size) {
     tt_metal::Program program = tt_metal::CreateProgram();
 
-    const auto& input_shape = input_tensor.get_padded_shape();
+    const auto& input_shape = input_tensor.padded_shape();
     const uint32_t head_dim = input_shape[-1];
     const uint32_t batch = input_shape[1];
 
     tt_metal::IDevice* device = input_tensor.device();
 
-    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
+    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor.dtype());
 
-    uint32_t single_tile_size = tt_metal::detail::TileSize(cb_data_format);
+    uint32_t single_tile_size = tt::tile_size(cb_data_format);
 
     uint32_t head_tiles = head_dim / TILE_WIDTH;
     uint32_t head_size = head_tiles * single_tile_size;
@@ -38,7 +36,6 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode(
     auto q_num_tiles = q_shard_spec.shape[0] * q_shard_spec.shape[1] / TILE_HW;
     auto in_shard_spec = input_tensor.shard_spec().value();
     auto in_cores = in_shard_spec.grid;
-    auto in_num_tiles = in_shard_spec.shape[0] * in_shard_spec.shape[1] / TILE_HW;
 
     uint32_t q_output_cb_index = CBIndex::c_16;
     tt_metal::CircularBufferConfig cb_q_output_config =
@@ -56,7 +53,6 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode(
     const auto& cores = grid_to_cores(num_cores, num_cores_x, num_cores_y, true);
 
     // cores for input
-    uint32_t in_num_cores = in_cores.num_cores();  // number of cores of the input
     auto in_core_grid = in_cores.bounding_box();
     uint32_t in_num_cores_x = in_core_grid.end_coord.x + 1, in_num_cores_y = in_core_grid.end_coord.y + 1;
 
@@ -101,7 +97,7 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode(
 
     for (uint32_t i = 0; i < num_cores; ++i) {
         uint32_t in_tile_offset_by_batch =
-            i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512 * element_size;
+            i < 16 ? i * sub_tile_line_bytes : ((i - 16) * sub_tile_line_bytes) + (512 * element_size);
 
         const auto& core = cores[i];
         std::vector<uint32_t> reader_runtime_args;
@@ -120,12 +116,10 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode(
     auto override_runtime_arguments_callback =
         [reader_kernel_id, writer_kernel_id, num_cores, cb_q_output, cores, element_size, sub_tile_line_bytes](
             const void* operation,
-            Program& program,
+            tt::tt_metal::Program& program,
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<Tensor>& output_tensors) {
-            auto src_buffer = input_tensors.at(0).buffer();
-
             auto dst_buffer_query = output_tensors.at(0).buffer();
 
             UpdateDynamicCircularBufferAddress(program, cb_q_output, *dst_buffer_query);
@@ -136,7 +130,7 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode(
 
             for (uint32_t i = 0; i < num_cores; ++i) {
                 uint32_t in_tile_offset_by_batch =
-                    i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512 * element_size;
+                    i < 16 ? i * sub_tile_line_bytes : ((i - 16) * sub_tile_line_bytes) + (512 * element_size);
                 const auto& core = cores[i];
                 auto& runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
                 runtime_args[0] = in_tile_offset_by_batch;
@@ -150,25 +144,26 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode(
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 }
-operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode_subcoregrids(
+
+tt::tt_metal::operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode_subcoregrids(
     const Tensor& input_tensor, Tensor& output, CoreCoord compute_with_storage_grid_size) {
     tt_metal::Program program = tt_metal::CreateProgram();
 
-    const auto& input_shape = input_tensor.get_padded_shape();
+    const auto& input_shape = input_tensor.padded_shape();
     const uint32_t head_dim = input_shape[-1];
     const uint32_t batch = input_shape[1];
 
     tt_metal::IDevice* device = input_tensor.device();
 
-    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
+    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor.dtype());
 
-    const uint32_t single_tile_size = tt_metal::detail::TileSize(cb_data_format);
-    auto tile_shape = input_tensor.get_tensor_spec().tile().get_tile_shape();
+    const uint32_t single_tile_size = tt::tile_size(cb_data_format);
+    auto tile_shape = input_tensor.tensor_spec().tile().get_tile_shape();
     auto tile_h = tile_shape[0];
     auto tile_w = tile_shape[1];
     auto tile_hw = tile_h * tile_w;
 
-    auto face_shape = input_tensor.get_tensor_spec().tile().get_face_shape();
+    auto face_shape = input_tensor.tensor_spec().tile().get_face_shape();
     auto face_h = face_shape[0];
     auto face_w = face_shape[1];
     auto face_hw = face_h * face_w;
@@ -183,7 +178,6 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode_subcoregrids(
     const auto q_num_tiles = q_shard_spec.shape[0] * q_shard_spec.shape[1] / tile_hw;
     const auto in_shard_spec = input_tensor.shard_spec().value();
     const auto in_cores = in_shard_spec.grid;
-    const auto in_num_tiles = in_shard_spec.shape[0] * in_shard_spec.shape[1] / tile_hw;
 
     uint32_t q_output_cb_index = CBIndex::c_16;
     tt_metal::CircularBufferConfig cb_q_output_config =
@@ -245,7 +239,7 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode_subcoregrids(
 
         const auto& core = cores[i];
         std::vector<uint32_t> reader_runtime_args;
-        reader_runtime_args.reserve(2 + 2 * in_num_cores);
+        reader_runtime_args.reserve(2 + (2 * in_num_cores));
         reader_runtime_args = {
             in_tile_offset_by_batch,
             q_start_addr,
@@ -268,12 +262,10 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode_subcoregrids(
          face_h,
          tile_w](
             const void* operation,
-            Program& program,
+            tt::tt_metal::Program& program,
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<Tensor>& output_tensors) {
-            auto src_buffer = input_tensors.at(0).buffer();
-
             auto dst_buffer_query = output_tensors.at(0).buffer();
 
             UpdateDynamicCircularBufferAddress(program, cb_q_output, *dst_buffer_query);

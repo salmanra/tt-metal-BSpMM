@@ -8,7 +8,7 @@ import torch.optim as optim
 
 import ttnn
 import pytest
-from models.utility_functions import comp_allclose_and_pcc, is_wormhole_b0
+from models.common.utility_functions import comp_allclose_and_pcc, is_wormhole_b0
 from tests.ttnn.unit_tests.operations.test_utils import (
     get_compute_kernel_options,
     compute_kernel_options,
@@ -207,7 +207,6 @@ def test_moreh_sgd_callback(
     npu_dtype,
     cpu_dtype,
     device,
-    use_program_cache,
 ):
     if nesterov and (momentum <= 0 or dampening != 0):
         pytest.skip()

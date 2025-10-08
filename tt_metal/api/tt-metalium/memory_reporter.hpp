@@ -4,22 +4,28 @@
 
 #pragma once
 
-#include <filesystem>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-#include "allocator.hpp"
+#include <tt-metalium/allocator.hpp>
+
+namespace tt {
+namespace tt_metal {
+enum class BufferType;
+}  // namespace tt_metal
+}  // namespace tt
 
 namespace tt::tt_metal {
-inline namespace v0 {
 
-class Program;
 class IDevice;
+class Program;
 
-}  // namespace v0
 namespace detail {
 struct MemoryView;
 
@@ -110,7 +116,7 @@ public:
     static bool enabled();
 
 private:
-    MemoryReporter() {};
+    MemoryReporter() = default;
     ~MemoryReporter();
     void init_reports();
     static std::atomic<bool> is_enabled_;

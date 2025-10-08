@@ -2,13 +2,11 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 import collections.abc
-import torch
 import torch.nn as nn
 
-from models.utility_functions import (
-    tt_to_torch_tensor,
+from models.common.utility_functions import (
     torch_to_tt_tensor_rm,
 )
 
@@ -57,7 +55,7 @@ class TtSwinPatchEmbeddings(nn.Module):
         return pixel_values
 
     def forward(self, pixel_values: Optional[ttnn.Tensor]) -> Tuple[ttnn.Tensor, Tuple[int]]:
-        _, num_channels, height, width = pixel_values.shape.with_tile_padding()
+        _, num_channels, height, width = pixel_values.padded_shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
@@ -65,7 +63,7 @@ class TtSwinPatchEmbeddings(nn.Module):
         # pad the input to be divisible by self.patch_size, if needed
         pixel_values = self.maybe_pad(pixel_values, height, width)
         embeddings = self.projection(pixel_values)
-        batch, channel, height, width = embeddings.shape.with_tile_padding()
+        batch, channel, height, width = embeddings.padded_shape
         output_dimensions = (height, width)
         embeddings = fallback_ops.reshape(embeddings, 1, batch, channel, height * width)
         embeddings = ttnn.transpose(embeddings, -2, -1)

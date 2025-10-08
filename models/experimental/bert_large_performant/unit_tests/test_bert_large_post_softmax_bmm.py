@@ -6,10 +6,8 @@
 from loguru import logger
 
 
-import numpy as np
-
 import ttnn
-from models.utility_functions import (
+from models.common.utility_functions import (
     comp_pcc,
 )
 from models.demos.metal_BERT_large_11.tt import custom_matmuls
@@ -58,7 +56,7 @@ def run_bert_large_post_softmax_bmm_test(device, dtype, in0_mem_config, in1_mem_
     logger.debug(f"in1 is on: {b_t.memory_config().buffer_type}")
     logger.debug(f"out is on: {t2.memory_config().buffer_type}")
 
-    assert t2.shape.with_tile_padding() == out_shape
+    assert t2.padded_shape == out_shape
     pyt_got_back_rm = ttnn.to_torch(t2)
 
     ref_bmm = torch.matmul(A.reshape([9, 16, 384, 384]), B)
@@ -105,7 +103,7 @@ def test_bert_large_post_softmax_bmm_test(device, dtype, in0_mem_config, in1_mem
     run_bert_large_post_softmax_bmm_test(device, dtype, in0_mem_config, in1_mem_config, out_mem_config)
 
 
-def test_bert_large_post_softmax_bmm_with_program_cache(device, use_program_cache):
+def test_bert_large_post_softmax_bmm_with_program_cache(device):
     dtype = ttnn.bfloat8_b
     mem_config = ttnn.DRAM_MEMORY_CONFIG
     for _ in range(2):

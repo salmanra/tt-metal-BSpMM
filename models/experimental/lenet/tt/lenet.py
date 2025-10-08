@@ -3,12 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import ttnn
-import torch
 import torch.nn as nn
 
 
 from models.experimental.lenet.lenet_utils import load_torch_lenet
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor
+from models.common.utility_functions import torch2tt_tensor
 from tt_lib.fallback_ops import fallback_ops
 
 
@@ -126,7 +125,7 @@ class TtLeNet5(nn.Module):
         out = self.maxp2(out)  # HOST (fallback)
 
         # using fallback since last dimension of tensor is not divisible by 2
-        out_shape = out.shape.with_tile_padding()
+        out_shape = out.padded_shape
         out = fallback_ops.reshape(
             out, out_shape[0], 1, 1, out_shape[1] * out_shape[2] * out_shape[3]
         )  # HOST (fallback)

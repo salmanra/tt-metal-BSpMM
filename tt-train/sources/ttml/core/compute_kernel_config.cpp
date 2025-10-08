@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -17,7 +17,7 @@ ttnn::WormholeComputeKernelConfig ComputeKernelConfig::precise() {
 
 ttnn::WormholeComputeKernelConfig ComputeKernelConfig::softmax() {
     ttnn::WormholeComputeKernelConfig config;
-    config.fp32_dest_acc_en = true;
+    config.fp32_dest_acc_en = false;
     config.math_approx_mode = false;
     config.math_fidelity = MathFidelity::HiFi4;
     config.packer_l1_acc = true;

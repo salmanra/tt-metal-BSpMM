@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 # SPDX-License-Identifier: Apache-2.0
 
@@ -6,7 +6,7 @@ import torch
 import pytest
 import ttnn
 from loguru import logger
-from models.utility_functions import nearest_32, pad_by_zero, skip_for_grayskull
+from models.common.utility_functions import nearest_32, pad_by_zero
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_pcc, comp_equal
 
 
@@ -22,6 +22,10 @@ def run_test_paged_fused_update_cache_decode(
     cache_dtype,
     device,
     pcc,
+    sub_core_grids=None,
+    row_major=False,
+    is_cur_pos_sharded=False,
+    is_page_table_sharded=False,
 ):
     max_num_blocks_per_seq = max_seq_len // block_size
     assert max_num_blocks_per_seq * block_size == max_seq_len
@@ -49,7 +53,30 @@ def run_test_paged_fused_update_cache_decode(
         permutation = torch.randperm(max_num_blocks)
         reverse_permutation = torch.argsort(permutation)
         page_table = reverse_permutation.reshape(num_users, max_num_blocks_per_seq)
-        page_table_tt = ttnn.Tensor(page_table, ttnn.int32).to(device)
+
+        if is_page_table_sharded:
+            page_table_core_grids = ttnn.CoreRangeSet(
+                [
+                    ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 0)),
+                    ttnn.CoreRange(ttnn.CoreCoord(0, 1), ttnn.CoreCoord(7, 1)),
+                ]
+            )
+            page_table = page_table.repeat(page_table_core_grids.num_cores(), 1)
+            page_table_shard_spec = ttnn.ShardSpec(
+                page_table_core_grids, (num_users, max_num_blocks_per_seq), ttnn.ShardOrientation.ROW_MAJOR
+            )
+            page_table_memory_config = ttnn.MemoryConfig(
+                ttnn.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.BufferType.L1, page_table_shard_spec
+            )
+            page_table_tt = ttnn.as_tensor(
+                page_table,
+                device=device,
+                dtype=ttnn.uint16,
+                layout=ttnn.ROW_MAJOR_LAYOUT,
+                memory_config=page_table_memory_config,
+            )
+        else:
+            page_table_tt = ttnn.Tensor(page_table, ttnn.int32).to(device)
 
         # Prepare paged caches for both cache1 and cache2
         shuffled_cache1 = prepare_paged_cache(cache1, permutation)
@@ -66,43 +93,58 @@ def run_test_paged_fused_update_cache_decode(
     # Prepare inputs
     x1 = torch.randn(input_shape).bfloat16().float()
     x2 = torch.randn(input_shape).bfloat16().float()
-    x1_pad = torch.nn.functional.pad(x1, (0, 0, 0, 32 - num_heads), "constant", 0)
-    x2_pad = torch.nn.functional.pad(x2, (0, 0, 0, 32 - num_heads), "constant", 0)
+    if row_major:
+        max_num_heads = 8
+        assert num_heads <= max_num_heads, f"num_heads must be less than or equal to {max_num_heads}"
+        x1_pad = torch.nn.functional.pad(x1, (0, 0, 0, max_num_heads - num_heads), "constant", 0)
+        x2_pad = torch.nn.functional.pad(x2, (0, 0, 0, max_num_heads - num_heads), "constant", 0)
 
-    xt1 = ttnn.Tensor(x1_pad, input_dtype).to(ttnn.TILE_LAYOUT)
-    xt2 = ttnn.Tensor(x2_pad, input_dtype).to(ttnn.TILE_LAYOUT)
+        xt1 = ttnn.Tensor(x1_pad, input_dtype).to(ttnn.ROW_MAJOR_LAYOUT)
+        xt2 = ttnn.Tensor(x2_pad, input_dtype).to(ttnn.ROW_MAJOR_LAYOUT)
+    else:
+        x1_pad = torch.nn.functional.pad(x1, (0, 0, 0, 32 - num_heads), "constant", 0)
+        x2_pad = torch.nn.functional.pad(x2, (0, 0, 0, 32 - num_heads), "constant", 0)
+
+        xt1 = ttnn.Tensor(x1_pad, input_dtype).to(ttnn.TILE_LAYOUT)
+        xt2 = ttnn.Tensor(x2_pad, input_dtype).to(ttnn.TILE_LAYOUT)
 
     # Sharding setup
     num_cores_per_cache = num_users
     assert (
         num_users % 8 == 0 or num_users == 1
     ), "num_users must be a multiple of 8 or less than 8 for fused_qk rotary embedding"
-    if num_users == 1:
-        shard_grid1_start_coord = ttnn.CoreCoord(0, 0)
-        shard_grid1_end_coord = ttnn.CoreCoord(0, 0)
-        shard_grid2_start_coord = ttnn.CoreCoord(1, 0)
-        shard_grid2_end_coord = ttnn.CoreCoord(1, 0)
-    else:
-        shard_grid1_start_coord = ttnn.CoreCoord(0, 0)
-        shard_grid1_end_coord = ttnn.CoreCoord((num_users - 1) % 8, (num_users // 8) - 1)
-        shard_grid2_start_coord = ttnn.CoreCoord(0, (num_users // 8))
-        shard_grid2_end_coord = ttnn.CoreCoord((num_users - 1) % 8, (num_users // 4) - 1)
 
-    shard_grid1 = ttnn.CoreRangeSet({ttnn.CoreRange(shard_grid1_start_coord, shard_grid1_end_coord)})
-    shard_grid2 = ttnn.CoreRangeSet({ttnn.CoreRange(shard_grid2_start_coord, shard_grid2_end_coord)})
+    if sub_core_grids is None:
+        compute_grid_size = device.compute_with_storage_grid_size()
+        grid_start_coord = ttnn.CoreCoord(0, 0)
+        grid_end_coord = ttnn.CoreCoord(compute_grid_size.x - 1, compute_grid_size.y - 1)
+        available_core_grid = ttnn.CoreRangeSet({ttnn.CoreRange(grid_start_coord, grid_end_coord)})
+    else:
+        grid_start_coord = sub_core_grids.ranges()[0].start
+        available_core_grid = sub_core_grids
+
+    shard_grid1 = ttnn.num_cores_to_corerangeset_in_subcoregrids(
+        grid_start_coord, num_cores_per_cache, available_core_grid, True
+    )
+    available_core_grid = available_core_grid.subtract(shard_grid1)
+    grid_start_coord = available_core_grid.ranges()[0].start
+
+    shard_grid2 = ttnn.num_cores_to_corerangeset_in_subcoregrids(
+        grid_start_coord, num_cores_per_cache, available_core_grid, True
+    )
     input_shard_spec1 = ttnn.ShardSpec(
         shard_grid1,
         [
-            xt1.volume() // xt1.shape.with_tile_padding()[-1] // num_cores_per_cache,
-            xt1.shape.with_tile_padding()[-1],
+            xt1.volume() // xt1.padded_shape[-1] // num_cores_per_cache,
+            xt1.padded_shape[-1],
         ],
         ttnn.ShardOrientation.ROW_MAJOR,
     )
     input_shard_spec2 = ttnn.ShardSpec(
         shard_grid2,
         [
-            xt1.volume() // xt1.shape.with_tile_padding()[-1] // num_cores_per_cache,
-            xt1.shape.with_tile_padding()[-1],
+            xt1.volume() // xt1.padded_shape[-1] // num_cores_per_cache,
+            xt1.padded_shape[-1],
         ],
         ttnn.ShardOrientation.ROW_MAJOR,
     )
@@ -115,7 +157,22 @@ def run_test_paged_fused_update_cache_decode(
     cache_idxs = [cache_idx + i * 17 for i in range(num_users)]
     if num_heads == 1:
         cache_idxs[num_users // 2] = -1
-    cache_idxs_tt = ttnn.Tensor(torch.tensor(cache_idxs), ttnn.int32).to(device)
+    cache_idxs_memory_config = None
+    if is_cur_pos_sharded:
+        cache_idxs_core_grids = ttnn.CoreRangeSet(
+            [
+                ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 0)),
+                ttnn.CoreRange(ttnn.CoreCoord(0, 1), ttnn.CoreCoord(7, 1)),
+            ]
+        )
+        cache_idxs_pt = torch.tensor([cache_idxs] * cache_idxs_core_grids.num_cores())
+        cache_idxs_shard_spec = ttnn.ShardSpec(cache_idxs_core_grids, (1, num_users), ttnn.ShardOrientation.ROW_MAJOR)
+        cache_idxs_memory_config = ttnn.MemoryConfig(
+            ttnn.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.BufferType.L1, cache_idxs_shard_spec
+        )
+        cache_idxs_tt = ttnn.Tensor(torch.tensor(cache_idxs_pt), ttnn.int32).to(device, cache_idxs_memory_config)
+    else:
+        cache_idxs_tt = ttnn.Tensor(torch.tensor(cache_idxs), ttnn.int32).to(device)
 
     # Perform fused update cache operation
     cachett1, cachett2 = ttnn.experimental.paged_fused_update_cache(
@@ -168,7 +225,6 @@ def run_test_paged_fused_update_cache_decode(
         assert eq_cache and eq_update, f"Cache{cache_idx} and update slice mismatch"
 
 
-@skip_for_grayskull("Grayskull does not support paged cache")
 @pytest.mark.timeout(1200)
 @pytest.mark.parametrize("paged_update", [True, False])
 @pytest.mark.parametrize("block_size", [64, 128], ids=["block64", "block128"])
@@ -191,7 +247,6 @@ def test_paged_fused_update_cache_decode(
     input_dtype,
     cache_dtype,
     device,
-    use_program_cache,
     pcc,
 ):
     run_test_paged_fused_update_cache_decode(
@@ -209,7 +264,6 @@ def test_paged_fused_update_cache_decode(
     )
 
 
-@skip_for_grayskull("Grayskull does not support paged cache")
 @pytest.mark.timeout(1200)
 @pytest.mark.parametrize("paged_update", [True, False])
 @pytest.mark.parametrize("block_size", [64, 128], ids=["block64", "block128"])
@@ -232,7 +286,6 @@ def test_paged_fused_update_cache_decode_program_caching(
     input_dtype,
     cache_dtype,
     device,
-    use_program_cache,
     pcc,
 ):
     dummy_tensors = []
@@ -255,8 +308,8 @@ def test_paged_fused_update_cache_decode_program_caching(
         input_shard_spec = ttnn.ShardSpec(
             shard_grid,
             [
-                xt.volume() // xt.shape.with_tile_padding()[-1] // num_cores,
-                xt.shape.with_tile_padding()[-1],
+                xt.volume() // xt.padded_shape[-1] // num_cores,
+                xt.padded_shape[-1],
             ],
             ttnn.ShardOrientation.ROW_MAJOR,
         )

@@ -34,8 +34,8 @@ struct MorehGroupNormOperation {
 
     struct MorehGroupNormFactory {
         struct shared_variables_t {
-            KernelHandle reader_kernels_id;
-            KernelHandle writer_kernels_id;
+            tt::tt_metal::KernelHandle reader_kernels_id;
+            tt::tt_metal::KernelHandle writer_kernels_id;
             uint32_t num_cores_to_be_used;
             std::size_t num_cores_y;
         };
@@ -64,8 +64,8 @@ struct MorehGroupNormOperation {
     static tensor_return_value_t create_output_tensors(const operation_attributes_t&, const tensor_args_t&);
     static std::tuple<operation_attributes_t, tensor_args_t> invoke(
         const Tensor& input,
-        const uint32_t num_groups,
-        const float eps,
+        uint32_t num_groups,
+        float eps,
         const std::optional<const Tensor>& gamma,
         const std::optional<const Tensor>& beta,
         const std::vector<bool>& are_required_outputs,

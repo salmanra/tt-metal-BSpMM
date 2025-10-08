@@ -12,21 +12,25 @@ from typing import Optional, Union, Callable
 from ttnn.dot_access import make_dot_access_dict
 
 from loguru import logger
-import torch
 
 import ttnn
 from ttnn.torch_tracer import trace, visualize
 
+try:
+    import torch
+except ImportError:
+    raise ImportError("Torch is not installed. Model preprocessing functions require torch to be installed.")
 
-def preprocess_linear_weight(weight, *, dtype, layout=ttnn.TILE_LAYOUT):
+
+def preprocess_linear_weight(weight, *, dtype, layout=ttnn.TILE_LAYOUT, weights_mesh_mapper=None):
     weight = weight.T.contiguous()
-    weight = ttnn.from_torch(weight, dtype=dtype, layout=layout)
+    weight = ttnn.from_torch(weight, dtype=dtype, layout=layout, mesh_mapper=weights_mesh_mapper)
     return weight
 
 
-def preprocess_linear_bias(bias, *, dtype, layout=ttnn.TILE_LAYOUT):
+def preprocess_linear_bias(bias, *, dtype, layout=ttnn.TILE_LAYOUT, weights_mesh_mapper=None):
     bias = bias.reshape((1, -1))
-    bias = ttnn.from_torch(bias, dtype=dtype, layout=layout)
+    bias = ttnn.from_torch(bias, dtype=dtype, layout=layout, mesh_mapper=weights_mesh_mapper)
     return bias
 
 
@@ -282,7 +286,7 @@ def _load_parameters(model_cache_path: pathlib.Path) -> ParameterDict:
                 parameters = {int(key): value for key, value in parameters.items()}
                 parameters = ParameterList([parameters[index] for index in sorted(parameters.keys())])
             output[name] = parameters
-        elif extension == ".bin":
+        elif extension == ".tensorbin":
             output[name] = ttnn.load_tensor(path)
         elif extension == ".pt":
             output[name] = torch.load(path)
@@ -304,7 +308,7 @@ def _dump_parameters(model_cache_path: pathlib.Path, parameters: ParameterDict) 
                 _dump_parameters(model_cache_path / name / str(index), element)
         elif isinstance(value, ttnn.Tensor):
             file_path = str(model_cache_path / name)
-            file_name = file_path + ".bin"
+            file_name = file_path + ".tensorbin"
             ttnn.dump_tensor(file_name, value)
         elif isinstance(value, (torch.Tensor, torch.nn.Parameter)):
             file_path = str(model_cache_path / name)
@@ -619,7 +623,6 @@ def from_torch(
                         **model.ttnn_module_args,
                         weight=model.weight,
                         bias=model.bias if "bias" in model else None,
-                        reader_patterns_cache=reader_patterns_cache,
                         using_parameters_cache=True,
                         device=device,
                     )

@@ -1,0 +1,115 @@
+name: "[internal] Blackhole Demo tests impl"
+
+on:
+  workflow_call:
+    inputs:
+      build-artifact-name:
+        required: true
+        type: string
+      wheel-artifact-name:
+        required: true
+        type: string
+      docker-image:
+        required: true
+        type: string
+      runner-label:
+        required: false
+        type: string
+        default: "BH"
+      regenerate-ttnn-cache:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  single-card-demo-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        test-group: [
+          {
+            name: "whisper performance",
+            arch: blackhole,
+            cmd: pytest models/demos/whisper/demo/demo.py --input-path="models/demos/whisper/demo/dataset/conditional_generation" -k "conditional_generation",
+            owner_id: U05RWH3QUPM # Salar Hosseini
+          },
+          {
+            name: "llama3-8b performance",
+            arch: blackhole,
+            # I think we can get rid of TT_CACHE_PATH here by using a NFS export
+            cmd:  LLAMA_DIR=/localdev/blackhole_demos/huggingface_data/meta-llama/Llama-3.1-8B-Instruct pytest models/tt_transformers/demo/simple_text_demo.py -k "performance-ci and not performance-ci-stress-1",
+            owner_id: U03PUAKE719 # Miguel Tairum
+          },
+          { # This should be moved to a BH perf regression pipeline in the future
+            name: "unet-shallow performance",
+            arch: blackhole,
+            cmd: pytest -sv models/experimental/functional_unet/tests/test_unet_perf.py -k "test_unet_trace_perf and not test_unet_trace_perf_multi_device",
+            owner_id: U06ECNVR0EN # Evan Smal
+          }
+        ]
+    name: ${{ matrix.test-group.name }}
+    runs-on:
+      - "in-service"
+      - "${{ inputs.runner-label }}"
+      - "pipeline-perf"
+    container:
+      image: ${{ inputs.docker-image || 'docker-image-unresolved' }}
+      env:
+        ARCH_NAME: ${{ inputs.arch }}
+        LOGURU_LEVEL: INFO
+        LD_LIBRARY_PATH: /work/build/lib
+        PYTHONPATH: /work
+        TT_METAL_HOME: /work
+        HF_TOKEN: ${{ secrets.HUGGINGFACE_TOKEN }}
+      volumes:
+        - ${{ github.workspace }}/docker-job:/work # Subdir to workaround https://github.com/actions/runner/issues/691
+        - /dev/hugepages-1G:/dev/hugepages-1G
+        - "/localdev/blackhole_demos/huggingface_data:/localdev/blackhole_demos/huggingface_data${{ inputs.regenerate-ttnn-cache == true && ':rw' || ':ro' }}"
+      options: "--device /dev/tenstorrent"
+    defaults:
+      run:
+        shell: bash
+        working-directory: /work # https://github.com/actions/runner/issues/878
+    steps:
+      - name: ⬇️  Setup Job
+        uses: tenstorrent/tt-metal/.github/actions/setup-job@main
+        timeout-minutes: 10
+        with:
+          build-artifact-name: ${{ inputs.build-artifact-name }}
+          wheel-artifact-name: ${{ inputs.wheel-artifact-name }}
+      - name: Run demo regression tests
+        timeout-minutes: 70
+        run: |
+          if [[ "${{ matrix.test-group.name }}" == *"llama"* ]]; then
+            pip install -r /work/models/tt_transformers/requirements.txt
+          fi
+          ${{ matrix.test-group.cmd }}
+      - name: Save environment data
+        if: ${{ contains(matrix.test-group.name, 'llama') && !cancelled() }}
+        timeout-minutes: 15
+        env:
+          ARCH_NAME: ${{ matrix.test-group.arch }}
+        run: python3 /work/.github/scripts/data_analysis/create_benchmark_with_environment_json.py
+
+      - name: Upload benchmark data
+        if: ${{ contains(matrix.test-group.name, 'llama') && !cancelled() }}
+        uses: tenstorrent/tt-metal/.github/actions/upload-data-via-sftp@main
+        with:
+          ssh-private-key: ${{ secrets.SFTP_BENCHMARK_WRITER_KEY }}
+          sftp-batchfile: /work/.github/actions/upload-data-via-sftp/benchmark_data_batchfile.txt
+          username: ${{ secrets.SFTP_BENCHMARK_WRITER_USERNAME }}
+          hostname: ${{ secrets.SFTP_BENCHMARK_WRITER_HOSTNAME }}
+          path: /work
+
+      - uses: tenstorrent/tt-metal/.github/actions/upload-artifact-with-job-uuid@main
+        timeout-minutes: 10
+        if: ${{ !cancelled() }}
+        with:
+          prefix: "test_reports_"
+      - uses: tenstorrent/tt-metal/.github/actions/slack-report@main
+        if: ${{ failure() }}
+        with:
+          slack_webhook_url: ${{ secrets.SLACK_METAL_INFRA_PIPELINE_STATUS_ALERT }}
+          owner: ${{ matrix.test-group.owner_id }}
+      - uses: tenstorrent/tt-metal/.github/actions/cleanup@main
+        if: always()

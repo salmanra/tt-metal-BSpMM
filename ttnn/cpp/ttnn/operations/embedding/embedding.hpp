@@ -15,22 +15,12 @@ namespace embedding {
 
 struct EmbeddingOperation {
     static ttnn::Tensor invoke(
-        uint8_t queue_id,
         const Tensor& input_tensor_arg,
         const Tensor& weight_arg,
         const std::optional<int>& pad_token = std::nullopt,
         const std::optional<Layout>& layout = std::nullopt,
         EmbeddingsType embeddings_type = EmbeddingsType::GENERIC,
-        const std::optional<const DataType> dtype = std::nullopt,
-        const std::optional<MemoryConfig>& memory_config = std::nullopt,
-        const std::optional<Tensor>& optional_output_tensor = std::nullopt);
-    static ttnn::Tensor invoke(
-        const Tensor& input_tensor_arg,
-        const Tensor& weight_arg,
-        const std::optional<int>& pad_token = std::nullopt,
-        const std::optional<Layout>& layout = std::nullopt,
-        EmbeddingsType embeddings_type = EmbeddingsType::GENERIC,
-        const std::optional<const DataType> dtype = std::nullopt,
+        std::optional<const DataType> dtype = std::nullopt,
         const std::optional<MemoryConfig>& memory_config = std::nullopt,
         const std::optional<Tensor>& optional_output_tensor = std::nullopt);
 };
@@ -39,6 +29,6 @@ struct EmbeddingOperation {
 }  // namespace operations
 
 constexpr auto embedding =
-    ttnn::register_operation_with_auto_launch_op<"ttnn::embedding", ttnn::operations::embedding::EmbeddingOperation>();
+    ttnn::register_operation<"ttnn::embedding", ttnn::operations::embedding::EmbeddingOperation>();
 
 }  // namespace ttnn

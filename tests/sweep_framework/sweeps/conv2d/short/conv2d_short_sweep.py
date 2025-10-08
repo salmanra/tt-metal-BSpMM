@@ -11,7 +11,7 @@ import torch
 import ttnn
 
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 from tests.sweep_framework.sweep_utils.conv2d_common import (
     run_conv2d_short_sweep,
     run_conv1d_short_sweep,
@@ -1608,37 +1608,44 @@ import pytest
 @pytest.mark.parametrize("input_spec", parameters["short_sweep_suite_conv2d"]["input_specs"])
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 def test_conv2d_localrun(device, input_spec):
-    run_conv2d_short_sweep(
+    passed, pcc, perf, out, ref = run_conv2d_short_sweep(
         input_spec,
         device,
     )
+    print(pcc)
+    assert passed, pcc
+    assert pcc != 1, "Conv2d with ranndomized input and wegihts can't ligitimately return PCC of 1"
 
 
 failing_parameters = [
     # [batch_size, output_channels, input_channels, input_height, input_width, kernel_height, kernel_width, stride_h, stride_w, pad_h, pad_w, groups, dilation_h, dilation_w, bias]
-    [1, 960, 960, 27, 27, 5, 5, 2, 2, 0, 0, 960, 1, 1, False],  # 0
-    [1, 960, 960, 24, 24, 5, 5, 1, 1, 2, 2, 960, 1, 1, False],  # 5
-    [1, 816, 816, 19, 19, 5, 5, 1, 1, 2, 2, 816, 1, 1, False],  # 19
-    [1, 816, 816, 23, 23, 5, 5, 2, 2, 0, 0, 816, 1, 1, False],  # 20
-    [1, 528, 528, 192, 192, 3, 3, 2, 2, 1, 1, 2, 1, 1, False],  # 220
-    [1, 819, 256, 100, 136, 3, 3, 1, 1, 1, 1, 1, 1, 1, True],  # 1443
-    [1, 819, 256, 50, 68, 3, 3, 1, 1, 1, 1, 1, 1, 1, True],  # 1447
-    [1, 1024, 3, 224, 224, 32, 32, 32, 32, 0, 0, 1, 1, 1, True],  # 1458
-    [1, 768, 3, 224, 224, 32, 32, 32, 32, 0, 0, 1, 1, 1, False],  # 1460
-    [1, 768, 3, 224, 224, 32, 32, 32, 32, 0, 0, 1, 1, 1, True],  # 1461
-    [1, 768, 3, 384, 512, 32, 32, 32, 32, 0, 0, 1, 1, 1, True],  # 1464
-    [1, 1, 64, 480, 640, 3, 3, 1, 1, 1, 1, 1, 1, 1, True],  # 1495
-    [1, 64, 64, 480, 640, 3, 3, 1, 1, 1, 1, 1, 1, 1, True],  # 1496
-    [1, 320, 320, 64, 64, 3, 3, 1, 1, 1, 1, 1, 1, 1, True],  # 1530
-    [1, 320, 640, 64, 64, 3, 3, 1, 1, 1, 1, 1, 1, 1, True],  # 1540
-    [1, 320, 960, 64, 64, 3, 3, 1, 1, 1, 1, 1, 1, 1, True],  # 1545
 ]
 
 
 @pytest.mark.parametrize("input_spec", failing_parameters)
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 def test_conv2d_localrun_fail_only(device, input_spec):
-    run_conv2d_short_sweep(
+    passed, pcc, perf, out, ref = run_conv2d_short_sweep(
         input_spec,
         device,
     )
+    print(pcc)
+    assert passed, pcc
+    assert pcc != 1, "Conv2d with ranndomized input and wegihts can't ligitimately return PCC of 1"
+
+
+@pytest.mark.parametrize("input_spec", parameters["short_sweep_suite_conv1d"]["input_specs"])
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
+def test_conv2d_localrun_conv1d(device, input_spec):
+    passed, pcc = run_conv1d_short_sweep(
+        input_spec,
+        device,
+    )[0]
+    print(pcc)
+    assert passed, pcc
+    assert pcc != 1, "Conv2d with ranndomized input and wegihts can't ligitimately return PCC of 1"
+
+
+failing_parameters_conv1d = [
+    # [batch_size, output_channels, input_channels, input_length, kernel_size, stride, pad, groups, dilation, bias]
+]

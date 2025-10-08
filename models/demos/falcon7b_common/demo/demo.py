@@ -9,28 +9,23 @@ from functools import partial
 
 import torch
 import torch.nn.functional as F
-import ttnn
 from loguru import logger
-from models.demos.falcon7b_common.tt.falcon_causallm import TtFalconCausalLM
-from models.demos.falcon7b_common.tt.model_config import get_model_config
-from models.demos.falcon7b_common.tests.test_utils import (
-    initialize_kv_cache,
-    load_hf_model,
-    synchronize_devices,
-    get_num_devices,
-)
-from models.demos.utils.llm_demo_utils import create_benchmark_data, verify_perf, check_tokens_match
-from models.utility_functions import (
-    disable_compilation_reports,
+from tqdm import tqdm
+from transformers import AutoTokenizer
+
+import ttnn
+from models.common.utility_functions import (
     disable_persistent_kernel_cache,
     enable_persistent_kernel_cache,
     nearest_32,
     tt_tensors_to_torch_tensors,
 )
+from models.common.utils import top_k_top_p_filtering
+from models.demos.falcon7b_common.tests.test_utils import get_num_devices, initialize_kv_cache, load_hf_model
+from models.demos.falcon7b_common.tt.falcon_causallm import TtFalconCausalLM
+from models.demos.falcon7b_common.tt.model_config import get_model_config
+from models.demos.utils.llm_demo_utils import check_tokens_match, create_benchmark_data, verify_perf
 from models.perf.benchmarking_utils import BenchmarkProfiler
-from tqdm import tqdm
-from transformers import AutoTokenizer
-from transformers.generation.utils import top_k_top_p_filtering
 
 END_OF_TEXT = 11
 SPACE = 204
@@ -135,6 +130,7 @@ def run_falcon_demo_kv(
     save_generated_text_path=None,  # If provided, save generated text to this path (e.g. set to expected_greedy_output_path to update expected output)
     json_perf_targets={},  # Optional perf targets for CSV output
     is_ci_env=False,  # Whether is running in CI environment
+    galaxy_type=None,  # "4U" or "6U" when running on WH-Galaxy
 ):
     profiler = BenchmarkProfiler()
     profiler.start("run")
@@ -155,7 +151,6 @@ def run_falcon_demo_kv(
         N_warmup_iter = {}
 
     disable_persistent_kernel_cache()
-    disable_compilation_reports()
 
     num_devices = get_num_devices(mesh_device)
     global_batch = batch_size * num_devices
@@ -197,7 +192,7 @@ def run_falcon_demo_kv(
     logger.info("Loading weights finished!")
     profiler.end(f"loading_weights")
 
-    synchronize_devices(mesh_device)
+    ttnn.synchronize_device(mesh_device)
 
     logger.info("Moving weights (single layer) to device...")
     base_url = ""
@@ -215,7 +210,7 @@ def run_falcon_demo_kv(
     )  # single layer only used for compile
     logger.info("Moved weights (single layer) to device!")
 
-    synchronize_devices(mesh_device)
+    ttnn.synchronize_device(mesh_device)
 
     logger.info("Initializing KV cache...")
     profiler.start(f"initializing_KV_cache")
@@ -252,7 +247,7 @@ def run_falcon_demo_kv(
             layer_past_len=0,
             use_cache=use_cache,
         )
-        synchronize_devices(mesh_device)
+        ttnn.synchronize_device(mesh_device)
 
         tt_prefill_input_ids.deallocate()
         if tt_prefill_attention_mask is not None:
@@ -267,7 +262,7 @@ def run_falcon_demo_kv(
 
     profiler.end("compile_prefill")
 
-    synchronize_devices(mesh_device)
+    ttnn.synchronize_device(mesh_device)
     logger.info("Finished 1st run prefill stage with compile!")
 
     ### First run decode stage with compile ###
@@ -296,7 +291,7 @@ def run_falcon_demo_kv(
             layer_past_len=kv_cache_len,
             use_cache=use_cache,
         )
-        synchronize_devices(mesh_device)
+        ttnn.synchronize_device(mesh_device)
 
         tt_decode_input_ids.deallocate()
         if tt_decode_attention_mask is not None:
@@ -306,7 +301,7 @@ def run_falcon_demo_kv(
     profiler.end("compile_decode")
 
     logger.info("Finished 1st run decode stage with compile!")
-    synchronize_devices(mesh_device)
+    ttnn.synchronize_device(mesh_device)
 
     del tt_logits
     del tt_prefill_input_ids
@@ -367,7 +362,7 @@ def run_falcon_demo_kv(
             layer_past_len=0,
             use_cache=use_cache,
         )
-        synchronize_devices(mesh_device)
+        ttnn.synchronize_device(mesh_device)
 
         if tt_prefill_attention_mask is not None:
             if isinstance(tt_prefill_attention_mask, ttnn.Tensor):
@@ -439,7 +434,7 @@ def run_falcon_demo_kv(
             layer_past_len=kv_cache_len,
             use_cache=use_cache,
         )
-        synchronize_devices(mesh_device)
+        ttnn.synchronize_device(mesh_device)
 
         logits = tt_tensors_to_torch_tensors(tt_logits, mesh_device, concat_dim=2).squeeze(1)
 
@@ -543,9 +538,12 @@ def run_falcon_demo_kv(
 
     # Save benchmark data (will only save if running in CI environment)
     benchmark_data = create_benchmark_data(profiler, measurements, N_warmup_iter, json_perf_targets)
+    run_type = f"demo_perf_{num_devices}chip" if perf_mode else f"demo_generate_{num_devices}chip"
+    if galaxy_type:
+        run_type += f"_{galaxy_type}"
     benchmark_data.save_partial_run_json(
         profiler,
-        run_type=f"demo_perf_{num_devices}chip" if perf_mode else f"demo_generate_{num_devices}chip",
+        run_type=run_type,
         ml_model_name=model_version,
         ml_model_type="llm",
         num_layers=num_layers,
@@ -559,7 +557,10 @@ def run_falcon_demo_kv(
     # Verify output or perf if expected values are provided
     assert expected_perf_metrics is None or expected_greedy_output_path is None
     if expected_perf_metrics is not None:
-        verify_perf(measurements, expected_perf_metrics)
+        if num_devices == 32:  # set higher margin to 20% for Galaxy due to larger variance on CI
+            verify_perf(measurements, expected_perf_metrics, high_tol_percentage=1.20)
+        else:
+            verify_perf(measurements, expected_perf_metrics)
     elif expected_greedy_output_path is not None:
         if token_check_does_pass:
             logger.info("Output Check Passed!")

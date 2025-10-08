@@ -6,7 +6,7 @@
  * This kernel computes layernorm or rmsnorm, dependent on the RMSNORM define.
  * For layernorm it receives E(x**2) and E(x) and computes the remaining normalization based on gamma, beta and epsilon.
  *   E(x**2) and E(x) are contained in a two tile wide tensor containing E(x**2) and E(x) in the left most columns per
- * tile. For rmsnorm it receives E(x**2) and computes teh remaining normalization based on gamma, beta and epsilon.
+ * tile. For rmsnorm it receives E(x**2) and computes the remaining normalization based on gamma, beta and epsilon.
  *   E(x**2) is contained in a one tile wide tensor containing E(x**2) in the left most column.
  */
 
@@ -44,18 +44,18 @@ void MAIN {
     constexpr uint32_t cb_eps = tt::CBIndex::c_4;
     constexpr uint32_t cb_reduce = tt::CBIndex::c_5;
 
-    constexpr uint32_t cb_out = tt::CBIndex::c_16;
+    constexpr uint32_t cb_out = tt::CBIndex::c_14;
 
-    constexpr uint32_t cb_stats_reduced = tt::CBIndex::c_24;   // [E(x**2), E(x)]
-    constexpr uint32_t cb_var_eps = tt::CBIndex::c_27;         // var + epsilon (or E(x**2) + epsilon)
-    constexpr uint32_t cb_recip_sqrt_var = tt::CBIndex::c_28;  // 1/sqrt(var+eps)
-    constexpr uint32_t cb_x_normed = tt::CBIndex::c_30;  // (x - E(x)) * 1/sqrt(var+eps) or x * 1/sqrt(E(x**2) + eps)
+    constexpr uint32_t cb_stats_reduced = tt::CBIndex::c_6;    // [E(x**2), E(x)]
+    constexpr uint32_t cb_var_eps = tt::CBIndex::c_9;          // var + epsilon (or E(x**2) + epsilon)
+    constexpr uint32_t cb_recip_sqrt_var = tt::CBIndex::c_10;  // 1/sqrt(var+eps)
+    constexpr uint32_t cb_x_normed = tt::CBIndex::c_12;  // (x - E(x)) * 1/sqrt(var+eps) or x * 1/sqrt(E(x**2) + eps)
 
-    constexpr uint32_t cb_var = tt::CBIndex::c_26;  // E(x**2) - E(x)**2 or E(x**2)
+    constexpr uint32_t cb_var = tt::CBIndex::c_8;  // E(x**2) - E(x)**2 or E(x**2)
 #ifndef RMSNORM
     // Layernorm-specific CBs
-    constexpr uint32_t cb_mean_squared = tt::CBIndex::c_25;  // E(x)**2
-    constexpr uint32_t cb_x_minus_mean = tt::CBIndex::c_29;  // x - E(x)
+    constexpr uint32_t cb_mean_squared = tt::CBIndex::c_7;   // E(x)**2
+    constexpr uint32_t cb_x_minus_mean = tt::CBIndex::c_11;  // x - E(x)
 
     constexpr uint32_t cb_norm_x_input = cb_x_minus_mean;
     constexpr uint32_t stats_tile_stride = 2;
@@ -68,7 +68,7 @@ void MAIN {
     constexpr uint32_t cb_beta = tt::CBIndex::c_3;
     uint32_t cb_times_gamma_out = cb_out;
     if constexpr (do_gamma and do_beta) {
-        cb_times_gamma_out = tt::CBIndex::c_31;
+        cb_times_gamma_out = tt::CBIndex::c_13;
     }
 
     binary_op_init_common(cb_inp, cb_inp, cb_stats_reduced);
@@ -88,7 +88,7 @@ void MAIN {
          * cb_stats = [sum(x0**2), sum(x0), sum(x1**2), sum(x1), ...]
          * RMSNorm packs mean(x**2) into cb_var. Layernorm just uses cb_stats_reduced.
          */
-        reduce_init_delta<false>(cb_stats_reduced, cb_stats, cb_reduce);
+        reduce_init(cb_stats, cb_reduce, cb_stats_reduced);
         cb_wait_front(cb_stats, stats_tiles_cols);
         cb_reserve_back(cb_stats_reduced, stats_tile_stride);
 #ifdef RMSNORM
@@ -117,7 +117,7 @@ void MAIN {
         cb_push_back(cb_var, 1);
 #endif
 
-        reduce_revert_delta(cb_stats_reduced);
+        reduce_uninit();
 
 #ifndef RMSNORM
         /*
@@ -125,7 +125,7 @@ void MAIN {
          */
         reconfig_data_format(cb_stats_reduced, cb_stats_reduced);
         pack_reconfig_data_format(cb_mean_squared);
-        mul_tiles_init();
+        mul_tiles_init(cb_stats_reduced, cb_stats_reduced);
         cb_reserve_back(cb_mean_squared, onetile);
         cb_wait_front(cb_stats_reduced, stats_tile_stride);
         ACQ();
@@ -140,7 +140,7 @@ void MAIN {
          */
         reconfig_data_format(cb_stats_reduced, cb_mean_squared);
         pack_reconfig_data_format(cb_var);
-        sub_tiles_init();
+        sub_tiles_init(cb_stats_reduced, cb_mean_squared);
 
         cb_reserve_back(cb_var, onetile);
         cb_wait_front(cb_mean_squared, 1);
@@ -182,13 +182,11 @@ void MAIN {
         reconfig_data_format(cb_var, cb_eps);
         pack_reconfig_data_format(cb_recip_sqrt_var);
 
-        add_tiles_init();
+        add_tiles_init(cb_var, cb_eps);
         ACQ();
         add_tiles(cb_var, cb_eps, 0, 0, 0);
-        sqrt_tile_init();
-        sqrt_tile(0);
-        recip_tile_init();
-        recip_tile(0);
+        rsqrt_tile_init<true>();
+        rsqrt_tile<true>(0);
         pack_tile(0, cb_recip_sqrt_var);
         REL();
         cb_push_back(cb_recip_sqrt_var, 1);
@@ -200,63 +198,70 @@ void MAIN {
          * RMSNorm: X * 1/sqrt(E[X**2] + eps)
          */
 
+        uint32_t normed_output_cb = cb_x_normed;
+        if constexpr (!do_gamma) {
+            normed_output_cb = cb_out;
+        }
+
         reconfig_data_format(cb_norm_x_input, cb_recip_sqrt_var);
-        pack_reconfig_data_format(cb_x_normed);
+        pack_reconfig_data_format(normed_output_cb);
         mul_bcast_cols_init_short(cb_norm_x_input, cb_recip_sqrt_var);
         cb_wait_front(cb_recip_sqrt_var, 1);
         for (uint32_t wt = 0; wt < Wt; wt += blk) {
             cb_wait_front(cb_norm_x_input, blk);
-            cb_reserve_back(cb_x_normed, blk);
+            cb_reserve_back(normed_output_cb, blk);
             ACQ();
             for (uint32_t wtr = 0; wtr < blk; wtr++) {
                 mul_tiles_bcast_cols(cb_norm_x_input, cb_recip_sqrt_var, wtr, 0, wtr);
-                pack_tile(wtr, cb_x_normed);
+                pack_tile(wtr, normed_output_cb);
             }
             REL();
-            cb_push_back(cb_x_normed, blk);
+            cb_push_back(normed_output_cb, blk);
             cb_pop_front(cb_norm_x_input, blk);
         }
         cb_pop_front(cb_recip_sqrt_var, 1);
 
-        /*
-         * x_normed * gamma
-         */
-        reconfig_data_format(cb_x_normed, cb_gamma);
-        pack_reconfig_data_format(cb_times_gamma_out);
-        cb_wait_front(cb_gamma, Wt);
-        mul_bcast_rows_init_short(cb_x_normed, cb_gamma);
-        for (uint32_t wt = 0; wt < Wt; wt += blk) {
-            cb_wait_front(cb_x_normed, blk);
-            cb_reserve_back(cb_times_gamma_out, blk);
-            ACQ();
-            for (uint32_t wtr = 0; wtr < blk; wtr++) {
-                mul_tiles_bcast_rows(cb_x_normed, cb_gamma, wtr, wt + wtr, wtr);
-                pack_tile(wtr, cb_times_gamma_out);
-            }
-            REL();
-            cb_push_back(cb_times_gamma_out, blk);
-            cb_pop_front(cb_x_normed, blk);
-        }
-
-        if constexpr (do_gamma and do_beta) {
+        if constexpr (do_gamma) {
             /*
-             * x_normed * gamma + beta
+             * x_normed * gamma
              */
-            reconfig_data_format(cb_times_gamma_out, cb_beta);
-            pack_reconfig_data_format(cb_out);
-            cb_wait_front(cb_beta, Wt);
-            add_bcast_rows_init_short(cb_times_gamma_out, cb_beta);
+            reconfig_data_format(cb_x_normed, cb_gamma);
+            pack_reconfig_data_format(cb_times_gamma_out);
+            cb_wait_front(cb_gamma, Wt);
+            mul_bcast_rows_init_short(cb_x_normed, cb_gamma);
             for (uint32_t wt = 0; wt < Wt; wt += blk) {
-                cb_wait_front(cb_times_gamma_out, blk);
-                cb_reserve_back(cb_out, blk);
+                cb_wait_front(cb_x_normed, blk);
+                cb_reserve_back(cb_times_gamma_out, blk);
                 ACQ();
                 for (uint32_t wtr = 0; wtr < blk; wtr++) {
-                    add_tiles_bcast_rows(cb_times_gamma_out, cb_beta, wtr, wt + wtr, wtr);
-                    pack_tile(wtr, cb_out);
+                    mul_tiles_bcast_rows(cb_x_normed, cb_gamma, wtr, wt + wtr, wtr);
+                    pack_tile(wtr, cb_times_gamma_out);
                 }
                 REL();
-                cb_push_back(cb_out, blk);
-                cb_pop_front(cb_times_gamma_out, blk);
+                cb_push_back(cb_times_gamma_out, blk);
+                cb_pop_front(cb_x_normed, blk);
+            }
+
+            if constexpr (do_beta) {
+                /*
+                 * x_normed * gamma + beta
+                 */
+                reconfig_data_format(cb_times_gamma_out, cb_beta);
+                pack_reconfig_data_format(cb_out);
+                cb_wait_front(cb_beta, Wt);
+                add_bcast_rows_init_short(cb_times_gamma_out, cb_beta);
+                for (uint32_t wt = 0; wt < Wt; wt += blk) {
+                    cb_wait_front(cb_times_gamma_out, blk);
+                    cb_reserve_back(cb_out, blk);
+                    ACQ();
+                    for (uint32_t wtr = 0; wtr < blk; wtr++) {
+                        add_tiles_bcast_rows(cb_times_gamma_out, cb_beta, wtr, wt + wtr, wtr);
+                        pack_tile(wtr, cb_out);
+                    }
+                    REL();
+                    cb_push_back(cb_out, blk);
+                    cb_pop_front(cb_times_gamma_out, blk);
+                }
             }
         }
     }

@@ -4,26 +4,22 @@
 
 #include <tt-metalium/host_api.hpp>
 #include <tt-metalium/constants.hpp>
-#include <tt-metalium/util.hpp>
 #include "nlp_concat_heads_device_operation.hpp"
 #include <tt-metalium/work_split.hpp>
-
-using namespace tt::tt_metal;
+#include <tt-metalium/tensor_accessor_args.hpp>
 
 namespace ttnn::operations::experimental::transformer {
 
 using namespace tt::constants;
 using namespace tt;
 
-operation::ProgramWithCallbacks multi_core_nlp_concat_heads(
+tt::tt_metal::operation::ProgramWithCallbacks multi_core_nlp_concat_heads(
     const Tensor& a, Tensor& output, CoreCoord compute_with_storage_grid_size) {
-    const auto& ashape = a.get_padded_shape();
+    const auto& ashape = a.padded_shape();
 
-    tt_metal::IDevice* device = a.device();
+    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(a.dtype());
 
-    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(a.get_dtype());
-
-    uint32_t single_tile_size = tt_metal::detail::TileSize(cb_data_format);
+    uint32_t single_tile_size = tt::tile_size(cb_data_format);
     tt_metal::Buffer* in0_buffer = a.buffer();
     bool in_sharded = a.is_sharded();
     bool out_sharded = output.is_sharded();
@@ -52,9 +48,9 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads(
         all_cores = a.shard_spec().value().grid;
         num_cores = all_cores.num_cores();
         core_group_1 = all_cores;
-        num_blocks_per_core_group_1 = a.shard_spec().value().shape[0] / a.get_padded_shape()[-2];
+        num_blocks_per_core_group_1 = a.shard_spec().value().shape[0] / a.padded_shape()[-2];
         per_tensor_tiles = a.shard_spec().value().shape[0] * a.shard_spec().value().shape[1] / TILE_HW;
-        row_major = a.shard_spec().value().orientation == ShardOrientation::ROW_MAJOR;
+        row_major = a.shard_spec().value().orientation == tt::tt_metal::ShardOrientation::ROW_MAJOR;
     } else {
         std::tie(
             num_cores,
@@ -66,7 +62,6 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads(
             tt::tt_metal::split_work_to_cores(compute_with_storage_grid_size, num_blocks);
     }
     uint32_t g1_numcores = core_group_1.num_cores();
-    uint32_t g2_numcores = core_group_2.num_cores();
 
     ////////////////////////////////////////////////////////////////////////////
     //                      Grayskull Device Setup
@@ -80,10 +75,7 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads(
     tt_metal::Program program = tt_metal::CreateProgram();
     uint32_t src0_cb_index = 0, out_cb_index = 16;
 
-    bool in0_is_dram = in0_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
-    bool out_is_dram = out_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
-
-    KernelHandle reader_kernel_id = 0, writer_kernel_id = 0;
+    tt::tt_metal::KernelHandle reader_kernel_id = 0, writer_kernel_id = 0;
     if (in_sharded) {
         std::vector<uint32_t> compile_time_args = {
             (std::uint32_t)src0_cb_index,
@@ -107,18 +99,14 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads(
             tt_metal::WriterDataMovementConfig(compile_time_args));
     } else {
         std::vector<uint32_t> reader_compile_time_args = {
-            // interleaved accessor args
-            (std::uint32_t)in0_is_dram,
             (std::uint32_t)in0_h_tiles,
             (std::uint32_t)in0_w_tiles,
             (std::uint32_t)in0_c,
             (std::uint32_t)in0_HtWt,
         };
-        std::vector<uint32_t> writer_compile_time_args = {
-            // interleaved accessor args
-            (std::uint32_t)src0_cb_index,
-            (std::uint32_t)out_is_dram,
-        };
+        tt_metal::TensorAccessorArgs(*in0_buffer).append_to(reader_compile_time_args);
+        std::vector<uint32_t> writer_compile_time_args = {(std::uint32_t)src0_cb_index};
+        tt_metal::TensorAccessorArgs(*out_buffer).append_to(writer_compile_time_args);
         reader_kernel_id = tt_metal::CreateKernel(
             program,
             "ttnn/cpp/ttnn/operations/experimental/transformer/nlp_concat_heads/device/kernels/dataflow/"
@@ -134,7 +122,7 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads(
     }
 
     // Create circular buffers
-    CBHandle cb_src0 = 0, cb_out = 0;
+    tt::tt_metal::CBHandle cb_src0 = 0, cb_out = 0;
     uint32_t cb_src0_num_tiles = per_tensor_tiles;
     if (!in_sharded) {
         cb_src0_num_tiles *= 2;  // double buffer
@@ -179,7 +167,7 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads(
             uint32_t num_blocks_per_core = i < g1_numcores ? num_blocks_per_core_group_1 : num_blocks_per_core_group_2;
 
             uint32_t in0_h_dim = num_blocks_written % in0_h_tiles;
-            uint32_t in0_tensor_tile_id = num_blocks_written / in0_h_tiles * in0_CHtWt + in0_h_dim * in0_w_tiles;
+            uint32_t in0_tensor_tile_id = (num_blocks_written / in0_h_tiles * in0_CHtWt) + (in0_h_dim * in0_w_tiles);
 
             std::vector<uint32_t> reader_runtime_args = {
                 (std::uint32_t)in0_buffer->address(),
@@ -202,7 +190,7 @@ operation::ProgramWithCallbacks multi_core_nlp_concat_heads(
 
     auto override_runtime_arguments_callback = [reader_kernel_id, writer_kernel_id, cb_src0, cb_out, cores](
                                                    const void* operation,
-                                                   Program& program,
+                                                   tt::tt_metal::Program& program,
                                                    const std::vector<Tensor>& input_tensors,
                                                    const std::vector<std::optional<const Tensor>>&,
                                                    const std::vector<Tensor>& output_tensors) {

@@ -5,12 +5,14 @@
 #pragma once
 
 #include <tt-metalium/host_api.hpp>
+#include <tt-metalium/global_semaphore.hpp>
+#include "impl/context/metal_context.hpp"
+#include "sub_device.hpp"
 
-// TODO: ARCH_NAME specific, must remove
-#include "eth_l1_address_map.h"
+namespace tt::tt_metal {
 
 inline std::tuple<Program, CoreCoord, GlobalSemaphore> create_single_sync_program(
-    IDevice* device, SubDevice sub_device) {
+    IDevice* device, const SubDevice& sub_device) {
     auto syncer_coord = sub_device.cores(HalProgrammableCoreType::TENSIX).ranges().at(0).start_coord;
     auto syncer_core = CoreRangeSet(CoreRange(syncer_coord, syncer_coord));
     auto global_sem = CreateGlobalSemaphore(device, sub_device.cores(HalProgrammableCoreType::TENSIX), INVALID);
@@ -23,7 +25,7 @@ inline std::tuple<Program, CoreCoord, GlobalSemaphore> create_single_sync_progra
         DataMovementConfig{.processor = DataMovementProcessor::RISCV_0, .noc = NOC::RISCV_0_default});
     std::array<uint32_t, 1> syncer_rt_args = {global_sem.address()};
     SetRuntimeArgs(syncer_program, syncer_kernel, syncer_core, syncer_rt_args);
-    return {std::move(syncer_program), std::move(syncer_coord), std::move(global_sem)};
+    return {std::move(syncer_program), syncer_coord, std::move(global_sem)};
 }
 
 inline std::tuple<Program, Program, Program, GlobalSemaphore> create_basic_sync_program(
@@ -74,10 +76,9 @@ inline std::tuple<Program, Program, Program, GlobalSemaphore> create_basic_sync_
 }
 
 inline std::tuple<Program, Program, Program, GlobalSemaphore> create_basic_eth_sync_program(
-    IDevice* device, const SubDevice& sub_device_1, const SubDevice& sub_device_2) {
+    IDevice* device, const SubDevice& sub_device_1, const SubDevice& sub_device_2, DataMovementProcessor dm_processor) {
     auto waiter_coord = sub_device_2.cores(HalProgrammableCoreType::ACTIVE_ETH).ranges().at(0).start_coord;
     auto waiter_core = CoreRangeSet(CoreRange(waiter_coord, waiter_coord));
-    auto waiter_core_physical = device->ethernet_core_from_logical_core(waiter_coord);
     auto tensix_waiter_coord = sub_device_2.cores(HalProgrammableCoreType::TENSIX).ranges().at(0).start_coord;
     auto tensix_waiter_core = CoreRangeSet(CoreRange(tensix_waiter_coord, tensix_waiter_coord));
     auto tensix_waiter_core_physical = device->worker_core_from_logical_core(tensix_waiter_coord);
@@ -93,7 +94,7 @@ inline std::tuple<Program, Program, Program, GlobalSemaphore> create_basic_eth_s
         waiter_program,
         "tests/tt_metal/tt_metal/test_kernels/misc/sub_device/persistent_remote_waiter.cpp",
         waiter_core,
-        EthernetConfig{.noc = NOC::RISCV_0_default, .processor = DataMovementProcessor::RISCV_0});
+        EthernetConfig{.noc = NOC::RISCV_0_default, .processor = dm_processor});
     std::array<uint32_t, 7> waiter_rt_args = {
         global_sem.address(),
         incrementer_cores.num_cores(),
@@ -101,7 +102,8 @@ inline std::tuple<Program, Program, Program, GlobalSemaphore> create_basic_eth_s
         syncer_core_physical.y,
         tensix_waiter_core_physical.x,
         tensix_waiter_core_physical.y,
-        eth_l1_mem::address_map::ERISC_L1_UNRESERVED_BASE};
+        MetalContext::instance().hal().get_dev_addr(tt::tt_metal::HalProgrammableCoreType::ACTIVE_ETH, tt::tt_metal::HalL1MemAddrType::UNRESERVED)
+    };
     SetRuntimeArgs(waiter_program, waiter_kernel, waiter_core, waiter_rt_args);
 
     Program syncer_program = CreateProgram();
@@ -128,3 +130,5 @@ inline std::tuple<Program, Program, Program, GlobalSemaphore> create_basic_eth_s
     return {
         std::move(waiter_program), std::move(syncer_program), std::move(incrementer_program), std::move(global_sem)};
 }
+
+} // namespace tt::tt_metal

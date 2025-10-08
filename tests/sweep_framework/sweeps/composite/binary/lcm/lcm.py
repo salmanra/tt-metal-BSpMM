@@ -13,7 +13,7 @@ from tests.sweep_framework.sweep_utils.utils import gen_shapes, tensor_to_dtype
 from tests.tt_eager.python_api_testing.sweep_tests.generation_funcs import gen_func_with_cast_tt
 
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 # Override the default timeout in seconds for hang detection.
 TIMEOUT = 30
@@ -29,8 +29,8 @@ parameters = {
         "input_shape": gen_shapes([1, 1, 32, 32], [6, 12, 256, 256], [1, 1, 32, 32], 4)
         + gen_shapes([1, 32, 32], [12, 256, 256], [1, 32, 32], 4)
         + gen_shapes([32, 32], [256, 256], [32, 32], 4),
-        "input_a_dtype": [ttnn.bfloat16],
-        "input_b_dtype": [ttnn.bfloat16],
+        "input_a_dtype": [ttnn.int32],
+        "input_b_dtype": [ttnn.int32],
         "input_a_layout": [ttnn.TILE_LAYOUT],
         "input_b_layout": [ttnn.TILE_LAYOUT],
         "input_a_memory_config": [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG],
@@ -68,8 +68,8 @@ def run(
     data_seed = random.randint(0, 20000000)
     torch.manual_seed(data_seed)
 
-    torch_input_tensor_a = torch.randint(-100, 100, input_shape, dtype=torch.int32)
-    torch_input_tensor_b = torch.randint(-80, 180, input_shape, dtype=torch.int32)
+    torch_input_tensor_a = torch.randint(-32767, 32768, input_shape, dtype=torch.int32)
+    torch_input_tensor_b = torch.randint(-32767, 32768, input_shape, dtype=torch.int32)
 
     golden_function = ttnn.get_golden_function(ttnn.lcm)
     torch_output_tensor = golden_function(torch_input_tensor_a, torch_input_tensor_b)

@@ -12,13 +12,13 @@ Tensor MorehMeanBackward::invoke(
     const Tensor& output_grad,
     std::optional<std::variant<int64_t, ttnn::SmallVector<int64_t>>> dim,
     const bool keepdim,
-    const std::optional<Shape>& input_grad_shape,
+    const std::optional<ttnn::Shape>& input_grad_shape,
     const std::optional<Tensor>& input_grad,
     const std::optional<MemoryConfig>& memory_config,
     const std::optional<DeviceComputeKernelConfig>& compute_kernel_config) {
-    auto output_grad_rank = output_grad.get_shape().rank();
+    auto output_grad_rank = output_grad.logical_shape().rank();
     auto input_grad_rank = output_grad_rank;
-    if (keepdim == false) {
+    if (!keepdim) {
         if (!dim.has_value()) {
             // do nothing
         } else if (std::holds_alternative<int64_t>(dim.value())) {

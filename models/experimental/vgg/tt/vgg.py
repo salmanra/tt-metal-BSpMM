@@ -10,8 +10,8 @@ from typing import List, Union, Dict, cast
 import ttnn
 
 from tt_lib.fallback_ops import fallback_ops
-from models.helper_funcs import Linear as TtLinear
-from models.utility_functions import (
+from models.common.helper_funcs import Linear as TtLinear
+from models.common.utility_functions import (
     is_conv_supported_on_device,
     run_conv_on_device_wrapper,
 )
@@ -37,34 +37,34 @@ class TtVGG(nn.Module):
 
         self.output_mem_config = ttnn.L1_MEMORY_CONFIG
 
-        linear1_weight = ttnn.load_tensor(f"{tt_cache_path}classifier.0.weight{tt_dtype}.bin")
-        linear1_bias = ttnn.load_tensor(f"{tt_cache_path}classifier.0.bias{tt_dtype}.bin")
+        linear1_weight = ttnn.load_tensor(f"{tt_cache_path}classifier.0.weight{tt_dtype}.tensorbin")
+        linear1_bias = ttnn.load_tensor(f"{tt_cache_path}classifier.0.bias{tt_dtype}.tensorbin")
 
-        linear2_weight = ttnn.load_tensor(f"{tt_cache_path}classifier.3.weight{tt_dtype}.bin")
-        linear2_bias = ttnn.load_tensor(f"{tt_cache_path}classifier.3.bias{tt_dtype}.bin")
+        linear2_weight = ttnn.load_tensor(f"{tt_cache_path}classifier.3.weight{tt_dtype}.tensorbin")
+        linear2_bias = ttnn.load_tensor(f"{tt_cache_path}classifier.3.bias{tt_dtype}.tensorbin")
 
-        linear3_weight = ttnn.load_tensor(f"{tt_cache_path}classifier.6.weight{tt_dtype}.bin")
-        linear3_bias = ttnn.load_tensor(f"{tt_cache_path}classifier.6.bias{tt_dtype}.bin")
+        linear3_weight = ttnn.load_tensor(f"{tt_cache_path}classifier.6.weight{tt_dtype}.tensorbin")
+        linear3_bias = ttnn.load_tensor(f"{tt_cache_path}classifier.6.bias{tt_dtype}.tensorbin")
 
         linear1 = TtLinear(
-            in_features=linear1_weight.shape.with_tile_padding()[-1],
-            out_features=linear1_weight.shape.with_tile_padding()[-2],
+            in_features=linear1_weight.padded_shape[-1],
+            out_features=linear1_weight.padded_shape[-2],
             weight=linear1_weight,
             bias=linear1_bias,
             output_mem_config=self.output_mem_config,
         )
 
         linear2 = TtLinear(
-            in_features=linear2_weight.shape.with_tile_padding()[-1],
-            out_features=linear2_weight.shape.with_tile_padding()[-2],
+            in_features=linear2_weight.padded_shape[-1],
+            out_features=linear2_weight.padded_shape[-2],
             weight=linear2_weight,
             bias=linear2_bias,
             output_mem_config=self.output_mem_config,
         )
 
         linear3 = TtLinear(
-            in_features=linear3_weight.shape.with_tile_padding()[-1],
-            out_features=linear3_weight.shape.with_tile_padding()[-2],
+            in_features=linear3_weight.padded_shape[-1],
+            out_features=linear3_weight.padded_shape[-2],
             weight=linear3_weight,
             bias=linear3_bias,
             output_mem_config=self.output_mem_config,
@@ -85,7 +85,7 @@ class TtVGG(nn.Module):
             else:
                 tt_x = layer(tt_x)
 
-        batch, c, w, h = tt_x.shape.with_tile_padding()
+        batch, c, w, h = tt_x.padded_shape
         tt_x = self.avgpool(tt_x)
 
         tt_x = fallback_ops.reshape(tt_x, batch, 1, 1, c * w * h)
@@ -119,8 +119,10 @@ def make_layers(
                 conv2d_params = [v, in_channels, 3, 3, 1, 1, 1, 1, 1, 1]
                 if not disable_conv_on_tt_device and is_conv_supported_on_device(conv2d_params):
                     assert device is not None
-                    conv2d_weight = ttnn.load_tensor(f"{tt_cache_path}{base_address}.{ind}.weight{tt_dtype}.bin")
-                    conv2d_bias = ttnn.load_tensor(f"{tt_cache_path}{base_address}.{ind}.bias{tt_dtype}.bin").tolist()
+                    conv2d_weight = ttnn.load_tensor(f"{tt_cache_path}{base_address}.{ind}.weight{tt_dtype}.tensorbin")
+                    conv2d_bias = ttnn.load_tensor(
+                        f"{tt_cache_path}{base_address}.{ind}.bias{tt_dtype}.tensorbin"
+                    ).tolist()
 
                     conv2d = run_conv_on_device_wrapper(
                         conv2d_weight.reshape(-1).tolist(),
@@ -129,8 +131,8 @@ def make_layers(
                         conv2d_bias,
                     )
                 else:
-                    weight = ttnn.load_tensor(f"{tt_cache_path}{base_address}.{ind}.weight{tt_dtype}.bin")
-                    bias = ttnn.load_tensor(f"{tt_cache_path}{base_address}.{ind}.bias{tt_dtype}.bin")
+                    weight = ttnn.load_tensor(f"{tt_cache_path}{base_address}.{ind}.weight{tt_dtype}.tensorbin")
+                    bias = ttnn.load_tensor(f"{tt_cache_path}{base_address}.{ind}.bias{tt_dtype}.tensorbin")
                     conv2d = fallback_ops.Conv2d(
                         weights=weight,
                         biases=bias,

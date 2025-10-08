@@ -2,12 +2,13 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import ttnn
 import math
-from loguru import logger
 from pathlib import Path
+
 from transformers import FalconConfig
-from models.utility_functions import is_grayskull, is_wormhole_b0
+
+import ttnn
+from models.common.utility_functions import is_grayskull, is_wormhole_b0
 from models.demos.falcon7b_common.tt.model_utils import get_default_hifi2_kernel_config
 
 OP_KEYS = (
@@ -147,6 +148,8 @@ def get_ln_block_sharded_config(height_dim, hidden_dim):
         block_h=num_tiles_per_core_h,
         block_w=num_tiles_per_core_w,
         inplace=True,
+        legacy_reduction=True,
+        legacy_rsqrt=True,
     )
 
     return ln_block_sharded_mem_config, ln_block_sharded_prog_config, ln_block_sharded_compute_kernel_config

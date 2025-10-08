@@ -3,13 +3,33 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <gtest/gtest.h>
-
-#include <tt-metalium/tt_metal.hpp>
-#include <tt-metalium/host_api.hpp>
-#include <tt-metalium/command_queue.hpp>
-#include "tt_metal/test_utils/env_vars.hpp"
+#include <stdlib.h>
 #include <tt-metalium/device.hpp>
 #include <tt-metalium/device_pool.hpp>
+#include <tt-metalium/host_api.hpp>
+#include <tt-metalium/tt_metal.hpp>
+#include <map>
+#include <variant>
+#include <vector>
+
+#include <tt-metalium/core_coord.hpp>
+#include <tt-metalium/data_types.hpp>
+#include "hostdevcommon/common_values.hpp"
+#include <tt-metalium/kernel_types.hpp>
+#include <tt-metalium/program.hpp>
+#include "impl/context/metal_context.hpp"
+#include <tt-metalium/tt_backend_api_types.hpp>
+#include "tt_metal/test_utils/env_vars.hpp"
+#include <umd/device/types/arch.hpp>
+#include <tt-metalium/distributed.hpp>
+
+namespace tt {
+namespace tt_metal {
+class CommandQueue;
+}  // namespace tt_metal
+}  // namespace tt
+
+namespace tt::tt_metal {
 
 using std::vector;
 using namespace tt;
@@ -22,39 +42,33 @@ protected:
 
 namespace unit_tests_common::basic::test_device_init {
 
-void launch_program(tt_metal::IDevice* device, tt_metal::Program& program) {
-    if (getenv("TT_METAL_SLOW_DISPATCH_MODE")) {
-        tt_metal::detail::LaunchProgram(device, program);
-    } else {
-        CommandQueue& cq = device->command_queue();
-        EnqueueProgram(cq, program, false);
-        Finish(cq);
-    }
-}
-
 /// @brief load_blank_kernels into all cores and will launch
 /// @param device
 /// @return
-bool load_all_blank_kernels(tt_metal::IDevice* device) {
+bool load_all_blank_kernels(const std::shared_ptr<distributed::MeshDevice>& mesh_device) {
     bool pass = true;
     tt_metal::Program program = tt_metal::CreateProgram();
-    CoreCoord compute_grid_size = device->compute_with_storage_grid_size();
+    auto mesh_workload = distributed::MeshWorkload();
+
+    CoreCoord compute_grid_size = mesh_device->compute_with_storage_grid_size();
     CoreRange all_cores = CoreRange(CoreCoord(0, 0), CoreCoord(compute_grid_size.x - 1, compute_grid_size.y - 1));
     CreateKernel(
         program,
         "tt_metal/kernels/dataflow/blank.cpp",
         all_cores,
-        DataMovementConfig{.processor = DataMovementProcessor::RISCV_1, .noc = NOC::RISCV_1_default});
+        tt::tt_metal::DataMovementConfig{
+            .processor = tt::tt_metal::DataMovementProcessor::RISCV_1, .noc = tt::tt_metal::NOC::RISCV_1_default});
 
     CreateKernel(
         program,
         "tt_metal/kernels/dataflow/blank.cpp",
         all_cores,
-        DataMovementConfig{.processor = DataMovementProcessor::RISCV_0, .noc = NOC::RISCV_0_default});
+        tt::tt_metal::DataMovementConfig{
+            .processor = tt::tt_metal::DataMovementProcessor::RISCV_0, .noc = tt::tt_metal::NOC::RISCV_0_default});
 
-    CreateKernel(program, "tt_metal/kernels/compute/blank.cpp", all_cores, ComputeConfig{});
-
-    unit_tests_common::basic::test_device_init::launch_program(device, program);
+    CreateKernel(program, "tt_metal/kernels/compute/blank.cpp", all_cores, tt::tt_metal::ComputeConfig{});
+    mesh_workload.add_program(distributed::MeshCoordinateRange(mesh_device->shape()), std::move(program));
+    distributed::EnqueueMeshWorkload(mesh_device->mesh_command_queue(), mesh_workload, true);
     return pass;
 }
 }  // namespace unit_tests_common::basic::test_device_init
@@ -69,14 +83,14 @@ TEST_P(DeviceParamFixture, DeviceInitializeAndTeardown) {
 
     ASSERT_TRUE(num_devices > 0);
     vector<chip_id_t> ids;
-    for (unsigned int id = 0; id < num_devices; id++) {
+    for (chip_id_t id : tt::tt_metal::MetalContext::instance().get_cluster().mmio_chip_ids()) {
         ids.push_back(id);
     }
-    const auto& dispatch_core_config = tt::llrt::RunTimeOptions::get_instance().get_dispatch_core_config();
-    tt::DevicePool::initialize(ids, 1, DEFAULT_L1_SMALL_SIZE, DEFAULT_TRACE_REGION_SIZE, dispatch_core_config);
-    const auto devices = tt::DevicePool::instance().get_all_active_devices();
-    for (auto device : devices) {
-        ASSERT_TRUE(tt::tt_metal::CloseDevice(device));
+    const auto& dispatch_core_config = tt::tt_metal::MetalContext::instance().rtoptions().get_dispatch_core_config();
+    auto devices = distributed::MeshDevice::create_unit_meshes(
+        ids, DEFAULT_L1_SMALL_SIZE, DEFAULT_TRACE_REGION_SIZE, 1, dispatch_core_config);
+    for (auto& [id, device] : devices) {
+        device->close();
     }
 }
 
@@ -88,16 +102,18 @@ TEST_P(DeviceParamFixture, TensixDeviceLoadBlankKernels) {
     }
     ASSERT_TRUE(num_devices > 0);
     vector<chip_id_t> ids;
-    for (unsigned int id = 0; id < num_devices; id++) {
+    for (chip_id_t id : tt::tt_metal::MetalContext::instance().get_cluster().mmio_chip_ids()) {
         ids.push_back(id);
     }
-    const auto& dispatch_core_config = tt::llrt::RunTimeOptions::get_instance().get_dispatch_core_config();
-    tt::DevicePool::initialize(ids, 1, DEFAULT_L1_SMALL_SIZE, DEFAULT_TRACE_REGION_SIZE, dispatch_core_config);
-    const auto devices = tt::DevicePool::instance().get_all_active_devices();
-    for (auto device : devices) {
+    const auto& dispatch_core_config = tt::tt_metal::MetalContext::instance().rtoptions().get_dispatch_core_config();
+    auto devices = distributed::MeshDevice::create_unit_meshes(
+        ids, DEFAULT_L1_SMALL_SIZE, DEFAULT_TRACE_REGION_SIZE, 1, dispatch_core_config);
+    for (auto& [id, device] : devices) {
         ASSERT_TRUE(unit_tests_common::basic::test_device_init::load_all_blank_kernels(device));
     }
-    for (auto device : devices) {
-        ASSERT_TRUE(tt::tt_metal::CloseDevice(device));
+    for (auto& [id, device] : devices) {
+        device->close();
     }
 }
+
+}  // namespace tt::tt_metal

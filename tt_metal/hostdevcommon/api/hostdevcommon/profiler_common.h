@@ -4,7 +4,10 @@
 
 #pragma once
 
-#define PROFILER_OPT_DO_DISPATCH_CORES 2
+#include <cstdint>
+
+#define PROFILER_OPT_DO_DISPATCH_CORES (1 << 1)
+#define PROFILER_OPT_DO_TRACE_ONLY (1 << 2)
 
 namespace kernel_profiler {
 
@@ -50,6 +53,7 @@ enum ControlBuffer {
     CORE_COUNT_PER_DRAM,
     DROPPED_ZONES,
     PROFILER_DONE,
+    CURRENT_TRACE_ID
 };
 
 enum PacketTypes { ZONE_START, ZONE_END, ZONE_TOTAL, TS_DATA, TS_EVENT };

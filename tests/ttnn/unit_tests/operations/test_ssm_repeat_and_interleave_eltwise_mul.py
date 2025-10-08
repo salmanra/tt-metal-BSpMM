@@ -9,7 +9,7 @@ import ttnn
 import pytest
 from loguru import logger
 
-from models.utility_functions import tt2torch_tensor, comp_pcc
+from models.common.utility_functions import tt2torch_tensor, comp_pcc
 
 
 def run_ssm_eltwise_mul_test(batch_size, in0_W, in1_W, dtype, in0_mem_config, in1_mem_config, out_mem_config, device):
@@ -31,7 +31,7 @@ def run_ssm_eltwise_mul_test(batch_size, in0_W, in1_W, dtype, in0_mem_config, in
         tt_input_tensor_B, tt_input_tensor_X, memory_config=out_mem_config, dtype=dtype
     )
 
-    assert list(tt_out.shape.with_tile_padding()) == [1, 1, batch_size, latent_size * hidden_size]
+    assert list(tt_out.padded_shape) == [1, 1, batch_size, latent_size * hidden_size]
 
     out = tt2torch_tensor(tt_out)
 
@@ -93,7 +93,7 @@ def test_ssm_eltwise_mul(batch, in0_W, in1_W, dtype, in0_mem_config, in1_mem_con
     run_ssm_eltwise_mul_test(batch, in0_W, in1_W, dtype, in0_mem_config, in1_mem_config, out_mem_config, device)
 
 
-def test_ssm_eltwise_mul_with_program_cache(device, use_program_cache):
+def test_ssm_eltwise_mul_with_program_cache(device):
     mem_config = ttnn.L1_MEMORY_CONFIG
     dtype = ttnn.bfloat16
 

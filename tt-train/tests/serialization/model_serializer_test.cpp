@@ -6,9 +6,9 @@
 
 #include <vector>
 
+#include "autograd/auto_context.hpp"
 #include "models/gpt2.hpp"
 #include "models/mlp.hpp"
-
 class MultiLayerPerceptronParametersTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -116,7 +116,8 @@ TEST_F(TransformerConfigTest, MissingFields) {
     yaml_node["vocab_size"] = 10000;
     yaml_node["max_sequence_length"] = 512;
 
-    EXPECT_THROW({ auto read_config_result = ttml::models::gpt2::read_config(yaml_node); }, YAML::Exception);
+    EXPECT_THROW(
+        { [[maybe_unused]] auto read_config_result = ttml::models::gpt2::read_config(yaml_node); }, YAML::Exception);
 }
 
 TEST_F(TransformerConfigTest, InvalidDataTypes) {
@@ -129,5 +130,6 @@ TEST_F(TransformerConfigTest, InvalidDataTypes) {
     yaml_node["vocab_size"] = 10000;
     yaml_node["max_sequence_length"] = 512;
 
-    EXPECT_THROW({ auto read_config_result = ttml::models::gpt2::read_config(yaml_node); }, YAML::Exception);
+    EXPECT_THROW(
+        { [[maybe_unused]] auto read_config_result = ttml::models::gpt2::read_config(yaml_node); }, YAML::Exception);
 }

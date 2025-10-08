@@ -6,14 +6,13 @@ import pytest
 from loguru import logger
 import torch
 import ttnn
-from models.utility_functions import skip_for_grayskull, skip_for_blackhole
+from models.common.utility_functions import skip_for_blackhole
 from tests.tt_eager.python_api_testing.unit_testing.misc.test_rotary_embedding_llama import (
     run_test_rotary_embedding_llama,
 )
 
 
 @skip_for_blackhole("Requires eth connected devices to run, only single chip BH available. See #12349")
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "batch, seq_len",
     (
@@ -72,7 +71,6 @@ def test_rotary_embedding_llama_fused_qk(
 
 
 @skip_for_blackhole("Requires eth connected devices to run, only single chip BH available. See #12349")
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "batch, seq_len",
     (
@@ -103,7 +101,6 @@ def test_rotary_embedding_llama_fused_qk_with_program_cache(
     datatype,
     pcc,
     device,
-    use_program_cache,
 ):
     compute_grid_size = device.compute_with_storage_grid_size()
     if compute_grid_size.x < 8 or compute_grid_size.y < 8:
@@ -132,7 +129,7 @@ def test_rotary_embedding_llama_fused_qk_with_program_cache(
 
         cache_tensors.append(test_tensor)
 
-    num_ops = 4  # embedding + fused_qk_rope + transpose + interleaved_to_sharded
+    num_ops = 5  # untilize cos/sin + embedding + fused_qk_rope + transpose + interleaved_to_sharded
 
     if (batch * 2) % ttnn.TILE_SIZE != 0:
         num_ops += 1  # slice

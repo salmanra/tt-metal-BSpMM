@@ -9,7 +9,7 @@
 /*************************************************************************
  * LLK UNPACK UNTILIZE
  *************************************************************************/
-template <bool is_fp32_dest_acc_en = false>
+template <bool is_fp32_dest_acc_en>
 inline void llk_unpack_untilize_hw_configure(const llk_unpack_A_params_t* unpack_untilize_params) {
     constexpr bool is_row_pool = false;
     constexpr bool within_face_16x16_transpose = false;
@@ -27,7 +27,7 @@ inline void llk_unpack_untilize_hw_configure(const llk_unpack_A_params_t* unpack
         unpA_num_faces);
 }
 
-template <bool is_fp32_dest_acc_en = false>
+template <bool is_fp32_dest_acc_en>
 inline void llk_unpack_untilize_hw_configure_disaggregated(const std::uint32_t unpA_operand) {
     const llk_unpack_A_params_t unpack_untilize_params = {
         .unpA_operand = unpA_operand,
@@ -41,6 +41,9 @@ inline void llk_unpack_untilize_init(std::uint32_t operand = 0) {
     const std::uint32_t operand_id = get_operand_id(operand);
     const std::uint32_t face_r_dim = 1;
     const std::uint32_t num_faces = get_operand_num_faces(operand_id);
+
+    // Disable transpose when unused
+    cfg_reg_rmw_tensix<THCON_SEC0_REG2_Haloize_mode_RMW>(0);
 
     // Save state of unpacker config for quick restore
     TTI_RDCFG(

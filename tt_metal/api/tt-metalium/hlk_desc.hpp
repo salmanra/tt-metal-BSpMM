@@ -4,14 +4,17 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstring>
+#include <functional>
 #include <string>
 
-#include "hostdevcommon/kernel_structs.h"
-#include "assert.hpp"
-#include "base_types.hpp"
-#include "tt_backend_api_types.hpp"
-#include "utils.hpp"
-#include "circular_buffer_constants.h"  // for NUM_CIRCULAR_BUFFERS
+#include <hostdevcommon/kernel_structs.h>
+#include <tt_stl/assert.hpp>
+#include <tt-metalium/base_types.hpp>
+#include <tt-metalium/tt_backend_api_types.hpp>
+#include <tt-metalium/circular_buffer_constants.h>
+#include <tt_stl/reflection.hpp>
 
 namespace tt {
 /**
@@ -28,21 +31,17 @@ private:
     size_t hlk_args_size;  // size of hlk_args_t in bytes (result of sizeof())
 
 public:
-    DataFormat buf_dataformat_arr[NUM_CIRCULAR_BUFFERS];
-    uint32_t buf_num_faces_arr[NUM_CIRCULAR_BUFFERS];
-    uint32_t buf_partial_face_arr[NUM_CIRCULAR_BUFFERS];
-    uint32_t buf_face_r_dim_arr[NUM_CIRCULAR_BUFFERS];
-    uint32_t buf_narrow_tile_arr[NUM_CIRCULAR_BUFFERS];
-    uint32_t buf_tile_r_dim_arr[NUM_CIRCULAR_BUFFERS];
-    uint32_t buf_tile_c_dim_arr[NUM_CIRCULAR_BUFFERS];
-    uint32_t buf_tile_size_arr[NUM_CIRCULAR_BUFFERS];
+    DataFormat buf_dataformat_arr[NUM_CIRCULAR_BUFFERS]{};
+    uint32_t buf_num_faces_arr[NUM_CIRCULAR_BUFFERS]{};
+    uint32_t buf_partial_face_arr[NUM_CIRCULAR_BUFFERS]{};
+    uint32_t buf_face_r_dim_arr[NUM_CIRCULAR_BUFFERS]{};
+    uint32_t buf_narrow_tile_arr[NUM_CIRCULAR_BUFFERS]{};
+    uint32_t buf_tile_r_dim_arr[NUM_CIRCULAR_BUFFERS]{};
+    uint32_t buf_tile_c_dim_arr[NUM_CIRCULAR_BUFFERS]{};
+    uint32_t buf_tile_size_arr[NUM_CIRCULAR_BUFFERS]{};
 
-    tt_hlk_desc() {
-        math_fidelity = MathFidelity::Invalid;
-        hlk_args = nullptr;
-        hlk_args_size = 0;
-        approximation_mode = true;
-
+    tt_hlk_desc() :
+        math_fidelity(MathFidelity::Invalid), hlk_args(nullptr), hlk_args_size(0), approximation_mode(true) {
         for (int i = 0; i < NUM_CIRCULAR_BUFFERS; ++i) {
             buf_dataformat_arr[i] = DataFormat::Invalid;
             buf_num_faces_arr[i] = constants::TILE_HW / constants::FACE_HW;
@@ -130,25 +129,35 @@ public:
 
 // Hash for hlk_args
 inline void hash_hlk_args(size_t& seed, void* hlk_args, size_t hlk_args_size) {
-    char buffer[hlk_args_size];
-    memcpy(buffer, hlk_args, hlk_args_size);
+    // C++20 standard, section 7.2.1, paragraph 11:
+    // If a program attempts to access the stored value of an object through a glvalue whose type is not
+    // similar to one of the following types the behavior is undefined:
+    // - the dynamic type of the object,
+    // - a type that is the signed or unsigned type corresponding to the dynamic type of the object, or
+    // - a char, unsigned char, or std::byte type
+    // </standard>
+    //
+    // Since we are accessing the raw bytes through a char type,
+    // reinterpret_casting is well defined.
 
-    for (int i = 0; i < hlk_args_size; i++) {
-        tt::utils::hash_combine(seed, std::hash<char>{}(buffer[i]));
+    const char* const raw_bytes = reinterpret_cast<char*>(hlk_args);
+
+    for (size_t i = 0; i < hlk_args_size; ++i) {
+        ttsl::hash::hash_combine(seed, std::hash<char>{}(raw_bytes[i]));
     }
 }
 
 template <>
 struct std::hash<tt::tt_hlk_desc> {
-    std::size_t operator()(tt::tt_hlk_desc const& obj) const noexcept {
+    std::size_t operator()(tt::tt_hlk_desc const& obj) const {
         std::size_t hash_value = 0;
         for (int i = 0; i < NUM_CIRCULAR_BUFFERS; i++) {
-            tt::utils::hash_combine(hash_value, hash<tt::DataFormat>{}(obj.get_buf_dataformat(i)));
-            tt::utils::hash_combine(hash_value, hash<uint32_t>{}(obj.get_buf_tile_r_dim(i)));
-            tt::utils::hash_combine(hash_value, hash<uint32_t>{}(obj.get_buf_tile_c_dim(i)));
+            ttsl::hash::hash_combine(hash_value, hash<tt::DataFormat>{}(obj.get_buf_dataformat(i)));
+            ttsl::hash::hash_combine(hash_value, hash<uint32_t>{}(obj.get_buf_tile_r_dim(i)));
+            ttsl::hash::hash_combine(hash_value, hash<uint32_t>{}(obj.get_buf_tile_c_dim(i)));
         }
-        tt::utils::hash_combine(hash_value, hash<MathFidelity>{}(obj.get_hlk_math_fidelity()));
-        tt::utils::hash_combine(hash_value, hash<bool>{}(obj.get_hlk_math_approx_mode()));
+        ttsl::hash::hash_combine(hash_value, hash<MathFidelity>{}(obj.get_hlk_math_fidelity()));
+        ttsl::hash::hash_combine(hash_value, hash<bool>{}(obj.get_hlk_math_approx_mode()));
 
         // Get hash for hlk_args here
         void* hlk_args = obj.get_hlk_args();
@@ -157,9 +166,7 @@ struct std::hash<tt::tt_hlk_desc> {
             hash_hlk_args(hash_value, hlk_args, hlk_args_size);
         } else if (hlk_args == nullptr and hlk_args_size == 0) {
         } else {
-            TT_THROW(
-                "Mismatching values, either hlk_args == nullptr and hlk_args_size == 0 or hlk_args != nullptr and "
-                "hlk_args_size > 0!");
+            TT_THROW("Invalid hlk_args, hlk_args == {}, hlk_args_size == {}", hlk_args, hlk_args_size);
         }
 
         return hash_value;

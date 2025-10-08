@@ -31,9 +31,9 @@ struct BinaryNgDeviceOperation {
 
     struct operation_attributes_t {
         BinaryOpType binary_op_type;
-        ttnn::SmallVector<unary::UnaryWithParam> lhs_activations;
-        ttnn::SmallVector<unary::UnaryWithParam> rhs_activations;
-        ttnn::SmallVector<unary::UnaryWithParam> post_activations;
+        ttnn::SmallVector<unary::EltwiseUnaryWithParam> lhs_activations;
+        ttnn::SmallVector<unary::EltwiseUnaryWithParam> rhs_activations;
+        ttnn::SmallVector<unary::EltwiseUnaryWithParam> post_activations;
         std::optional<float> scalar;
         tt::tt_metal::MemoryConfig memory_config;
         DataType input_dtype;
@@ -42,6 +42,7 @@ struct BinaryNgDeviceOperation {
         std::optional<DeviceComputeKernelConfig> compute_kernel_config;
         SubtileBroadcastType subtile_broadcast_type = SubtileBroadcastType::NONE;
         bool is_sfpu = false;
+        bool is_quant_op = false;
 
         tt::stl::hash::hash_t to_hash() const;
         DataType get_dtype() const;
@@ -58,6 +59,9 @@ struct BinaryNgDeviceOperation {
             tt::tt_metal::KernelHandle reader_kernel_id;
             tt::tt_metal::KernelHandle writer_kernel_id;
             tt::tt_metal::KernelHandle compute_kernel_id;
+            tt::tt_metal::CBHandle cb_src_a;
+            tt::tt_metal::CBHandle cb_src_b;
+            tt::tt_metal::CBHandle cb_src_c;
         };
 
         using cached_program_t = ttnn::device_operation::CachedProgram<shared_variables_t>;
@@ -91,10 +95,10 @@ struct BinaryNgDeviceOperation {
         BinaryOpType binary_op_type,
         const std::optional<const DataType>& output_dtype,
         const std::optional<MemoryConfig>& memory_config,
-        std::optional<Tensor> optional_output_tensor,
-        tt::stl::Span<const unary::UnaryWithParam> lhs_activations,
-        tt::stl::Span<const unary::UnaryWithParam> rhs_activations,
-        tt::stl::Span<const unary::UnaryWithParam> post_activations);
+        const std::optional<Tensor>& optional_output_tensor,
+        tt::stl::Span<const unary::EltwiseUnaryWithParam> lhs_activations,
+        tt::stl::Span<const unary::EltwiseUnaryWithParam> rhs_activations,
+        tt::stl::Span<const unary::EltwiseUnaryWithParam> post_activations);
 
     // tensor-scalar invocation
     static std::tuple<operation_attributes_t, tensor_args_t> invoke(
@@ -103,10 +107,10 @@ struct BinaryNgDeviceOperation {
         BinaryOpType binary_op_type,
         const std::optional<const DataType>& output_dtype,
         const std::optional<MemoryConfig>& memory_config,
-        std::optional<Tensor> optional_output_tensor,
-        tt::stl::Span<const unary::UnaryWithParam> lhs_activations,
-        tt::stl::Span<const unary::UnaryWithParam> rhs_activations,
-        tt::stl::Span<const unary::UnaryWithParam> post_activations);
+        const std::optional<Tensor>& optional_output_tensor,
+        tt::stl::Span<const unary::EltwiseUnaryWithParam> lhs_activations,
+        tt::stl::Span<const unary::EltwiseUnaryWithParam> rhs_activations,
+        tt::stl::Span<const unary::EltwiseUnaryWithParam> post_activations);
 };
 
 }  // namespace ttnn::operations::binary_ng

@@ -31,9 +31,9 @@ struct MorehClipGradNormStep1Operation {
 
     struct ProgramFactory {
         struct shared_variables_t {
-            KernelHandle reader_kernel_id;
-            KernelHandle writer_kernel_id;
-            KernelHandle compute_kernel_id;
+            tt::tt_metal::KernelHandle reader_kernel_id;
+            tt::tt_metal::KernelHandle writer_kernel_id;
+            tt::tt_metal::KernelHandle compute_kernel_id;
             uint32_t num_cores_to_be_used;
             size_t num_cores_y;
         };
@@ -62,8 +62,8 @@ struct MorehClipGradNormStep1Operation {
     static tensor_return_value_t create_output_tensors(const operation_attributes_t&, const tensor_args_t&);
     static std::tuple<operation_attributes_t, tensor_args_t> invoke(
         const std::vector<Tensor>& inputs,
-        const float norm_type,
-        const uint32_t tile_offset_of_tmp_pow_sum,
+        float norm_type,
+        uint32_t tile_offset_of_tmp_pow_sum,
         const Tensor& tmp_pow_sum,
         const std::optional<MemoryConfig>& memory_config,
         const DeviceComputeKernelConfig& compute_kernel_config);

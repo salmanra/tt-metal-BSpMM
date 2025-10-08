@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2023 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -42,7 +42,7 @@ void kernel_main() {
     constexpr uint32_t cb_ex_partial2 = tt::CBIndex::c_11;
     constexpr uint32_t cb_ex2 = tt::CBIndex::c_12;
     constexpr uint32_t cb_ex_external2 = tt::CBIndex::c_13;
-    constexpr uint32_t cb_ex2pe = tt::CBIndex::c_27;
+    constexpr uint32_t cb_ex2pe = tt::CBIndex::c_20;
     constexpr uint32_t cb_ex_global = tt::CBIndex::c_15;  // E[x] global reduce
 
     const uint32_t single_tile_size_bytes = get_tile_size(cb_ex_partial2);
@@ -192,7 +192,6 @@ void kernel_main() {
                     multicast_data_noc | l1_read_addr_ex_global,
                     num_tiles_bytes,
                     num_blocks - 1,
-                    true,
                     true);
                 noc_semaphore_set_multicast(
                     reduce_sender_semaphore_addr, reduce_sender_semaphore_noc_addr, num_blocks - 1);

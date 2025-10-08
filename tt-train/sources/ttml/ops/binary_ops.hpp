@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -23,3 +23,12 @@ autograd::TensorPtr mul(const autograd::TensorPtr& a, float b);
 autograd::TensorPtr div(const autograd::TensorPtr& a, const autograd::TensorPtr& b);
 
 }  // namespace ttml::ops
+
+// operators should be in the same namespace as the TensorPtr
+namespace ttml::autograd {
+using ops::operator*;
+using ops::operator+;
+using ops::operator-;
+using ops::operator/;
+
+}  // namespace ttml::autograd

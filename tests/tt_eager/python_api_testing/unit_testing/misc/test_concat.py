@@ -9,7 +9,7 @@ import sys
 import torch
 
 import ttnn
-from models.utility_functions import print_diff_argmax, skip_for_blackhole
+from models.common.utility_functions import print_diff_argmax, skip_for_blackhole
 import pytest
 from loguru import logger
 
@@ -161,7 +161,7 @@ def test_concat(shapes, dim, device, layout, dtype, input_mem_config, output_mem
     ),
 )
 def test_concat_with_program_cache(
-    shapes, dim, device, layout, dtype, input_mem_config, output_mem_config, use_program_cache, function_level_defaults
+    shapes, dim, device, layout, dtype, input_mem_config, output_mem_config, function_level_defaults
 ):
     run_concat(shapes, dim, device, layout, dtype, input_mem_config, output_mem_config)
     tmp = ttnn.zeros([1, 256, 32, 32], ttnn.bfloat16, ttnn.TILE_LAYOUT, device)

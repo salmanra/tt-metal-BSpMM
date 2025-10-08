@@ -3,26 +3,20 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
-from datasets import load_dataset
 from loguru import logger
 import pytest
 import ttnn
-from models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor, profiler
-from models.utility_functions import (
+from models.common.utility_functions import profiler
+from models.common.utility_functions import (
     disable_persistent_kernel_cache,
     enable_persistent_kernel_cache,
 )
 from models.perf.perf_utils import prep_perf_report
 
 from transformers import BloomForCausalLM, BloomTokenizerFast
-from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
-    comp_allclose,
-    comp_pcc,
-)
 
 from loguru import logger
 
-import models.experimental.bloom.bloom_utils as bloom_utils
 import models.experimental.bloom.tt.bloom_model as bloom_model
 
 
@@ -105,7 +99,7 @@ def run_perf_bloom(expected_inference_time, expected_compile_time, device):
         ),
     ),
 )
-def test_perf_bare_metal(device, use_program_cache, expected_inference_time, expected_compile_time):
+def test_perf_bare_metal(device, expected_inference_time, expected_compile_time):
     run_perf_bloom(expected_inference_time, expected_compile_time, device)
 
 
@@ -119,5 +113,5 @@ def test_perf_bare_metal(device, use_program_cache, expected_inference_time, exp
         ),
     ),
 )
-def test_perf_virtual_machine(device, use_program_cache, expected_inference_time, expected_compile_time):
+def test_perf_virtual_machine(device, expected_inference_time, expected_compile_time):
     run_perf_bloom(expected_inference_time, expected_compile_time, device)

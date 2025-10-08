@@ -6,7 +6,7 @@ from loguru import logger
 
 
 import ttnn
-from models.utility_functions import (
+from models.common.utility_functions import (
     comp_pcc,
 )
 import torch
@@ -39,7 +39,7 @@ def run_bert_large_concatenate_heads_test(device, batch, dtype, in0_mem_config, 
     logger.debug(f"in0: {a_t.memory_config().buffer_type} and {a_t.get_dtype()}")
     logger.debug(f"out: {out.memory_config().buffer_type} and {out.get_dtype()}")
 
-    assert out.shape.with_tile_padding() == [batch, 1, 384, 1024]
+    assert out.padded_shape == [batch, 1, 384, 1024]
     pyt_got_back_rm_out = ttnn.to_torch(out)
 
     ref_out = torch.transpose(A, -3, -2).reshape([batch, 1, 384, 1024])
@@ -86,7 +86,7 @@ def test_bert_large_concatenate_heads_test(device, batch, dtype, in0_mem_config,
     run_bert_large_concatenate_heads_test(device, batch, dtype, in0_mem_config, out_mem_config)
 
 
-def test_bert_large_concatenate_heads_with_program_cache(device, use_program_cache):
+def test_bert_large_concatenate_heads_with_program_cache(device):
     dtype = ttnn.bfloat8_b
     mem_config = ttnn.DRAM_MEMORY_CONFIG
     for _ in range(2):

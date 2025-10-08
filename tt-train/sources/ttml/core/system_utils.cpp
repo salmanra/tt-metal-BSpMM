@@ -1,10 +1,13 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
 #include "system_utils.hpp"
 
 #include <cxxabi.h>
+
+#include <memory>
+#include <string>
 
 namespace ttml::core {
 std::string demangle(const char* name) {

@@ -88,7 +88,7 @@ There are two extreme cases:
 2. `bsz*n_kv_heads` is 1 or a very small number. In this case, one work is assigned to many cores. This can lead to a new bottleneck from noc traffic, where the reduction step takes more time than compute. We show this phenomenon in the performance analysis section. To mitigate this, we limit the maximum number of cores assigned to one work to 16. `max_cores_per_head_batch` is the parameter that controls this in SDPAProgramConfig.
 
 ### 3.2 Step-by-step Visualization of an Average Case
-To give the reader a better intuition of how FlashDecode works on TT-Metallium, we visualize an average case with `bsz=16`, `n_kv_heads=1`, `n_q_heads=8` (padded to 32), and `n_cores=64`. The input is read from DRAM, and the output is left in L1.
+To give the reader a better intuition of how FlashDecode works on TT-Metalium, we visualize an average case with `bsz=16`, `n_kv_heads=1`, `n_q_heads=8` (padded to 32), and `n_cores=64`. The input is read from DRAM, and the output is left in L1.
 
 ![FlashDecodeStepByStep](images/FlashDecode/steps.png)
 
@@ -124,10 +124,10 @@ Overall, the kernel pseudocode is similar to FlashAttention, but with only a sin
 In the final part of the implementation details, we will discuss the role of `cur_pos`, `cur_pos_tensor`, and `attn_mask` in the kernel.
 
 **Causal mode**
-In causal mode, each batch's query attends to all previous tokens up to the current decoding position. Since each batch is independent, each core only needs to read the previous tokens from the KV cache rather than reading the entire cache. This is accomplished by passing the `cur_pos` list, which contains the current decoding position for each batch, into the kernel. Alternatively, the `cur_pos_tensor` can be passed in as a row-major TT-NN tensor. This optimization eliminates the need for an explicit mask and avoids redundant computation. An example of causal mode flash decode can be found in the [Llama 3 attention module](https://github.com/tenstorrent/tt-metal/blob/main/models/demos/llama3/tt/llama_attention.py).
+In causal mode, each batch's query attends to all previous tokens up to the current decoding position. Since each batch is independent, each core only needs to read the previous tokens from the KV cache rather than reading the entire cache. This is accomplished by passing the `cur_pos` list, which contains the current decoding position for each batch, into the kernel. Alternatively, the `cur_pos_tensor` can be passed in as a row-major TT-NN tensor. This optimization eliminates the need for an explicit mask and avoids redundant computation. An example of causal mode flash decode can be found in the [Llama 3 attention module](https://github.com/tenstorrent/tt-metal/blob/main/models/tt_transformers/tt/test_attention.py).
 
 **Non-causal mode**
-In non-causal mode, the query does not necessarily attend to all previous tokens. Users can pass in an arbitrary attention mask up to `kv_len`. Attention is computed on the entire length of KV cache, and the mask is applied to the attention scores. A use case for non-causal attention is in vision-language models, where cross attention is applied in the decode phase on the entire input image with arbitrary masking. An example of non-causal mode flash decode can be found in the [Llama 3 cross attention module](https://github.com/tenstorrent/tt-metal/blob/main/models/demos/llama3/tt/multimodal/llama_cross_attention.py).
+In non-causal mode, the query does not necessarily attend to all previous tokens. Users can pass in an arbitrary attention mask up to `kv_len`. Attention is computed on the entire length of KV cache, and the mask is applied to the attention scores. A use case for non-causal attention is in vision-language models, where cross attention is applied in the decode phase on the entire input image with arbitrary masking. An example of non-causal mode flash decode can be found in the [Llama 3 cross attention module](https://github.com/tenstorrent/tt-metal/blob/main/models/tt_transformers/tt/multimodal/llama_cross_attention.py).
 
 ## 4 Performance Analysis
 

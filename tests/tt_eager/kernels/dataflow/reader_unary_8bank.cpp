@@ -41,13 +41,8 @@ void kernel_main() {
     constexpr uint32_t onetile = 1;
     uint32_t tile_bytes = get_tile_size(cb_id_in0);
 
-#ifdef KERNEL_COMPILE_TIME_ARG_0
-    constexpr bool read_from_dram = get_compile_time_arg_val(0);
-#else
-    constexpr bool read_from_dram = true;
-#endif
-
-    const InterleavedPow2AddrGen<read_from_dram> src_a = {src_addr, 11};
+    constexpr auto src_args = TensorAccessorArgs<0>();
+    const auto src_a = TensorAccessor(src_args, src_addr, tile_bytes);
 
 #if GENERATE_BCAST_SCALER
     // TODO(AP): cleanup, probably with named args/param pack/reflection.

@@ -8,7 +8,7 @@
 #include <pybind11/stl.h>
 
 #include "repeat_and_interleave_eltwise_mul.hpp"
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 
 namespace ttnn::operations::experimental::ssm::detail {
 
@@ -31,15 +31,15 @@ void bind_repeat_and_interleave_eltwise_mul(py::module& module) {
                const ttnn::Tensor& b,
                const std::optional<MemoryConfig>& memory_config,
                const std::optional<DataType> dtype,
-               const std::optional<MathFidelity> math_fidelity,
-               uint8_t queue_id) { return self(queue_id, a, b, memory_config, dtype, math_fidelity); },
+               const std::optional<MathFidelity> math_fidelity) {
+                return self(a, b, memory_config, dtype, math_fidelity);
+            },
             py::arg("a"),
             py::arg("b"),
             py::kw_only(),
             py::arg("memory_config") = std::nullopt,
             py::arg("dtype") = std::nullopt,
-            py::arg("math_fidelity") = std::nullopt,
-            py::arg("queue_id") = 0});
+            py::arg("math_fidelity") = std::nullopt});
 }
 
 }  // namespace ttnn::operations::experimental::ssm::detail

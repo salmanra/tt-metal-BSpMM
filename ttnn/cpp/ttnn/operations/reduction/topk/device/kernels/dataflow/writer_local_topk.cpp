@@ -13,8 +13,7 @@ void kernel_main() {
     constexpr uint32_t K = get_compile_time_arg_val(5);
     constexpr uint32_t Kt = get_compile_time_arg_val(6);
 
-    uint32_t start_ht = get_arg_val<uint32_t>(0);
-    uint32_t start_wt = get_arg_val<uint32_t>(1);
+    uint32_t start_wt = get_arg_val<uint32_t>(0);
 
     constexpr uint32_t values_cb_index = tt::CBIndex::c_16;
     constexpr uint32_t output_ind_cb_index = tt::CBIndex::c_17;
@@ -34,9 +33,9 @@ void kernel_main() {
     uint32_t final_indices_cb_addr = get_write_ptr(final_indices_cb_index);
 
     uint64_t noc_final_addr_values =
-        get_noc_addr(noc_final_x, noc_final_y, final_values_cb_addr) + start_wt * tile_bytes_values;
+        get_noc_addr(noc_final_x, noc_final_y, final_values_cb_addr) + start_wt * tile_bytes_values * Kt;
     uint64_t noc_value_addr_values =
-        get_noc_addr(noc_final_x, noc_final_y, final_indices_cb_addr) + start_wt * tile_bytes_ind;
+        get_noc_addr(noc_final_x, noc_final_y, final_indices_cb_addr) + start_wt * tile_bytes_ind * Kt;
 
     volatile tt_l1_ptr uint32_t* receiver_semaphore_addr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(receiver_semaphore);
@@ -71,4 +70,5 @@ void kernel_main() {
         // set the receiver ready semaphore to invalid until the receiver is ready to receive data
         noc_semaphore_set(receiver_semaphore_addr, INVALID);
     }
+    noc_async_atomic_barrier();
 }

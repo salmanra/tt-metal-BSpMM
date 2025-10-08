@@ -1,7 +1,6 @@
 #!/bin/bash
 set -eo pipefail
 
-
 # Allow overriding Python command via environment variable
 if [ -z "$PYTHON_CMD" ]; then
     PYTHON_CMD="python3"
@@ -10,7 +9,7 @@ else
 fi
 
 # Verify Python command exists
-if ! command -v $PYTHON_CMD &> /dev/null; then
+if ! command -v $PYTHON_CMD &>/dev/null; then
     echo "Python command not found: $PYTHON_CMD"
     exit 1
 fi
@@ -25,12 +24,20 @@ echo "Creating virtual env in: $PYTHON_ENV_DIR"
 $PYTHON_CMD -m venv $PYTHON_ENV_DIR
 source $PYTHON_ENV_DIR/bin/activate
 
-echo "Forcefully using a version of pip that will work with our view of editable installs"
-pip install --force-reinstall pip==21.2.4
+# Import functions for detecting OS
+. ./install_dependencies.sh --source-only
+detect_os
 
-echo "Setting up virtual env"
-python3 -m pip config set global.extra-index-url https://download.pytorch.org/whl/cpu
-python3 -m pip install setuptools wheel
+
+if [ "$OS_ID" = "ubuntu" ] && [ "$OS_VERSION" = "22.04" ]; then
+    echo "Ubuntu 22.04 detected: force pip/setuptools/wheel versions"
+    pip install --force-reinstall pip==25.1.1
+    python3 -m pip config set global.extra-index-url https://download.pytorch.org/whl/cpu
+    python3 -m pip install setuptools wheel==0.45.1
+else
+    echo "$OS_ID $OS_VERSION detected: updating wheel and setuptools to latest"
+    python3 -m pip install --upgrade wheel setuptools
+fi
 
 echo "Installing dev dependencies"
 python3 -m pip install -r $(pwd)/tt_metal/python_env/requirements-dev.txt
@@ -39,7 +46,7 @@ echo "Installing tt-metal"
 pip install -e .
 
 # Do not install hooks when this is a worktree
-if [ $(git rev-parse --git-dir) = $(git rev-parse --git-common-dir) ] ; then
+if [ $(git rev-parse --git-dir) = $(git rev-parse --git-common-dir) ]; then
     echo "Generating git hooks"
     pre-commit install
     pre-commit install --hook-type commit-msg

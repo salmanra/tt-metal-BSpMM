@@ -2,24 +2,15 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
-import math
 import pytest
-import ttnn
+import torch
 
-from tests.ttnn.utils_for_testing import assert_with_pcc
-from models.utility_functions import (
-    skip_for_grayskull,
-)
-from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import (
-    determine_largest_subblock_size,
-    round_up_to_tile_dim,
-)
-from models.utility_functions import comp_pcc, tt2torch_tensor, torch2tt_tensor, skip_for_wormhole_b0
+import ttnn
+from models.common.utility_functions import comp_pcc, torch2tt_tensor, tt2torch_tensor
+from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import round_up_to_tile_dim
 
 
 # Test matmul attention sequence with InterleavedToShardedPartialOp
-@skip_for_grayskull()
 @pytest.mark.parametrize(
     "W0, Z0, W1, Z1, M, K, N, input_dtype, output_dtype, bias, output_mem_config, input_mem_config, program_config_type, grid_size, in0_block_w, out_subblock_h, out_subblock_w, per_core_M, per_core_N, transpose_mcast, fused_activation, fuse_batch, mcast_in0",
     [

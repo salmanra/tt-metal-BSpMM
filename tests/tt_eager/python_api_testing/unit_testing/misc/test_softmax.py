@@ -15,9 +15,9 @@ from tt_lib.utils import (
     untilize,
     is_close,
 )
-from models.utility_functions import print_diff_argmax, comp_pcc
-from models.utility_functions import torch2tt_tensor, tt2torch_tensor, pad_by_zero
-from models.utility_functions import is_grayskull, is_blackhole, skip_for_blackhole
+from models.common.utility_functions import print_diff_argmax, comp_pcc
+from models.common.utility_functions import torch2tt_tensor, tt2torch_tensor, pad_by_zero
+from models.common.utility_functions import is_grayskull, is_blackhole, skip_for_blackhole
 
 
 @pytest.mark.parametrize(
@@ -70,7 +70,7 @@ def test_softmax(device, inplace, dtype):
 
 
 @pytest.mark.parametrize("inplace", [True, False])
-def test_softmax_with_program_cache(device, use_program_cache, inplace):
+def test_softmax_with_program_cache(device, inplace):
     torch.manual_seed(0)
     sm_op = ttnn.softmax_in_place if inplace else ttnn.softmax
 

@@ -2,16 +2,16 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "ttnn/common/constants.hpp"
 #include "ttnn/run_operation.hpp"
 #include "device/interleaved_to_sharded_partial_op.hpp"
 #include "interleaved_to_sharded_partial.hpp"
 #include <tt-metalium/work_split.hpp>
 
+using namespace tt::tt_metal;
+
 namespace ttnn::operations::data_movement {
 
 ttnn::Tensor InterleavedToShardedPartialOperation::invoke(
-    uint8_t queue_id,
     const ttnn::Tensor& input_tensor,
     const std::variant<CoreCoord, CoreRangeSet>& grid,
     const std::array<uint32_t, 2>& shard_shape,
@@ -20,8 +20,6 @@ ttnn::Tensor InterleavedToShardedPartialOperation::invoke(
     tt::tt_metal::TensorMemoryLayout shard_scheme,
     tt::tt_metal::ShardOrientation shard_orientation,
     const std::optional<DataType>& data_type_arg) {
-    std::vector<Tensor> output_tensors = {Tensor(tt::tt_metal::operation::get_workers_for_op_output({input_tensor}))};
-
     bool row_wise = shard_orientation == tt::tt_metal::ShardOrientation::ROW_MAJOR;
     CoreCoord grid_size;
     CoreRangeSet grid_set;
@@ -31,10 +29,10 @@ ttnn::Tensor InterleavedToShardedPartialOperation::invoke(
             if constexpr (std::is_same_v<GridType, CoreCoord>) {
                 grid_size = grid;
                 uint32_t num_cores = 0;
-                uint32_t total_height = input_tensor.volume() / input_tensor.get_padded_shape()[-1];
+                uint32_t total_height = input_tensor.physical_volume() / input_tensor.padded_shape()[-1];
                 total_height /= num_slices;
 
-                uint32_t total_width = input_tensor.get_padded_shape()[-1];
+                uint32_t total_width = input_tensor.padded_shape()[-1];
                 switch (shard_scheme) {
                     case TensorMemoryLayout::HEIGHT_SHARDED:
                         num_cores = tt::div_up(total_height, shard_shape[0]);
@@ -53,8 +51,7 @@ ttnn::Tensor InterleavedToShardedPartialOperation::invoke(
         grid);
 
     tt::tt_metal::ShardSpec shard_spec(grid_set, shard_shape, shard_orientation);
-    tt::tt_metal::MemoryConfig sharded_mem_config =
-        tt::tt_metal::MemoryConfig{.memory_layout = shard_scheme, .buffer_type = BufferType::L1};
+    tt::tt_metal::MemoryConfig sharded_mem_config = tt::tt_metal::MemoryConfig{shard_scheme, BufferType::L1};
     return operation::run(
                InterleavedToShardedPartialDeviceOperation{
                    .grid_size = grid_size,
@@ -62,7 +59,7 @@ ttnn::Tensor InterleavedToShardedPartialOperation::invoke(
                    .num_slices = num_slices,
                    .slice_index = slice_index,
                    .output_mem_config = sharded_mem_config,
-                   .output_dtype = data_type_arg.value_or(input_tensor.get_dtype())},
+                   .output_dtype = data_type_arg.value_or(input_tensor.dtype())},
                {input_tensor})
         .at(0);
 }

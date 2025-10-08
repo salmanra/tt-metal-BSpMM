@@ -33,8 +33,8 @@ struct MorehMeanOperation {
 
     struct MorehMeanHFactory {
         struct shared_variables_t {
-            KernelHandle unary_reader_kernel_id;
-            KernelHandle unary_writer_kernel_id;
+            tt::tt_metal::KernelHandle unary_reader_kernel_id;
+            tt::tt_metal::KernelHandle unary_writer_kernel_id;
             std::uint32_t num_cores;
             std::uint32_t core_h;
         };
@@ -55,8 +55,8 @@ struct MorehMeanOperation {
 
     struct MorehMeanNCFactory {
         struct shared_variables_t {
-            KernelHandle unary_reader_kernel_id;
-            KernelHandle unary_writer_kernel_id;
+            tt::tt_metal::KernelHandle unary_reader_kernel_id;
+            tt::tt_metal::KernelHandle unary_writer_kernel_id;
             std::uint32_t num_cores;
             std::uint32_t core_h;
         };
@@ -77,8 +77,8 @@ struct MorehMeanOperation {
 
     struct MorehMeanWFactory {
         struct shared_variables_t {
-            KernelHandle unary_reader_kernel_id;
-            KernelHandle unary_writer_kernel_id;
+            tt::tt_metal::KernelHandle unary_reader_kernel_id;
+            tt::tt_metal::KernelHandle unary_writer_kernel_id;
             std::uint32_t num_cores;
             std::uint32_t core_h;
         };
@@ -107,8 +107,8 @@ struct MorehMeanOperation {
     static tensor_return_value_t create_output_tensors(const operation_attributes_t&, const tensor_args_t&);
     static std::tuple<operation_attributes_t, tensor_args_t> invoke(
         const Tensor& input,
-        const int64_t dim,
-        const bool keepdim,
+        int64_t dim,
+        bool keepdim,
         const std::optional<uint32_t>& divisor,
         const std::optional<Tensor>& output,
         const std::optional<MemoryConfig>& memory_config,

@@ -9,27 +9,25 @@ on:
       runner-label:
         required: true
         type: string
+      docker-image:
+        required: true
+        type: string
+      build-artifact-name:
+        required: true
+        type: string
       timeout:
         required: false
         type: number
-        default: 20
-  workflow_dispatch:
-    inputs:
-      arch:
-        required: true
-        type: choice
-        options:
-          - wormhole_b0
-      runner-label:
-        required: true
-        type: choice
-        options:
-          - N150
-          - N300
-      timeout:
+        default: 45
+      enable-watcher:
         required: false
-        type: number
-        default: 20
+        type: boolean
+        default: false
+      gtest_filter:
+        required: false
+        default: "*"
+        type: string
+        description: "Filter for gtest"
 
 jobs:
   models:
@@ -39,42 +37,60 @@ jobs:
       fail-fast: false
       matrix:
         test-group: [
-          {name: tt-train, cmd: ctest --no-tests=error --output-on-failure},
+          {name: tt-train, cmd: ctest -E NIGHTLY --no-tests=error --output-on-failure  --output-junit generated/test_reports/ctest_report.xml},
         ]
     name: ${{ matrix.test-group.name }} ${{ inputs.arch }} ${{ inputs.runner-label }}
-    env:
-      TT_METAL_ENV: ${{ vars.TT_METAL_ENV }}
-      ARCH_NAME: ${{ inputs.arch }}
-      LOGURU_LEVEL: INFO
-      LD_LIBRARY_PATH: ${{ github.workspace }}/build/lib
-      TEST_DATA_DIR: ${{ github.workspace }}/data
-      ENABLE_CI_ONLY_TT_TRAIN_TESTS: 1
-    runs-on:
-      - ${{ inputs.runner-label }}
-      - cloud-virtual-machine
-      - in-service
+    # tt-train in N300 is timing out on CIv2: https://github.com/tenstorrent/tt-metal/issues/29443
+    runs-on: >-
+      ${{
+        (inputs.runner-label == 'P100') && fromJSON(format('["in-service", "cloud-virtual-machine", "{0}"]', inputs.runner-label))
+        || ((inputs.runner-label == 'N300') && format('tt-ubuntu-2204-{0}-stable', inputs.runner-label))
+        || format('tt-ubuntu-2204-{0}-viommu-stable', inputs.runner-label)
+      }}
+    container:
+      image: harbor.ci.tenstorrent.net/${{ inputs.docker-image || 'docker-image-unresolved!' }}
+      env:
+        TT_METAL_HOME: /work
+        LD_LIBRARY_PATH: /work/build/lib
+        TEST_DATA_DIR: /work/data
+        ENABLE_CI_ONLY_TT_TRAIN_TESTS: 1
+      volumes:
+        - ${{ github.workspace }}/docker-job:/work # Subdir to workaround https://github.com/actions/runner/issues/691
+        - /dev/hugepages-1G:/dev/hugepages-1G
+      options: "--device /dev/tenstorrent"
+    defaults:
+      run:
+        shell: bash
+        working-directory: /work # https://github.com/actions/runner/issues/878
     steps:
-      - uses: tenstorrent/tt-metal/.github/actions/checkout-with-submodule-lfs@main
-      - name: Set up dynamic env vars for build
-        run: |
-          echo "TT_METAL_HOME=$(pwd)" >> $GITHUB_ENV
-      - uses: ./.github/actions/prepare-metal-run
+      - name: ⬇️  Setup Job
+        uses: tenstorrent/tt-metal/.github/actions/setup-job@main
+        timeout-minutes: 10
+        with:
+          build-artifact-name: ${{ inputs.build-artifact-name }}
+          enable-watcher: ${{ inputs.enable-watcher || false }}
+
       - name: ${{ matrix.test-group.name }} tests
         timeout-minutes: ${{ inputs.timeout }}
         run: |
-          source ${{ github.workspace }}/python_env/bin/activate
-          export PYTHONPATH=$TT_METAL_HOME
-          cd $TT_METAL_HOME
           cp ./build/tt-train/3rd_party/wandb-cpp/libwandbcpp.so build/lib/
-          find ./build -type f -name "*.tcl" -o -name "*.cmake" -exec sed -i "s|/home/ubuntu/[^/]*/_work/tt-metal/tt-metal/build_Release|${TT_METAL_HOME}/build|g" {} +
-          cd $TT_METAL_HOME/build/tt-train
+          cd /work/build/tt-train
+          mkdir -p generated/test_reports
           ldd tests/ttml_tests || true
           ${{ matrix.test-group.cmd }}
-      - uses: ./.github/actions/slack-report
+
+      - uses: tenstorrent/tt-metal/.github/actions/slack-report@main
         if: ${{ failure() }}
         with:
-          slack_webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          slack_webhook_url: ${{ secrets.SLACK_METAL_INFRA_PIPELINE_STATUS_ALERT }}
           owner: U07ASPTGJTS # Denys
-      - name: Generate system logs on failure
-        uses: ./.github/actions/generate-system-logs
-        if: ${{ failure() }}
+
+      - uses: tenstorrent/tt-metal/.github/actions/upload-artifact-with-job-uuid@main
+        timeout-minutes: 10
+        if: ${{ !cancelled() }}
+        with:
+          path: /work/build/tt-train/generated/test_reports/
+          prefix: "test_reports_"
+
+      - uses: tenstorrent/tt-metal/.github/actions/cleanup@main
+        if: always()

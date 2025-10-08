@@ -7,7 +7,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 
 #include "split_query_key_value_and_split_heads.hpp"
 
@@ -19,7 +19,6 @@ void py_bind_split_query_key_value_and_split_heads(pybind11::module& module) {
         module,
         ttnn::transformer::split_query_key_value_and_split_heads,
         R"doc(
-
             Splits :attr:`input_tensor` of shape ``[batch_size, sequence_size, 3 * hidden_size]`` into 3 tensors (Query, Key, Value) of shape ``[batch_size, sequence_size, hidden_size]``.
             Then, reshapes and permutes the output tensors, to make them ready for computing attention scores.
 

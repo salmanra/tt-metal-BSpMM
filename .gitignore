@@ -1,4 +1,6 @@
 .cache
+.clangd
+.devcontainer/
 .vscode
 .idea
 runtime
@@ -20,7 +22,6 @@ build
 build_*
 /python_env/
 CMakeUserPresets.json
-
 /llk_out/
 /out/
 
@@ -93,6 +94,9 @@ venv/
 
 # exclude binaries
 *.bin
+
+# exclude serialized tensor binaries
+*.tensorbin
 
 # releases
 dist

@@ -5,7 +5,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 
 #include "typecast_pybind.hpp"
 #include "typecast.hpp"
@@ -41,13 +41,13 @@ void py_bind_typecast(py::module& module) {
                const ttnn::Tensor& input_tensor,
                const ttnn::DataType dtype,
                const std::optional<ttnn::MemoryConfig>& memory_config,
-               const std::optional<ttnn::Tensor>& optional_output_tensor,
-               uint8_t queue_id) { return self(queue_id, input_tensor, dtype, memory_config, optional_output_tensor); },
+               const std::optional<ttnn::Tensor>& optional_output_tensor) {
+                return self(input_tensor, dtype, memory_config, optional_output_tensor);
+            },
             py::arg("input_tensor").noconvert(),
             py::arg("dtype").noconvert(),
             py::arg("memory_config") = std::nullopt,
-            py::arg("optional_output_tensor") = std::nullopt,
-            py::arg("queue_id") = 0});
+            py::arg("optional_output_tensor") = std::nullopt});
 }
 
 }  // namespace ttnn::operations::experimental::copy::detail

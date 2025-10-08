@@ -7,8 +7,8 @@ import torch
 from loguru import logger
 
 import ttnn
-from models.utility_functions import untilize, comp_pcc
-from models.utility_functions import is_grayskull, skip_for_blackhole
+from models.common.utility_functions import untilize, comp_pcc
+from models.common.utility_functions import is_grayskull, skip_for_blackhole
 
 
 @pytest.mark.parametrize(
@@ -28,7 +28,6 @@ from models.utility_functions import is_grayskull, skip_for_blackhole
 def test_run_untilize_subcoregrid_test(dtype, nb, nc, nh, nw, device):
     if is_grayskull():
         pytest.skip("Skipping tests on Grayskull")
-    device.enable_async(True)
     shape = [nb, nc, nh, nw]
 
     torch.set_printoptions(precision=3, sci_mode=False, linewidth=3000, threshold=10000, edgeitems=128)
@@ -175,3 +174,9 @@ def test_run_untilize_5d(dtype, shape, device):
         passing1 = torch.equal(inp, our_untilized)
 
     assert passing1
+
+
+def test_regression_untilize_1d(device):
+    input = ttnn.ones([1280], ttnn.bfloat16, ttnn.TILE_LAYOUT, device, ttnn.DRAM_MEMORY_CONFIG)
+    out_untilized = ttnn.to_layout(input, layout=ttnn.ROW_MAJOR_LAYOUT)
+    assert out_untilized is not None

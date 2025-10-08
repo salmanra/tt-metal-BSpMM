@@ -8,8 +8,8 @@ from functools import partial
 
 import ttnn
 
-from models.helper_funcs import Linear as TTLinear
-from models.utility_functions import (
+from models.common.helper_funcs import Linear as TTLinear
+from models.common.utility_functions import (
     pad_by_zero,
 )
 
@@ -30,8 +30,8 @@ class TtRobertaSelfOutput(nn.Module):
         # TODO: Add dropout when supported
         # self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.dense_linear = TTLinear(
-            self.dense_weight.shape.with_tile_padding()[-1],
-            self.dense_weight.shape.with_tile_padding()[-2],
+            self.dense_weight.padded_shape[-1],
+            self.dense_weight.padded_shape[-2],
             self.dense_weight,
             self.dense_bias,
         )

@@ -12,7 +12,7 @@ from tests.sweep_framework.sweep_utils.utils import gen_shapes, sanitize_shape_r
 from tests.tt_eager.python_api_testing.sweep_tests.generation_funcs import gen_func_with_cast_tt
 
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 # Override the default timeout in seconds for hang detection.
 TIMEOUT = 30
@@ -109,9 +109,6 @@ def run(
 ) -> list:
     data_seed = random.randint(0, 20000000)
     torch.manual_seed(data_seed)
-
-    if (input_a_dtype == ttnn.float32 or grad_dtype == ttnn.float32) and ttnn.device.is_grayskull(device):
-        return [(False, "Dest Fp32 mode is not supported for arch grayskull"), 0]
 
     torch_input_tensor_a = gen_func_with_cast_tt(
         partial(torch_random, low=0, high=100, dtype=torch.float32), input_a_dtype

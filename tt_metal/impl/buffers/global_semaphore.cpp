@@ -2,20 +2,24 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <tt_stl/assert.hpp>
+#include <buffer.hpp>
+#include <buffer_types.hpp>
+#include <core_coord.hpp>
+#include <device.hpp>
 #include <global_semaphore.hpp>
-
+#include <host_api.hpp>
+#include <tt-metalium/distributed.hpp>
+#include <tt_metal.hpp>
 #include <cstdint>
 #include <memory>
+#include <utility>
+#include <variant>
 #include <vector>
 
-#include <assert.hpp>
-#include <core_coord.hpp>
-#include <tt_metal.hpp>
-#include <host_api.hpp>
-#include <buffer.hpp>
-#include <buffer_constants.hpp>
-#include <device.hpp>
-#include <hal.hpp>
+#include "mesh_device.hpp"
+#include <tt_stl/reflection.hpp>
+#include "impl/context/metal_context.hpp"
 
 namespace tt::tt_metal {
 
@@ -35,40 +39,35 @@ void GlobalSemaphore::setup_buffer(uint32_t initial_value, BufferType buffer_typ
     TT_FATAL(
         buffer_type == BufferType::L1 or buffer_type == BufferType::L1_SMALL,
         "Global semaphore can only be created for L1 buffer types");
-    TT_FATAL(this->device_ != nullptr, "Device cannot be null");
-    TT_FATAL(this->cores_.num_cores() > 0, "CoreRangeSet must have at least one core");
-    uint32_t num_cores = this->cores_.num_cores();
-    auto shard_parameters = ShardSpecBuffer(this->cores_, {1, 1}, ShardOrientation::ROW_MAJOR, {1, 1}, {num_cores, 1});
-
-    this->buffer_ = Buffer::create(
-        this->device_,
-        num_cores * sizeof(uint32_t),
-        sizeof(uint32_t),
-        buffer_type,
-        TensorMemoryLayout::HEIGHT_SHARDED,
-        shard_parameters,
-        std::nullopt);
+    TT_FATAL(device_ != nullptr, "Device cannot be null");
+    TT_FATAL(cores_.num_cores() > 0, "CoreRangeSet must have at least one core");
+    uint32_t num_cores = cores_.num_cores();
+    auto shard_parameters = ShardSpecBuffer(cores_, {1, 1}, ShardOrientation::ROW_MAJOR, {1, 1}, {num_cores, 1});
+    ShardedBufferConfig sem_shard_config = {
+        .device = device_,
+        .size = num_cores * sizeof(uint32_t),
+        .page_size = sizeof(uint32_t),
+        .buffer_type = buffer_type,
+        .buffer_layout = TensorMemoryLayout::HEIGHT_SHARDED,
+        .shard_parameters = std::move(shard_parameters),
+    };
+    buffer_ = distributed::AnyBuffer::create(sem_shard_config);
 
     this->reset_semaphore_value(initial_value);
 }
 
 IDevice* GlobalSemaphore::device() const { return device_; }
 
-DeviceAddr GlobalSemaphore::address() const { return buffer_->address(); }
+DeviceAddr GlobalSemaphore::address() const { return buffer_.get_buffer()->address(); }
 
 void GlobalSemaphore::reset_semaphore_value(uint32_t reset_value) const {
-    // Write the initial value to the semaphore to the device
-    // Only block for the slow dispatch case
-    auto* device = this->device_;
-    device->push_work([device, reset_value, num_cores = this->cores_.num_cores(), buffer = this->buffer_] {
-        std::vector<uint32_t> host_buffer(num_cores, reset_value);
-        if (device->using_slow_dispatch()) {
-            detail::WriteToBuffer(*buffer, host_buffer);
-            tt::Cluster::instance().l1_barrier(device->id());
-        } else {
-            EnqueueWriteBuffer(device->command_queue(), buffer, host_buffer, false);
-        }
-    });
+    // Blocking write here to ensure that Global Semaphore reset value lands on
+    // each physical device before the next program runs.
+    // This is to ensure that cross-chip writes to the Global Semaphore are not
+    // lost due to device skew.
+    std::vector<uint32_t> host_buffer(cores_.num_cores(), reset_value);
+    auto mesh_buffer = buffer_.get_mesh_buffer();
+    distributed::EnqueueWriteMeshBuffer(mesh_buffer->device()->mesh_command_queue(), mesh_buffer, host_buffer, true);
 }
 
 }  // namespace tt::tt_metal

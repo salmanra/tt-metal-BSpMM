@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 
 #include "ttnn/operations/experimental/transformer/nlp_create_qkv_heads_vit/nlp_create_qkv_heads_vit.hpp"
 #include "ttnn/operations/experimental/transformer/nlp_create_qkv_heads_vit/nlp_create_qkv_heads_vit_pybind.hpp"
@@ -20,12 +20,12 @@ void bind_nlp_create_qkv_heads_vit(pybind11::module& module) {
             [](const decltype(ttnn::experimental::nlp_create_qkv_heads_vit)& self,
                const ttnn::Tensor& input_tensor_q,
                const std::optional<ttnn::MemoryConfig>& memory_config,
-               std::optional<std::vector<std::optional<ttnn::Tensor>>>& optional_output_tensors,
-               uint8_t queue_id) { return self(queue_id, input_tensor_q, memory_config, optional_output_tensors); },
+               std::optional<std::vector<std::optional<ttnn::Tensor>>>& optional_output_tensors) {
+                return self(input_tensor_q, memory_config, optional_output_tensors);
+            },
             pybind11::arg("input").noconvert(),
             pybind11::kw_only(),
             pybind11::arg("memory_config").noconvert() = std::nullopt,
-            pybind11::arg("output_tensors").noconvert() = std::nullopt,
-            pybind11::arg("queue_id") = 0});
+            pybind11::arg("output_tensors").noconvert() = std::nullopt});
 };
 }  // namespace ttnn::operations::experimental::transformer::detail

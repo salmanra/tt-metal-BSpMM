@@ -14,7 +14,7 @@ from tests.ttnn.utils_for_testing import (
     stop_measuring_time,
     get_per_core_size_and_num_cores,
 )
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 # Override the default timeout in seconds for hang detection.
 TIMEOUT = 5
@@ -267,7 +267,6 @@ def run(
     device,
 ) -> list:
     torch_input_tensors = []
-    device.enable_async(False)
     if input_mem_config == ttnn.L1_BLOCK_SHARDED_MEMORY_CONFIG:
         input_mem_config_a = ttnn.create_sharded_memory_config(
             shape=concat_specs["shape1"],

@@ -10,46 +10,56 @@ import ttnn
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
+torch.manual_seed(0)
+
+
+def random_torch_tensor(dtype, shape):
+    if dtype == ttnn.uint16:
+        return torch.randint(0, 100, shape).to(torch.int16)
+    if dtype == ttnn.int32:
+        return torch.randint(-(2**31), 2**31, shape, dtype=torch.int32)
+    if dtype == ttnn.uint32:
+        return torch.randint(0, 2**31, shape, dtype=torch.int32)
+    return torch.rand(shape).bfloat16().float()
+
 
 @pytest.mark.parametrize(
     "concat_spec",
-    (([[1, 1, 12, 50], [1, 1, 12, 50]], -1),),
+    (([[1, 1, 4, 4], [1, 1, 4, 4]], -1),),
 )
-@pytest.mark.parametrize("async_mode", [True, False], ids=["async_on", "async_off"])
-def test_tiled_concat(device, concat_spec, async_mode):
+@pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.int32, ttnn.uint32])
+def test_tiled_concat(device, concat_spec, dtype):
     shapes, dim = concat_spec
-    device.enable_async(async_mode)
-    torch_input_tensors = [torch.rand(shape, dtype=torch.bfloat16) for shape in shapes]
+    torch_input_tensors = [random_torch_tensor(dtype, shape) for shape in shapes]
     torch_output_tensor = torch.concat(torch_input_tensors, dim=dim)
 
     input_tensors = [
-        ttnn.from_torch(torch_input_tensor, layout=ttnn.TILE_LAYOUT, device=device)
+        ttnn.from_torch(torch_input_tensor, layout=ttnn.TILE_LAYOUT, device=device, dtype=dtype)
         for torch_input_tensor in torch_input_tensors
     ]
 
     output = ttnn.concat(input_tensors, dim=dim)
     output = ttnn.to_torch(output)
 
-    assert_with_pcc(torch_output_tensor, output, 0.9999)
+    assert torch.equal(torch_output_tensor, output)
 
 
 @pytest.mark.parametrize("height", [20, 32])
 @pytest.mark.parametrize("width", [4, 32])
 @pytest.mark.parametrize("dim", [0, 1])
-@pytest.mark.parametrize("async_mode", [True, False], ids=["async_on", "async_off"])
-def test_concat(device, height, width, dim, async_mode):
-    device.enable_async(async_mode)
-    torch_input_tensor_a = torch.rand((height, width), dtype=torch.bfloat16)
-    torch_input_tensor_b = torch.rand((height, width), dtype=torch.bfloat16)
+@pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.int32, ttnn.uint32])
+def test_concat(device, height, width, dim, dtype):
+    torch_input_tensor_a = random_torch_tensor(dtype, (height, width))
+    torch_input_tensor_b = random_torch_tensor(dtype, (height, width))
     torch_output_tensor = torch.concat([torch_input_tensor_a, torch_input_tensor_b], dim=dim)
 
-    input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device)
-    input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device)
+    input_tensor_a = ttnn.from_torch(torch_input_tensor_a, layout=ttnn.TILE_LAYOUT, device=device, dtype=dtype)
+    input_tensor_b = ttnn.from_torch(torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device, dtype=dtype)
 
     output = ttnn.concat([input_tensor_a, input_tensor_b], dim=dim)
     output = ttnn.to_torch(output)
 
-    assert_with_pcc(torch_output_tensor, output, 0.9999)
+    assert torch.equal(torch_output_tensor, output)
 
 
 @pytest.mark.parametrize(
@@ -157,11 +167,10 @@ def test_concat(device, height, width, dim, async_mode):
         ),
     ),
 )
-@pytest.mark.parametrize("async_mode", [True, False], ids=["async_on", "async_off"])
-def test_sharded_concat(device, inputs, output_shard_shape, shard_grid, strategy, layout, cache_mode, async_mode):
-    device.enable_async(async_mode)
-    if cache_mode:
-        device.enable_program_cache()
+@pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.int32, ttnn.uint32])
+def test_sharded_concat(device, inputs, output_shard_shape, shard_grid, strategy, layout, cache_mode, dtype):
+    if not cache_mode:
+        device.disable_and_clear_program_cache()
 
     dim = 2 if strategy == ttnn.ShardStrategy.WIDTH else 3
 
@@ -175,8 +184,8 @@ def test_sharded_concat(device, inputs, output_shard_shape, shard_grid, strategy
                 strategy=strategy,
                 use_height_and_width_as_shard_shape=True,
             )
-            torch_input_tensor = torch.rand(shape, dtype=torch.bfloat16)
-            input_tensor = ttnn.from_torch(torch_input_tensor, layout=layout, device=device)
+            torch_input_tensor = random_torch_tensor(dtype, shape)
+            input_tensor = ttnn.from_torch(torch_input_tensor, layout=layout, device=device, dtype=dtype)
             input_tensor = ttnn.to_memory_config(input_tensor, input_sharded_memory_config)
             input_tensors.append((torch_input_tensor, input_tensor))
         return input_tensors
@@ -192,7 +201,7 @@ def test_sharded_concat(device, inputs, output_shard_shape, shard_grid, strategy
     torch_output_tensor = torch.concat([torch_tensor for torch_tensor, _ in input_tensors], dim=dim)
     output = ttnn.concat([tensor for _, tensor in input_tensors], dim=dim, memory_config=output_sharded_memory_config)
     output = ttnn.to_torch(output)
-    assert_with_pcc(torch_output_tensor, output)
+    assert torch.equal(torch_output_tensor, output)
 
     # If cache mode is enabled, run the second set of input tensors to verify buffers are updated when cache hits.
     if not cache_mode:
@@ -204,43 +213,35 @@ def test_sharded_concat(device, inputs, output_shard_shape, shard_grid, strategy
         [tensor for _, tensor in input_tensors_2], dim=dim, memory_config=output_sharded_memory_config
     )
     output_2 = ttnn.to_torch(output_2)
-    assert_with_pcc(torch_output_tensor_2, output_2)
+    assert torch.equal(torch_output_tensor_2, output_2)
 
 
 @pytest.mark.parametrize("dim", [3])
 @pytest.mark.parametrize("groups", [1, 2, 4])
+@pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.int32, ttnn.bfloat8_b])
 @pytest.mark.parametrize(
-    "input_shapes, output_shape, core_grid",
+    "input_shapes, output_shape, core_grid, layout",
     (
-        (
-            ((1, 1, 1, 32), (1, 1, 1, 32)),
-            (1, 1, 1, 64),
-            ttnn.CoreGrid(x=1, y=1),
-        ),
-        (
-            ((1, 1, 1, 32), (1, 1, 1, 64)),
-            (1, 1, 1, 96),
-            ttnn.CoreGrid(x=1, y=1),
-        ),
-        (
-            ((1, 1, 1, 64), (1, 1, 1, 32)),
-            (1, 1, 1, 96),
-            ttnn.CoreGrid(x=1, y=1),
-        ),
-        (
-            ((1, 1, 1024, 64), (1, 1, 1024, 32)),
-            (1, 1, 1024, 96),
-            ttnn.CoreGrid(x=4, y=1),
-        ),
-        (
-            ((1, 1, 256, 64), (1, 1, 256, 128)),
-            (1, 1, 256, 192),
-            ttnn.CoreGrid(x=8, y=1),
-        ),
+        (((1, 1, 1, 32), (1, 1, 1, 32)), (1, 1, 1, 64), ttnn.CoreGrid(x=1, y=1), ttnn.ROW_MAJOR_LAYOUT),
+        (((1, 1, 1, 32), (1, 1, 1, 64)), (1, 1, 1, 96), ttnn.CoreGrid(x=1, y=1), ttnn.ROW_MAJOR_LAYOUT),
+        (((1, 1, 1, 64), (1, 1, 1, 32)), (1, 1, 1, 96), ttnn.CoreGrid(x=1, y=1), ttnn.ROW_MAJOR_LAYOUT),
+        (((1, 1, 1024, 64), (1, 1, 1024, 32)), (1, 1, 1024, 96), ttnn.CoreGrid(x=4, y=1), ttnn.ROW_MAJOR_LAYOUT),
+        (((1, 1, 256, 64), (1, 1, 256, 128)), (1, 1, 256, 192), ttnn.CoreGrid(x=8, y=1), ttnn.ROW_MAJOR_LAYOUT),
+        (((1, 1, 32, 32), (1, 1, 32, 32)), (1, 1, 32, 64), ttnn.CoreGrid(x=1, y=1), ttnn.TILE_LAYOUT),
+        (((1, 1, 32, 64), (1, 1, 32, 64)), (1, 1, 32, 128), ttnn.CoreGrid(x=1, y=1), ttnn.TILE_LAYOUT),
+        (((1, 1, 256, 64), (1, 1, 256, 128)), (1, 1, 256, 192), ttnn.CoreGrid(x=8, y=1), ttnn.TILE_LAYOUT),
+        (((1, 1, 512, 64), (1, 1, 512, 128)), (1, 1, 512, 192), ttnn.CoreGrid(x=8, y=1), ttnn.TILE_LAYOUT),
+        (((1, 1, 512, 128), (1, 1, 512, 64)), (1, 1, 512, 192), ttnn.CoreGrid(x=8, y=1), ttnn.TILE_LAYOUT),
     ),
 )
-def test_sharded_concat_with_groups(device, input_shapes, output_shape, dim, groups, core_grid):
-    torch_input_tensors = [torch.full(shapes, idx + 1, dtype=torch.bfloat16) for idx, shapes in enumerate(input_shapes)]
+def test_sharded_concat_with_groups(device, input_shapes, output_shape, dim, groups, dtype, core_grid, layout):
+    torch_input_tensors = [random_torch_tensor(dtype, shapes) for idx, shapes in enumerate(input_shapes)]
+
+    if dtype == ttnn.bfloat8_b and layout == ttnn.ROW_MAJOR_LAYOUT:
+        pytest.skip("Cannot use bfloat8 with RM layout")
+
+    if layout == ttnn.TILE_LAYOUT and (input_shapes[0][-1] // groups < 16 or input_shapes[1][-1] // groups < 16):
+        pytest.xfail("Group size < 16 is currently not supported for tiled inputs")
 
     expected = ttnn.concat.golden_function(torch_input_tensors, dim, groups)
 
@@ -251,9 +252,7 @@ def test_sharded_concat_with_groups(device, input_shapes, output_shape, dim, gro
         for x in torch_input_tensors
     ]
     ttnn_input_tensors = [
-        ttnn.from_torch(
-            x, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT, device=device, memory_config=memory_config
-        )
+        ttnn.from_torch(x, dtype=dtype, layout=layout, device=device, memory_config=memory_config)
         for x, memory_config in zip(torch_input_tensors, sharded_memory_configs)
     ]
 
@@ -263,18 +262,22 @@ def test_sharded_concat_with_groups(device, input_shapes, output_shape, dim, gro
     )
 
     actual = ttnn.to_torch(z)
-    assert_with_pcc(expected, actual, 1.0)
+    if dtype == ttnn.bfloat8_b:
+        assert_with_pcc(expected, actual, 0.99)
+    else:
+        assert torch.equal(expected, actual)
 
 
 @pytest.mark.parametrize("dim", [0, 1, 2, 3])
-def test_concat_5d(device, dim):
-    torch_input_tensor = torch.rand(1, 1, 1, 1, 2, dtype=torch.bfloat16)
+@pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.int32, ttnn.uint32])
+def test_concat_5d(device, dim, dtype):
+    torch_input_tensor = random_torch_tensor(dtype, (1, 1, 1, 1, 2))
     torch_result = torch.cat([torch_input_tensor, torch_input_tensor], dim=dim)
 
-    ttnn_input_tensor = ttnn.from_torch(torch_input_tensor, layout=ttnn.ROW_MAJOR_LAYOUT, device=device)
+    ttnn_input_tensor = ttnn.from_torch(torch_input_tensor, layout=ttnn.ROW_MAJOR_LAYOUT, device=device, dtype=dtype)
     ttnn_result = ttnn.concat([ttnn_input_tensor, ttnn_input_tensor], dim=dim)
     ttnn_result = ttnn.to_torch(ttnn_result)
-    assert_with_pcc(torch_result, ttnn_result, 0.9999)
+    assert torch.equal(torch_result, ttnn_result)
 
 
 @pytest.mark.parametrize(
@@ -293,7 +296,8 @@ def test_concat_5d(device, dim):
         ),
     ),
 )
-def test_concat_sharded_pad(device, core_grid, hw, channels1, channels2, shard_height, use_program_cache):
+@pytest.mark.parametrize("dtype", [ttnn.bfloat16, ttnn.int32, ttnn.uint32])
+def test_concat_sharded_pad(device, core_grid, hw, channels1, channels2, shard_height, dtype):
     shape1 = [1, 1, hw, channels1]
     shape2 = [1, 1, hw, channels2]
 
@@ -302,8 +306,8 @@ def test_concat_sharded_pad(device, core_grid, hw, channels1, channels2, shard_h
     shape1_memory_config = ttnn.MemoryConfig(
         ttnn.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.BufferType.L1, shape1_shard_spec
     )
-    torch_input_tensor1 = torch.randn(shape1, dtype=torch.bfloat16)
-    ttnn_input_tensor1 = ttnn.from_torch(torch_input_tensor1, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT)
+    torch_input_tensor1 = random_torch_tensor(dtype, shape1)
+    ttnn_input_tensor1 = ttnn.from_torch(torch_input_tensor1, dtype=dtype, layout=ttnn.ROW_MAJOR_LAYOUT)
     ttnn_input_tensor1 = ttnn.to_device(ttnn_input_tensor1, device, memory_config=shape1_memory_config)
 
     shape2_shard_shape = (shard_height, channels2)
@@ -311,8 +315,8 @@ def test_concat_sharded_pad(device, core_grid, hw, channels1, channels2, shard_h
     shape2_memory_config = ttnn.MemoryConfig(
         ttnn.TensorMemoryLayout.HEIGHT_SHARDED, ttnn.BufferType.L1, shape2_shard_spec
     )
-    torch_input_tensor2 = torch.randn(shape2, dtype=torch.bfloat16)
-    ttnn_input_tensor2 = ttnn.from_torch(torch_input_tensor2, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT)
+    torch_input_tensor2 = random_torch_tensor(dtype, shape2)
+    ttnn_input_tensor2 = ttnn.from_torch(torch_input_tensor2, dtype=dtype, layout=ttnn.ROW_MAJOR_LAYOUT)
     ttnn_input_tensor2 = ttnn.to_device(ttnn_input_tensor2, device, memory_config=shape2_memory_config)
 
     output_shard_shape = (shard_height, channels1 + channels2)
@@ -327,4 +331,4 @@ def test_concat_sharded_pad(device, core_grid, hw, channels1, channels2, shard_h
         memory_config=output_memory_config,
     )
     expected = torch.concat([torch_input_tensor1, torch_input_tensor2], dim=-1)
-    assert_with_pcc(expected, ttnn.to_torch(actual), 0.9999)
+    assert torch.equal(expected, ttnn.to_torch(actual))

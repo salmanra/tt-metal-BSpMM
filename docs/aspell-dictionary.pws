@@ -12,7 +12,6 @@ BRISC
 BRISCs
 BUF
 BUFs
-BeginTraceCapture
 BertIntermediate
 BinaryOpType
 BorrowedStorage
@@ -58,19 +57,11 @@ DeviceOperation
 DeviceStorage
 DeviceZoneScopedN
 DstMode
-DumpDeviceProfileResults
+ReadDeviceProfilerResults
+ReadMeshDeviceProfilerResults
 ENDL
 ETH
 EltwiseUnary
-EndTraceCapture
-EnqueueProgram
-EnqueueReadBuffer
-EnqueueReadSubBuffer
-EnqueueRecordEvent
-EnqueueTrace
-EnqueueWaitForEvent
-EnqueueWriteBuffer
-EnqueueWriteSubBuffer
 Enum
 Enums
 EventSynchronize
@@ -137,8 +128,6 @@ RISCVs
 RISCs
 ReadFromDevice
 ReduceDim
-RepeatTrace
-ReplayTrace
 ResNet
 RuntimeArgs
 SETPRECISION
@@ -160,7 +149,7 @@ TT
 TTNN
 TTNN's
 TT-NN
-TensTorrent's
+Tenstorrent's
 TensorMemoryLayout
 Tensorflow
 Tenstorrent

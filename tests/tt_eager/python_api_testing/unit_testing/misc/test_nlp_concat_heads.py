@@ -5,10 +5,10 @@
 import pytest
 from loguru import logger
 
-from models.utility_functions import comp_pcc, tt2torch_tensor
+from models.common.utility_functions import comp_pcc, tt2torch_tensor
 import torch
-from models.utility_functions import is_wormhole_b0
-from models.utility_functions import is_grayskull
+from models.common.utility_functions import is_wormhole_b0
+from models.common.utility_functions import is_grayskull
 import ttnn
 
 
@@ -29,7 +29,7 @@ def run_nlp_concat_heads_test(batch, seq_len, num_heads, head_dim, dtype, in0_me
     logger.debug(f"in0: {in0_t.memory_config().buffer_type} and {in0_t.get_dtype()}")
     logger.debug(f"out: {out.memory_config().buffer_type} and {out.get_dtype()}")
 
-    assert list(out.shape.with_tile_padding()) == [batch, 1, seq_len, num_heads * head_dim]
+    assert list(out.padded_shape) == [batch, 1, seq_len, num_heads * head_dim]
 
     pyt_got_back_rm_out = tt2torch_tensor(out)
 
@@ -86,7 +86,7 @@ def test_nlp_concat_heads_test(
     run_nlp_concat_heads_test(batch, seq_len, num_heads, head_dim, dtype, in0_mem_config, out_mem_config, device)
 
 
-def test_nlp_concat_heads_with_program_cache(device, use_program_cache):
+def test_nlp_concat_heads_with_program_cache(device):
     num_heads = 71
     head_dim = 64
     dtype = ttnn.bfloat8_b

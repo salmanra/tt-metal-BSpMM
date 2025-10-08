@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cpp/ttnn/operations/ccl/common/uops/ccl_host_commands.hpp"
+#include "ttnn/operations/ccl/common/uops/ccl_host_commands.hpp"
 
 #include "ttnn/operations/ccl/common/uops/ccl_command.hpp"
 #include <tt-metalium/global_semaphore.hpp>
-#include <tt-metalium/overloaded.hpp>
+#include <tt_stl/overloaded.hpp>
 
 #include <variant>
 namespace ttnn::ccl::cmd {

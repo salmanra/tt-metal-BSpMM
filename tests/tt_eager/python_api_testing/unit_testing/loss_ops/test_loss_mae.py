@@ -9,7 +9,7 @@ from tests.tt_eager.python_api_testing.sweep_tests import (
     comparison_funcs,
 )
 from loguru import logger
-from models.utility_functions import skip_for_blackhole
+from models.common.utility_functions import skip_for_blackhole
 
 
 @skip_for_blackhole("Mismatches on Blackhole, see #12349")
@@ -68,7 +68,7 @@ class TestMAELoss:
         pt_mae_output = loss(ref_data.to(torch.float32), pred_data.to(torch.float32))
 
         comp_pass_a, comp_out_a = comparison_funcs.comp_allclose(
-            pt_mae_output, torch.tensor(tt_mae_output[0, 0, 0, 0]), atol=1e-1, rtol=1e-1
+            pt_mae_output, torch.tensor(tt_mae_output), atol=1e-1, rtol=1e-1
         )
 
         logger.debug(comp_out_a)
@@ -94,7 +94,7 @@ class TestMAELoss:
         pt_mae_output = loss(ref_data.to(torch.float32), pred_data.to(torch.float32))
 
         comp_pass_a, comp_out_a = comparison_funcs.comp_allclose(
-            pt_mae_output, torch.tensor(tt_mae_output[0, 0, 0, 0]), atol=1e-1, rtol=1e-1
+            pt_mae_output, torch.tensor(tt_mae_output), atol=1e-1, rtol=1e-1
         )
 
         logger.debug(comp_out_a)

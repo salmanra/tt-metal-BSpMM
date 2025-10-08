@@ -4,28 +4,22 @@
 
 import pytest
 import torch
-
 from loguru import logger
 from transformers import BertForQuestionAnswering, BertTokenizer, pipeline
 
 import ttnn
-
+from models.common.utility_functions import (
+    comp_allclose,
+    comp_pcc,
+    disable_persistent_kernel_cache,
+    enable_persistent_kernel_cache,
+    profiler,
+)
 from models.demos.metal_BERT_large_11.tt.bert_model import TtBertBatchDram
 from models.demos.metal_BERT_large_11.tt.model_config import (
     get_model_config,
     get_tt_cache_path,
     skip_unsupported_config,
-)
-
-from models.utility_functions import (
-    enable_persistent_kernel_cache,
-    disable_compilation_reports,
-    comp_pcc,
-    comp_allclose,
-    disable_persistent_kernel_cache,
-    profiler,
-    is_e75,
-    skip_for_wormhole_b0,
 )
 
 
@@ -300,7 +294,6 @@ def test_bert_batch_dram(
     PERF_CNT = 1
     assert PERF_CNT == 1, "Bert does not support internal perf count no more."
     disable_persistent_kernel_cache()
-    disable_compilation_reports()
 
     run_bert_question_and_answering_inference(
         model_version,
@@ -359,7 +352,6 @@ def test_bert_batch_dram(
 )
 def test_bert_batch_dram_with_program_cache(
     device,
-    use_program_cache,
     model_version,
     batch,
     seq_len,
@@ -382,7 +374,6 @@ def test_bert_batch_dram_with_program_cache(
     PERF_CNT = 1
 
     disable_persistent_kernel_cache()
-    disable_compilation_reports()
 
     run_bert_question_and_answering_inference(
         model_version,

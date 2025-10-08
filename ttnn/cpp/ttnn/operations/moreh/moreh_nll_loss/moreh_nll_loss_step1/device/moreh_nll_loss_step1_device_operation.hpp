@@ -32,8 +32,8 @@ struct MorehNllLossStep1DeviceOperation {
 
     struct Factory {
         struct shared_variables_t {
-            KernelHandle unary_reader_kernel_id;
-            KernelHandle unary_writer_kernel_id;
+            tt::tt_metal::KernelHandle unary_reader_kernel_id;
+            tt::tt_metal::KernelHandle unary_writer_kernel_id;
             std::size_t num_cores;
             std::size_t num_cores_y;
         };
@@ -68,10 +68,10 @@ struct MorehNllLossStep1DeviceOperation {
     static std::tuple<operation_attributes_t, tensor_args_t> invoke(
         const Tensor& target_tensor,
         const std::optional<Tensor>& weight_tensor,
-        const int32_t ignore_index,
+        int32_t ignore_index,
         const std::string& reduction,
-        const DataType dtype,
-        const uint32_t channel_size,
+        DataType dtype,
+        uint32_t channel_size,
         const std::optional<MemoryConfig>& memory_config,
         const DeviceComputeKernelConfig& compute_kernel_config);
 };

@@ -1,11 +1,11 @@
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
 #include <stdint.h>
 
 #include "dataflow_api.h"
-#include "cpp/ttnn/operations/eltwise/binary_ng/device/kernels/dataflow/fill_tile_utils.hpp"
+#include "ttnn/operations/eltwise/binary_ng/device/kernels/dataflow/fill_tile_utils.hpp"
 
 void kernel_main() {
     uint32_t src_addr = get_arg_val<uint32_t>(0);        // batch_mean
@@ -24,52 +24,37 @@ void kernel_main() {
     constexpr uint32_t onetile = 1;
 
     // batch_mean
-    constexpr auto cb_id_src = tt::CBIndex::c_1;
-    constexpr bool src_is_dram = get_compile_time_arg_val(0) == 1;
-    const uint32_t src_tile_bytes = get_tile_size(cb_id_src);
-    const DataFormat src_data_format = get_dataformat(cb_id_src);
+    constexpr bool weight_has_value = get_compile_time_arg_val(0) == 1;
+    constexpr bool bias_has_value = get_compile_time_arg_val(1) == 1;
+    constexpr auto cb_id_src = get_compile_time_arg_val(2);
+    constexpr auto cb_id_dst = get_compile_time_arg_val(3);
+    constexpr auto cb_id_batch_var = get_compile_time_arg_val(4);
+    constexpr auto cb_id_weight = get_compile_time_arg_val(5);
+    constexpr auto cb_id_bias = get_compile_time_arg_val(6);
+    constexpr auto src_args = TensorAccessorArgs<7>();
+    constexpr auto dst_args = TensorAccessorArgs<src_args.next_compile_time_args_offset()>();
+    constexpr auto batch_var_args = TensorAccessorArgs<dst_args.next_compile_time_args_offset()>();
+    constexpr auto weight_args = TensorAccessorArgs<batch_var_args.next_compile_time_args_offset()>();
+    constexpr auto bias_args = TensorAccessorArgs<weight_args.next_compile_time_args_offset()>();
 
-    const InterleavedAddrGenFast<src_is_dram> src = {
-        .bank_base_address = src_addr, .page_size = src_tile_bytes, .data_format = src_data_format};
+    const uint32_t src_tile_bytes = get_tile_size(cb_id_src);
+    const auto src = TensorAccessor(src_args, src_addr, src_tile_bytes);
 
     // output
-    constexpr auto cb_id_dst = tt::CBIndex::c_2;
-    constexpr bool dst_is_dram = get_compile_time_arg_val(1) == 1;
     const uint32_t dst_tile_bytes = get_tile_size(cb_id_dst);
-    const DataFormat dst_data_format = get_dataformat(cb_id_dst);
-
-    const InterleavedAddrGenFast<dst_is_dram> dst = {
-        .bank_base_address = dst_addr, .page_size = dst_tile_bytes, .data_format = dst_data_format};
+    const auto dst = TensorAccessor(dst_args, dst_addr, dst_tile_bytes);
 
     // batch_var
-    constexpr auto cb_id_batch_var = tt::CBIndex::c_3;
-    constexpr bool batch_var_is_dram = get_compile_time_arg_val(2) == 1;
     const uint32_t batch_var_tile_bytes = get_tile_size(cb_id_batch_var);
-    const DataFormat batch_var_data_format = get_dataformat(cb_id_batch_var);
-
-    const InterleavedAddrGenFast<batch_var_is_dram> batch_var = {
-        .bank_base_address = batch_var_addr, .page_size = batch_var_tile_bytes, .data_format = batch_var_data_format};
+    const auto batch_var = TensorAccessor(batch_var_args, batch_var_addr, batch_var_tile_bytes);
 
     // weight
-    constexpr auto cb_id_weight = tt::CBIndex::c_16;
-    constexpr bool weight_is_dram = get_compile_time_arg_val(3) == 1;
     const uint32_t weight_tile_bytes = get_tile_size(cb_id_weight);
-    const DataFormat weight_data_format = get_dataformat(cb_id_weight);
-
-    const InterleavedAddrGenFast<weight_is_dram> weight = {
-        .bank_base_address = weight_addr, .page_size = weight_tile_bytes, .data_format = weight_data_format};
+    const auto weight = TensorAccessor(weight_args, weight_addr, weight_tile_bytes);
 
     // bias
-    constexpr auto cb_id_bias = tt::CBIndex::c_18;
-    constexpr bool bias_is_dram = get_compile_time_arg_val(4) == 1;
     const uint32_t bias_tile_bytes = get_tile_size(cb_id_bias);
-    const DataFormat bias_data_format = get_dataformat(cb_id_bias);
-
-    const InterleavedAddrGenFast<bias_is_dram> bias = {
-        .bank_base_address = bias_addr, .page_size = bias_tile_bytes, .data_format = bias_data_format};
-
-    constexpr bool weight_has_value = get_compile_time_arg_val(5) == 1;
-    constexpr bool bias_has_value = get_compile_time_arg_val(6) == 1;
+    const auto bias = TensorAccessor(bias_args, bias_addr, bias_tile_bytes);
 
     uint32_t tiles_per_batch = HtWt * C;
     uint32_t start_n = start_tile_id / tiles_per_batch;
@@ -89,7 +74,7 @@ void kernel_main() {
             uint32_t l1_write_addr = get_write_ptr(cb_id_src);
             noc_async_read_tile(tile_offset, src, l1_write_addr);
             noc_async_read_barrier();
-            fill_tile_with_first_element_bfloat16(cb_id_src);
+            FILL_TILE_WITH_FIRST_ELEMENT(cb_id_src);
             cb_push_back(cb_id_src, onetile);
 
             // read a tile from batch variance
@@ -97,7 +82,7 @@ void kernel_main() {
             uint32_t l1_batch_var_write_addr = get_write_ptr(cb_id_batch_var);
             noc_async_read_tile(tile_offset, batch_var, l1_batch_var_write_addr);
             noc_async_read_barrier();
-            fill_tile_with_first_element_bfloat16(cb_id_batch_var);
+            FILL_TILE_WITH_FIRST_ELEMENT(cb_id_batch_var);
             cb_push_back(cb_id_batch_var, onetile);
 
             if constexpr (weight_has_value) {  // read a tile from weight tensor
@@ -105,7 +90,7 @@ void kernel_main() {
                 uint32_t l1_weight_write_addr = get_write_ptr(cb_id_weight);
                 noc_async_read_tile(tile_offset, weight, l1_weight_write_addr);
                 noc_async_read_barrier();
-                fill_tile_with_first_element_bfloat16(cb_id_weight);
+                FILL_TILE_WITH_FIRST_ELEMENT(cb_id_weight);
                 cb_push_back(cb_id_weight, onetile);
             }
 
@@ -114,7 +99,7 @@ void kernel_main() {
                 uint32_t l1_bias_write_addr = get_write_ptr(cb_id_bias);
                 noc_async_read_tile(tile_offset, bias, l1_bias_write_addr);
                 noc_async_read_barrier();
-                fill_tile_with_first_element_bfloat16(cb_id_bias);
+                FILL_TILE_WITH_FIRST_ELEMENT(cb_id_bias);
                 cb_push_back(cb_id_bias, onetile);
             }
 

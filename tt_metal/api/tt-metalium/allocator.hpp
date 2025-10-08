@@ -5,180 +5,160 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
-#include <vector>
+#include <fstream>
+#include <memory>
+#include <optional>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
-#include "allocator_types.hpp"
-#include "assert.hpp"
-#include "core_coord.hpp"
-#include "allocator_algorithm.hpp"
-#include "hal.hpp"
+#include <tt_stl/assert.hpp>
+#include <tt-metalium/core_coord.hpp>
+#include <tt-metalium/hal_types.hpp>
+#include <tt-metalium/math.hpp>
 
 namespace tt {
 
 namespace tt_metal {
 
-inline namespace v0 {
+/*
+MemoryBlockTable is a list of memory blocks in the following format:
+[{"blockID": "0", "address": "0", "size": "0", "prevID": "0", "nextID": "0", "allocated": true}]
+address: bytes
+size: bytes
+*/
+using MemoryBlockTable = std::vector<std::unordered_map<std::string, std::string>>;
 
-class Buffer;
-
-}  // namespace v0
+struct Statistics {
+    size_t total_allocatable_size_bytes = 0;
+    size_t total_allocated_bytes = 0;
+    size_t total_free_bytes = 0;
+    size_t largest_free_block_bytes = 0;
+    // addresses (relative to bank) that can hold the largest_free_block_bytes
+    std::vector<uint32_t> largest_free_block_addrs;
+};
 
 // Fwd declares
+class BankManager;
+class Buffer;
+// These are supplied from impl
 enum class BufferType;
-struct Allocator;
+struct AllocatorConfig;
 
-namespace allocator {
-
-class BankManager {
+// THREAD SAFETY: Allocator is thread safe.
+class Allocator {
 public:
-    BankManager() {}
+    // AllocatorConfig is not in the API directory, thus Allocator currently cannot be constructed publicly,
+    // this is because we are in the middle of moving Allocator into implementation details.
+    // This initiative is established from our analysis that Allocator is only used to query memory profiles
+    // (e.g. how much memory is left in L1?)
+    // but not for allocator-specific operations (managing allocations).
+    //
+    // While in the middle of this refactor,
+    // runtime (river) splits moving AllocatorConfig out of public API,
+    // coming up with a memory profile access interface to replace current Allocator API into two (or more) PRs.
+    //
+    // See: #29569
+    explicit Allocator(const AllocatorConfig& alloc_config);
 
-    BankManager(
-        const BufferType& buffer_type,
-        const std::vector<int64_t>& bank_descriptors,
-        DeviceAddr size_bytes,
-        uint32_t alignment_bytes,
-        DeviceAddr alloc_offset = 0,
-        bool disable_interleaved = false);
-    BankManager(
-        const BufferType& buffer_type,
-        const std::unordered_map<uint32_t, int64_t>& bank_id_to_descriptor,
-        DeviceAddr size_bytes,
-        DeviceAddr interleaved_address_limit,
-        uint32_t alignment_bytes,
-        DeviceAddr alloc_offset = 0,
-        bool disable_interleaved = false);
-    BankManager&& operator=(BankManager&& that) noexcept;
-    ~BankManager();
-    uint32_t num_banks() const;
+    ~Allocator();
 
-    DeviceAddr bank_size() const;
+    DeviceAddr allocate_buffer(Buffer* buffer);
 
-    int64_t bank_offset(uint32_t bank_id) const;
+    void deallocate_buffer(Buffer* buffer);
+    void deallocate_buffers();
 
-    DeviceAddr allocate_buffer(
-        DeviceAddr size,
-        DeviceAddr page_size,
-        bool bottom_up,
-        const CoreRangeSet& compute_grid,
-        std::optional<uint32_t> num_shards);
+    std::unordered_set<Buffer*> get_allocated_buffers() const;
+    size_t get_num_allocated_buffers() const;
 
-    void deallocate_buffer(DeviceAddr address);
-    void deallocate_all();
+    uint32_t get_num_banks(const BufferType& buffer_type) const;
+    DeviceAddr get_bank_size(const BufferType& buffer_type) const;
+
+    uint32_t get_dram_channel_from_bank_id(uint32_t bank_id) const;
+    CoreCoord get_logical_core_from_bank_id(uint32_t bank_id) const;
+
+    int32_t get_bank_offset(BufferType buffer_type, uint32_t bank_id) const;
+
+    const std::vector<uint32_t>& get_bank_ids_from_dram_channel(uint32_t dram_channel) const;
+    const std::vector<uint32_t>& get_bank_ids_from_logical_core(
+        BufferType buffer_type, const CoreCoord& logical_core) const;
+
+    DeviceAddr get_base_allocator_addr(const HalMemType& mem_type) const;
+
+    const AllocatorConfig& get_config() const;
+    // Alignment can be pulled out of the AllocatorConfig but this getter is a helper
+    // so client code does not need to condition based on BufferType
+    uint32_t get_alignment(BufferType buffer_type) const;
+
+    // This a proxy of get_config().worker_l1_size,
+    // this helper function is made for reports.cpp in TTNN and act as a transient member function
+    // before we figure out a good memory profile accessor.
+    size_t get_worker_l1_size() const;
+
+    Statistics get_statistics(const BufferType& buffer_type) const;
+    MemoryBlockTable get_memory_block_table(const BufferType& buffer_type) const;
+    void dump_memory_blocks(const BufferType& buffer_type, std::ostream& out) const;
+
+    std::optional<DeviceAddr> get_lowest_occupied_l1_address(uint32_t bank_id) const;
+
+    void shrink_allocator_size(const BufferType& buffer_type, DeviceAddr shrink_size, bool bottom_up = true);
+    void reset_allocator_size(const BufferType& buffer_type);
+
+    void mark_allocations_unsafe();
+    void mark_allocations_safe();
 
     void clear();
 
-    std::optional<DeviceAddr> lowest_occupied_address(uint32_t bank_id) const;
+protected:
+    // Initializers for mapping banks to DRAM channels / L1 banks
+    void init_one_bank_per_channel();
+    void init_one_bank_per_l1();
+    void init_compute_and_storage_l1_bank_manager();
 
-    Statistics get_statistics() const;
-
-    void dump_blocks(std::ofstream& out) const;
-
-    MemoryBlockTable get_memory_block_table() const;
-
-    void shrink_size(DeviceAddr shrink_size, bool bottom_up = true);
-    void reset_size();
+    void validate_bank_assignments() const;
 
 private:
-    void deallocate_buffer_(DeviceAddr address);
+    void verify_safe_allocation() const;
 
-    // Types of buffers allocated in the banks
-    BufferType buffer_type_;
-    std::unordered_set<DeviceAddr> allocated_buffers_;
-    // This is to store offsets for any banks that share a core or node (dram in wh/storage core), so we can view all
-    // banks using only bank_id Set to 0 for cores/nodes with only 1 bank
-    std::unordered_map<uint32_t, int64_t> bank_id_to_bank_offset_;
-    std::unique_ptr<Algorithm> allocator_;
-    DeviceAddr interleaved_address_limit_;
-    uint32_t alignment_bytes_;
-    void validate_bank_id(uint32_t bank_id) const;
+    mutable std::mutex mutex_;
 
-    void init_allocator(DeviceAddr size_bytes, uint32_t alignment_bytes, DeviceAddr offset);
-};
-
-DeviceAddr get_unreserved_base_address(const Allocator& allocator, const HalMemType& mem_type);
-
-// Functions used to initiate allocator and allocate buffers
-void init_one_bank_per_channel(Allocator& allocator, const AllocatorConfig& alloc_config);
-
-void init_one_bank_per_l1(Allocator& allocator, const AllocatorConfig& alloc_config);
-
-uint32_t num_banks(const Allocator& allocator, const BufferType& buffer_type);
-
-DeviceAddr bank_size(const Allocator& allocator, const BufferType& buffer_type);
-
-uint32_t dram_channel_from_bank_id(const Allocator& allocator, uint32_t bank_id);
-
-CoreCoord logical_core_from_bank_id(const Allocator& allocator, uint32_t bank_id);
-
-int32_t bank_offset(const Allocator& allocator, BufferType buffer_type, uint32_t bank_id);
-
-const std::vector<uint32_t>& bank_ids_from_dram_channel(const Allocator& allocator, uint32_t dram_channel);
-
-const std::vector<uint32_t>& bank_ids_from_logical_core(
-    const Allocator& allocator, BufferType buffer_type, const CoreCoord& logical_core);
-
-Statistics get_statistics(const Allocator& allocator, const BufferType& buffer_type);
-
-void dump_memory_blocks(const Allocator& allocator, const BufferType& buffer_type, std::ofstream& out);
-
-MemoryBlockTable get_memory_block_table(const Allocator& allocator, const BufferType& buffer_type);
-
-std::optional<DeviceAddr> lowest_occupied_l1_address(const Allocator& allocator, uint32_t bank_id);
-
-DeviceAddr base_alloc(
-    const AllocatorConfig& config,
-    BankManager& bank_manager,
-    DeviceAddr size,
-    DeviceAddr page_size,
-    bool bottom_up,
-    std::optional<uint32_t> num_shards);
-
-void shrink_allocator_size(
-    Allocator& allocator, const BufferType& buffer_type, DeviceAddr shrink_size, bool bottom_up = true);
-void reset_allocator_size(Allocator& allocator, const BufferType& buffer_type);
-
-DeviceAddr allocate_buffer(Allocator& allocator, Buffer* buffer);
-
-void mark_allocations_unsafe(Allocator& allocator);
-
-void mark_allocations_safe(Allocator& allocator);
-
-void deallocate_buffer(Allocator& allocator, Buffer* buffer);
-void deallocate_buffers(Allocator& allocator);
-
-const std::unordered_set<Buffer*>& get_allocated_buffers(const Allocator& allocator);
-
-void clear(Allocator& allocatator);
-
-}  // namespace allocator
-
-struct Allocator {
-    Allocator(const AllocatorConfig& alloc_config, const allocator::AllocDescriptor& alloc_descriptor);
     // Set to true if allocating a buffer is unsafe. This happens when a live trace on device can corrupt
     // memory allocated by the user (memory used by trace is not tracked in the allocator once the trace is captured).
-    bool allocations_unsafe = false;
-    allocator::BankManager dram_manager;
-    allocator::BankManager l1_manager;
-    allocator::BankManager l1_small_manager;
-    allocator::BankManager trace_buffer_manager;
-    // TODO: Track lowest l1 addresses!
+    bool allocations_unsafe_ = false;
+    std::unique_ptr<BankManager> dram_manager_;
+    std::unique_ptr<BankManager> l1_manager_;
+    std::unique_ptr<BankManager> l1_small_manager_;
+    std::unique_ptr<BankManager> trace_buffer_manager_;
 
-    std::unordered_map<uint32_t, uint32_t> bank_id_to_dram_channel;
-    std::unordered_map<uint32_t, std::vector<uint32_t>> dram_channel_to_bank_ids;
-    std::unordered_map<uint32_t, CoreCoord> bank_id_to_logical_core;
-    std::unordered_map<BufferType, std::unordered_map<CoreCoord, std::vector<uint32_t>>> logical_core_to_bank_ids;
-    std::unordered_set<Buffer*> allocated_buffers;
+    std::unordered_map<uint32_t, uint32_t> bank_id_to_dram_channel_;
+    std::unordered_map<uint32_t, std::vector<uint32_t>> dram_channel_to_bank_ids_;
+    std::unordered_map<uint32_t, CoreCoord> bank_id_to_logical_core_;
+    std::unordered_map<BufferType, std::unordered_map<CoreCoord, std::vector<uint32_t>>> logical_core_to_bank_ids_;
+    std::unordered_set<Buffer*> allocated_buffers_;
 
-    AllocatorConfig config;
-    // Callbacks to invoke during initialization and allocation
-    allocator::AllocDescriptor descriptor;
-
-    void reset();
-    ~Allocator();
+    // config_ is stored in a unique_ptr because AllocatorConfig is current an incomplete type in API directory.
+    //
+    // TODO(river): revert this to inplace storage if we can shove Allocator into impl.
+    std::unique_ptr<AllocatorConfig> config_;
 };
+
+namespace detail {
+
+// This is only used by the move operation in ttnn and is not intended for public use
+// (it's in the detail namespace)
+constexpr DeviceAddr calculate_bank_size_spread(
+    DeviceAddr size_bytes, DeviceAddr page_size_bytes, uint32_t num_banks, uint32_t alignment_bytes) {
+    TT_ASSERT(
+        page_size_bytes == 0 ? size_bytes == 0 : size_bytes % page_size_bytes == 0,
+        "Page size {} should be divisible by buffer size {}",
+        page_size_bytes,
+        size_bytes);
+    DeviceAddr num_pages = page_size_bytes == 0 ? 0 : size_bytes / page_size_bytes;
+    DeviceAddr num_equally_distributed_pages = num_pages == 0 ? 0 : 1 + ((num_pages - 1) / num_banks);
+    return num_equally_distributed_pages * round_up(page_size_bytes, static_cast<DeviceAddr>(alignment_bytes));
+}
+
+}  // namespace detail
 
 }  // namespace tt_metal
 

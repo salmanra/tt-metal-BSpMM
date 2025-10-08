@@ -9,7 +9,7 @@ import random
 import ttnn
 
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 TIMEOUT = 10
 # seed for random
@@ -288,8 +288,6 @@ def run(
     *,
     device,
 ):
-    device.enable_async(False)
-
     # Extract the shape from unsqueeze_specs
     shape = unsqueeze_specs["shape"]
     dim = unsqueeze_specs.get("dim")  # Get the dimension to unsqueeze, if specified

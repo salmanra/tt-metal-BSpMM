@@ -12,14 +12,6 @@ namespace operations::data_movement {
 
 struct ExecuteUntilize {
     static ttnn::Tensor invoke(
-        uint8_t queue_id,
-        const ttnn::Tensor& input_tensor,
-        const std::optional<MemoryConfig>& memory_config = std::nullopt,
-        bool use_multicore = true,
-        bool use_pack_untilize = true,
-        const std::optional<CoreRangeSet>& sub_core_grids = std::nullopt);
-
-    static ttnn::Tensor invoke(
         const ttnn::Tensor& input_tensor,
         const std::optional<MemoryConfig>& memory_config = std::nullopt,
         bool use_multicore = true,
@@ -30,6 +22,6 @@ struct ExecuteUntilize {
 }  // namespace operations::data_movement
 
 constexpr auto untilize =
-    ttnn::register_operation_with_auto_launch_op<"ttnn::untilize", ttnn::operations::data_movement::ExecuteUntilize>();
+    ttnn::register_operation<"ttnn::untilize", ttnn::operations::data_movement::ExecuteUntilize>();
 
 }  // namespace ttnn

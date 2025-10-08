@@ -2,19 +2,47 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <chrono>
+#include <emmintrin.h>
+#include <errno.h>
+#include <fmt/base.h>
+#include <immintrin.h>
+#include <smmintrin.h>
+#include <stdlib.h>
+#include <tt-metalium/allocator.hpp>
+#include <tt-metalium/bfloat16.hpp>
+#include <tt-metalium/host_api.hpp>
+#include <tt-metalium/tt_metal.hpp>
 #include <algorithm>
-#include <functional>
-#include <random>
+#include <cstdint>
+#include <cstring>
+#include <exception>
+#include <map>
+#include <memory>
+#include <optional>
 #include <string>
+#include <thread>
+#include <tuple>
+#include <variant>
 #include <vector>
 
-#include <tt-metalium/bfloat16.hpp>
-#include <tt-metalium/tt_metal.hpp>
-#include <tt-metalium/host_api.hpp>
-#include <tt-metalium/command_queue.hpp>
-#include <tt-metalium/command_queue_interface.hpp>
-#include <tt-metalium/memcpy.hpp>
+#include <tt_stl/assert.hpp>
+#include "impl/dispatch/command_queue_common.hpp"
+#include <tt-metalium/core_coord.hpp>
+#include <tt-metalium/data_types.hpp>
+#include <tt-metalium/device.hpp>
+#include "dispatch/memcpy.hpp"
+#include <tt-metalium/dispatch_core_common.hpp>
+#include <tt-metalium/hal_types.hpp>
+#include <tt-metalium/kernel_types.hpp>
+#include <tt-logger/tt-logger.hpp>
+#include <tt-metalium/program.hpp>
+#include "test_common.hpp"
+#include "impl/context/metal_context.hpp"
 #include "tt_metal/tt_metal/perf_microbenchmark/common/util.hpp"
+#include <umd/device/types/xy_pair.hpp>
+#include <tt-metalium/distributed.hpp>
+#include <umd/device/types/core_coordinates.hpp>
 
 using namespace tt;
 using namespace tt::tt_metal;
@@ -39,7 +67,7 @@ void* align(void* ptr, std::size_t max_alignment) {
     // ex. if the current ptr here is 16, but we specified an alignment of 8,
     // then this is both 8 and 16 byte aligned, so we offset again by our
     // specified alignment to make the max alignment what was specified
-    aligned = aligned & (max_alignment << 1 - 1) ? aligned : aligned + max_alignment;
+    aligned = aligned & ((max_alignment << 1) - 1) ? aligned : aligned + max_alignment;
 
     return reinterpret_cast<void*>(aligned);
 }
@@ -214,35 +242,38 @@ int main(int argc, char** argv) {
 
         // Device setup
         int device_id = 0;
-        tt_metal::IDevice* device = tt_metal::CreateDevice(device_id);
+        auto device = tt_metal::distributed::MeshDevice::create_unit_mesh(device_id);
         CoreCoord logical_core(0, 0);
         CoreCoord physical_core = device->worker_core_from_logical_core(logical_core);
 
-        chip_id_t mmio_device_id = tt::Cluster::instance().get_associated_mmio_device(device_id);
+        chip_id_t mmio_device_id =
+            tt::tt_metal::MetalContext::instance().get_cluster().get_associated_mmio_device(device_id);
         TT_ASSERT(device_id == mmio_device_id, "This test can only be run on MMIO device!");
-        uint16_t channel = tt::Cluster::instance().get_assigned_channel_for_device(device_id);
-        void* host_hugepage_start = (void*)tt::Cluster::instance().host_dma_address(0, mmio_device_id, channel);
-        uint32_t hugepage_size = tt::Cluster::instance().get_host_channel_size(mmio_device_id, channel);
+        uint16_t channel =
+            tt::tt_metal::MetalContext::instance().get_cluster().get_assigned_channel_for_device(device_id);
+        void* host_hugepage_start =
+            (void*)tt::tt_metal::MetalContext::instance().get_cluster().host_dma_address(0, mmio_device_id, channel);
+        uint32_t hugepage_size =
+            tt::tt_metal::MetalContext::instance().get_cluster().get_host_channel_size(mmio_device_id, channel);
         uint32_t host_write_ptr = 0;
 
-        CoreType dispatch_core_type = dispatch_core_manager::instance().get_dispatch_core_type(device_id);
-        uint32_t prefetch_q_base = dispatch_constants::get(dispatch_core_type)
-                                       .get_device_command_queue_addr(CommandQueueDeviceAddrType::UNRESERVED);
+        uint32_t prefetch_q_base = MetalContext::instance().dispatch_mem_map().get_device_command_queue_addr(
+            CommandQueueDeviceAddrType::UNRESERVED);
 
         uint32_t reg_addr = prefetch_q_base;
         uint32_t num_reg_entries = 128;
 
         std::vector<uint32_t> go_signal = {0};
         std::vector<uint32_t> done_signal = {1};
-        uint32_t l1_unreserved_base = device->get_base_allocator_addr(HalMemType::L1);
-        tt_metal::detail::WriteToDeviceL1(device, logical_core, l1_unreserved_base, go_signal);
+        uint32_t l1_unreserved_base = device->allocator()->get_base_allocator_addr(HalMemType::L1);
+        tt_metal::detail::WriteToDeviceL1(device->get_devices()[0], logical_core, l1_unreserved_base, go_signal);
 
         // Application setup
         tt_metal::Program program = tt_metal::Program();
 
         uint32_t kernel_read_size = 64 * 1024;
 
-        auto pcie_reader = tt_metal::CreateKernel(
+        tt_metal::CreateKernel(
             program,
             "tests/tt_metal/tt_metal/perf_microbenchmark/3_pcie_transfer/kernels/pull_from_pcie.cpp",
             logical_core,
@@ -255,7 +286,7 @@ int main(int argc, char** argv) {
         // First add is for aligning to next aligned addr
         // Second add is for making sure the specified alignment is the max alignment
         std::vector<uint32_t> src_vec = create_random_vector_of_bfloat16(
-            total_transfer_size + 2 * addr_align, 1000, std::chrono::system_clock::now().time_since_epoch().count());
+            total_transfer_size + (2 * addr_align), 1000, std::chrono::system_clock::now().time_since_epoch().count());
 
         uint32_t* start_ptr = (uint32_t*)align(src_vec.data(), addr_align);
         std::vector<uint32_t> result_vec;
@@ -279,11 +310,17 @@ int main(int argc, char** argv) {
             copy_mode_str);
 
         log_info(LogTest, "Num tests {}", num_tests);
+
+        // Create MeshWorkload for kernel execution
+        auto mesh_workload = tt_metal::distributed::MeshWorkload();
+        mesh_workload.add_program(tt::tt_metal::distributed::MeshCoordinateRange{{0, 0}, {0, 0}}, std::move(program));
+
         for (uint32_t i = 0; i < num_tests; ++i) {
             // Execute application
             std::thread t1([&]() {
                 if (enable_kernel_read) {
-                    tt::tt_metal::detail::LaunchProgram(device, program);
+                    tt_metal::distributed::EnqueueMeshWorkload(device->mesh_command_queue(), mesh_workload, false);
+                    tt_metal::distributed::Finish(device->mesh_command_queue());
                 }
             });
 
@@ -345,8 +382,8 @@ int main(int argc, char** argv) {
                 if (simulate_write_ptr_update) {
                     uint32_t num_write_ptr_updates = write_size_bytes / (32 * 1024);
                     for (int i = 0; i < num_write_ptr_updates; i++) {
-                        tt::Cluster::instance().write_reg(
-                            &val_to_write, tt_cxy_pair(device->id(), physical_core), reg_addr);
+                        tt::tt_metal::MetalContext::instance().get_cluster().write_reg(
+                            &val_to_write, tt_cxy_pair(device->get_devices()[0]->id(), physical_core), reg_addr);
                         reg_addr += sizeof(uint32_t);
                         num_reg_writes = (reg_addr - prefetch_q_base) / sizeof(uint32_t);
                         if (num_reg_writes == num_reg_entries) {
@@ -357,8 +394,11 @@ int main(int argc, char** argv) {
 
                 if (write_ptr_readback_interval > 0 and num_reg_writes == write_ptr_readback_interval) {
                     std::vector<std::uint32_t> read_hex_vec(1, 0);
-                    tt::Cluster::instance().read_core(
-                        read_hex_vec.data(), sizeof(uint32_t), tt_cxy_pair(device->id(), physical_core), reg_addr);
+                    tt::tt_metal::MetalContext::instance().get_cluster().read_core(
+                        read_hex_vec.data(),
+                        sizeof(uint32_t),
+                        tt_cxy_pair(device->get_devices()[0]->id(), physical_core),
+                        reg_addr);
                 }
 
                 host_write_ptr += write_size_bytes;
@@ -366,7 +406,7 @@ int main(int argc, char** argv) {
             }
 
             auto t_end = std::chrono::steady_clock::now();
-            tt_metal::detail::WriteToDeviceL1(device, logical_core, l1_unreserved_base, done_signal);
+            tt_metal::detail::WriteToDeviceL1(device->get_devices()[0], logical_core, l1_unreserved_base, done_signal);
 
             t1.join();
 
@@ -375,7 +415,7 @@ int main(int argc, char** argv) {
             log_info(LogTest, "H2D BW: {:.3f}ms, {:.3f}GB/s", elapsed_us / 1000.0, h2d_bandwidth[i]);
         }
 
-        pass &= tt_metal::CloseDevice(device);
+        pass &= device->close();
     } catch (const std::exception& e) {
         pass = false;
         log_error(LogTest, "{}", e.what());
@@ -401,9 +441,9 @@ int main(int argc, char** argv) {
         }
     }
 
-    log_info("test_pull_from_pcie");
-    log_info("Bandwidth(GB/s): {:.3f}", avg_h2d_bandwidth);
-    log_info("pass:{}", pass);
+    log_info(tt::LogTest, "test_pull_from_pcie");
+    log_info(tt::LogTest, "Bandwidth(GB/s): {:.3f}", avg_h2d_bandwidth);
+    log_info(tt::LogTest, "pass:{}", pass);
 
     if (pass) {
         log_info(LogTest, "Test Passed");

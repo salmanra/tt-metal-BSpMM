@@ -31,7 +31,7 @@ struct FullLikeOperation {
 
     struct ProgramFactory {
         struct shared_variables_t {
-            KernelHandle writer_kernel_id;
+            tt::tt_metal::KernelHandle writer_kernel_id;
             std::size_t num_cores;
             std::size_t num_cores_y;
         };
@@ -59,7 +59,7 @@ struct FullLikeOperation {
     static tensor_return_value_t create_output_tensors(const operation_attributes_t&, const tensor_args_t&);
     static std::tuple<operation_attributes_t, tensor_args_t> invoke(
         const Tensor& input,
-        const std::variant<float, int> fill_value,
+        std::variant<float, int> fill_value,
         const std::optional<DataType>& dtype,
         const std::optional<Layout>& layout,
         const std::optional<MemoryConfig>& memory_config);

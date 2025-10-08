@@ -4,14 +4,12 @@
 
 import pytest
 import ttnn
-from models.utility_functions import skip_for_grayskull
 from tests.ttnn.unit_tests.operations.ccl.test_reduce_scatter_post_commit import (
     run_reduce_scatter_test,
     run_reduce_scatter_sharded_test,
 )
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
@@ -45,7 +43,6 @@ from tests.ttnn.unit_tests.operations.ccl.test_reduce_scatter_post_commit import
     ],
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_ring_reduce_scatter_n300_post_commit(
     n300_mesh_device,
     num_devices,
@@ -56,9 +53,7 @@ def test_ring_reduce_scatter_n300_post_commit(
     input_dtype,
     layout,
     mem_config,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=5,
 ):
     run_reduce_scatter_test(
@@ -71,14 +66,11 @@ def test_ring_reduce_scatter_n300_post_commit(
         input_dtype,
         layout,
         mem_config,
-        use_program_cache,
         function_level_defaults,
         num_iters=num_iters,
-        enable_async=enable_async,
     )
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
@@ -119,7 +111,6 @@ def test_ring_reduce_scatter_n300_post_commit(
     ),
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_width_sharded_reduce_scatter_N300_post_commit(
     t3k_mesh_device,
     num_devices,
@@ -133,9 +124,7 @@ def test_width_sharded_reduce_scatter_N300_post_commit(
     input_dtype,
     tensor_layout,
     tensor_mem_layout,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=5,
 ):
     run_reduce_scatter_sharded_test(
@@ -151,8 +140,6 @@ def test_width_sharded_reduce_scatter_N300_post_commit(
         input_dtype,
         tensor_layout,
         tensor_mem_layout,
-        use_program_cache=use_program_cache,
         function_level_defaults=function_level_defaults,
-        enable_async=enable_async,
         num_iters=num_iters,
     )

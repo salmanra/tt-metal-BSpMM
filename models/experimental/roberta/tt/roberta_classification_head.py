@@ -2,13 +2,12 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 import torch.nn as nn
 
 import ttnn
 
-from models.helper_funcs import Linear as TTLinear
-from models.utility_functions import tt2torch_tensor, pad_by_zero
+from models.common.helper_funcs import Linear as TTLinear
+from models.common.utility_functions import tt2torch_tensor, pad_by_zero
 from models.experimental.roberta.roberta_common import torch2tt_tensor
 
 
@@ -32,14 +31,14 @@ class TtRobertaClassificationHead(nn.Module):
         self.out_proj_weight = torch2tt_tensor(state_dict[f"{base_address}.out_proj.weight"], self.device)
         self.out_proj_bias = torch2tt_tensor(state_dict[f"{base_address}.out_proj.bias"], self.device)
         self.dense_linear = TTLinear(
-            self.dense_weight.shape.with_tile_padding()[-1],
-            self.dense_weight.shape.with_tile_padding()[-2],
+            self.dense_weight.padded_shape[-1],
+            self.dense_weight.padded_shape[-2],
             self.dense_weight,
             self.dense_bias,
         )
         self.out_proj_linear = TTLinear(
-            self.out_proj_weight.shape.with_tile_padding()[-1],
-            self.out_proj_weight.shape.with_tile_padding()[-2],
+            self.out_proj_weight.padded_shape[-1],
+            self.out_proj_weight.padded_shape[-2],
             self.out_proj_weight,
             self.out_proj_bias,
         )

@@ -37,8 +37,8 @@ struct MorehGroupNormBackwardGammaBetaGradOperation {
 
     struct MorehGroupNormBackwardGammaBetaGradFactory {
         struct shared_variables_t {
-            KernelHandle reader_kernels_id;
-            KernelHandle writer_kernels_id;
+            tt::tt_metal::KernelHandle reader_kernels_id;
+            tt::tt_metal::KernelHandle writer_kernels_id;
             uint32_t num_cores_to_be_used;
             std::size_t num_cores_y;
         };
@@ -70,7 +70,7 @@ struct MorehGroupNormBackwardGammaBetaGradOperation {
         const Tensor& input,
         const Tensor& mean,
         const Tensor& rstd,
-        const uint32_t num_groups,
+        uint32_t num_groups,
         const std::vector<bool>& are_required_outputs,
         const std::optional<const Tensor>& gamma_grad,
         const std::optional<const Tensor>& beta_grad,

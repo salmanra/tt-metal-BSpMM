@@ -6,7 +6,7 @@ import torch
 
 import ttnn
 import pytest
-from models.utility_functions import comp_allclose_and_pcc, is_blackhole, skip_for_blackhole
+from models.common.utility_functions import comp_allclose_and_pcc, is_blackhole, skip_for_blackhole
 from loguru import logger
 
 from tests.ttnn.unit_tests.operations.test_utils import to_ttnn
@@ -76,7 +76,7 @@ def test_getitem_RAW_MJOR_one_index(shape_index_dim, dtype, index_size, device):
 
     tt_npu = ttnn.operations.moreh.getitem(dev_x, [dev_idx], [index_dim])
 
-    assert list(tt_npu.shape.with_tile_padding()) == list(tt_cpu.shape)
+    assert list(tt_npu.shape) == list(tt_cpu.shape)
     tt_dev = tt_npu.cpu().to_torch()
 
     passing, out = comp_allclose_and_pcc(tt_cpu, tt_dev)
@@ -138,7 +138,7 @@ def test_getitem_RAW_MAJOR_two_indices(shape_index_dims, dtype, index_size, devi
         tt_cpu = x[:, :, indices[0], indices[1]]
     tt_npu = ttnn.operations.moreh.getitem(dev_x, dev_indices, index_dims)
 
-    assert list(tt_npu.shape.with_tile_padding()) == list(tt_cpu.shape)
+    assert list(tt_npu.shape) == list(tt_cpu.shape)
     tt_dev = tt_npu.cpu().to_torch()
 
     passing, out = comp_allclose_and_pcc(tt_cpu, tt_dev)
@@ -198,7 +198,7 @@ def test_getitem_RAW_MAJOR_three_indices(shape_index_dims, dtype, index_size, de
         tt_cpu = x[:, indices[0], indices[1], indices[2]]
     tt_npu = ttnn.operations.moreh.getitem(dev_x, dev_indices, index_dims)
 
-    assert list(tt_npu.shape.with_tile_padding()) == list(tt_cpu.shape)
+    assert list(tt_npu.shape) == list(tt_cpu.shape)
     tt_dev = tt_npu.cpu().to_torch()
 
     passing, out = comp_allclose_and_pcc(tt_cpu, tt_dev)
@@ -236,7 +236,7 @@ def run_getitem_RAW_MAJOR(shape_index_dim, dtype, index_size, device):
 
     tt_npu = ttnn.operations.moreh.getitem(dev_x, [dev_idx], [index_dim])
 
-    assert list(tt_npu.shape.with_tile_padding()) == list(tt_cpu.shape)
+    assert list(tt_npu.shape) == list(tt_cpu.shape)
     tt_dev = tt_npu.cpu().to_torch()
 
     passing, out = comp_allclose_and_pcc(tt_cpu, tt_dev)
@@ -268,7 +268,7 @@ def run_getitem_RAW_MAJOR(shape_index_dim, dtype, index_size, device):
         100,
     ],
 )
-def test_getitem_RAW_MAJOR_callback(shape_index_dim, dtype, index_size, device, use_program_cache):
+def test_getitem_RAW_MAJOR_callback(shape_index_dim, dtype, index_size, device):
     torch.manual_seed(2024)
     num_program_cache_entries_list = []
     for i in range(2):
@@ -816,9 +816,7 @@ def run_moreh_geitem_tilized_one_index(shape_index_dim, dtype, index_size, row_m
         False,
     ],
 )
-def test_getitem_tilized_one_index_callback(
-    shape_index_dim, dtype, index_size, row_major_index, device, use_program_cache
-):
+def test_getitem_tilized_one_index_callback(shape_index_dim, dtype, index_size, row_major_index, device):
     torch.manual_seed(2024)
     num_program_cache_entries_list = []
     for i in range(2):

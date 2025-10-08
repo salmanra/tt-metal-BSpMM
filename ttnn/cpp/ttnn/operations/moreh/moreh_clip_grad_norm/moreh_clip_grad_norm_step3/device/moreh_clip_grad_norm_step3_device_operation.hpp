@@ -31,8 +31,8 @@ struct MorehClipGradNormStep3Operation {
 
     struct ProgramFactory {
         struct shared_variables_t {
-            KernelHandle reader_kernel_id;
-            KernelHandle writer_kernel_id;
+            tt::tt_metal::KernelHandle reader_kernel_id;
+            tt::tt_metal::KernelHandle writer_kernel_id;
             uint32_t num_cores_to_be_used;
             size_t num_cores_y;
         };
@@ -63,7 +63,7 @@ struct MorehClipGradNormStep3Operation {
         const std::vector<Tensor>& inputs,
         const Tensor& clip_coef_clamped,
         const std::optional<MemoryConfig>& memory_config,
-        const DeviceComputeKernelConfig compute_kernel_config);
+        DeviceComputeKernelConfig compute_kernel_config);
 };
 
 }  // namespace ttnn::operations::moreh::moreh_clip_grad_norm_step3

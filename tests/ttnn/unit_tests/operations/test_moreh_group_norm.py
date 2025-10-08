@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 
 import ttnn
-from models.utility_functions import comp_allclose
+from models.common.utility_functions import comp_allclose
 from loguru import logger
 
 
@@ -202,6 +202,8 @@ def make_input_tensors(input_shape, affine, do_backward=False):
 
 
 def run_test_moreh_group_norm(N, C_num_groups, HW, eps, affine, compute_mean_rstd, device):
+    pytest.skip("Skipping test_moreh_group_norm for now - libstdc++ issue")
+
     H, W = HW
     C, num_groups = C_num_groups
     input_shape = (N, C, H, W)
@@ -323,7 +325,7 @@ def test_moreh_group_norm(N, C_num_groups, HW, eps, affine, compute_mean_rstd, d
         True,
     ],
 )
-def test_moreh_group_norm_callback(N, C_num_groups, HW, eps, affine, compute_mean_rstd, device, use_program_cache):
+def test_moreh_group_norm_callback(N, C_num_groups, HW, eps, affine, compute_mean_rstd, device):
     torch.manual_seed(2024)
     num_program_cache_entries_list = []
     for i in range(2):
@@ -531,7 +533,6 @@ def test_moreh_group_norm_backward_callback(
     gamma_requires_grad,
     beta_requires_grad,
     device,
-    use_program_cache,
 ):
     torch.manual_seed(2024)
     num_program_cache_entries_list = []

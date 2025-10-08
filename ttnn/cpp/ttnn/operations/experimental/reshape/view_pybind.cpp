@@ -8,7 +8,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 #include "ttnn/operations/data_movement/reshape_on_device/reshape.hpp"
 #include "ttnn/types.hpp"
 
@@ -45,14 +45,6 @@ void py_bind_view(py::module& module) {
             py::arg("C"),
             py::arg("H"),
             py::arg("W"),
-        },
-
-        ttnn::pybind_overload_t{
-            [](const decltype(ttnn::experimental::view)& self, ttnn::Tensor& input_tensor, const ttnn::Shape& shape) {
-                return self(input_tensor, shape);
-            },
-            py::arg("input_tensor"),
-            py::arg("shape"),
         },
         ttnn::pybind_overload_t{
             [](const decltype(ttnn::experimental::view)& self,

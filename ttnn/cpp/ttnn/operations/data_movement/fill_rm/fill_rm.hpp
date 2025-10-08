@@ -12,19 +12,6 @@ namespace data_movement {
 
 struct FillRMOperation {
     static ttnn::Tensor invoke(
-        uint8_t queue_id,
-        uint32_t N,
-        uint32_t C,
-        uint32_t H,
-        uint32_t W,
-        uint32_t hFill,
-        uint32_t wFill,
-        const ttnn::Tensor& any,
-        float val_hi,
-        float val_lo,
-        const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt);
-
-    static ttnn::Tensor invoke(
         uint32_t N,
         uint32_t C,
         uint32_t H,
@@ -38,17 +25,6 @@ struct FillRMOperation {
 };
 
 struct FillOnesRMOperation {
-    static ttnn::Tensor invoke(
-        uint8_t queue_id,
-        uint32_t N,
-        uint32_t C,
-        uint32_t H,
-        uint32_t W,
-        uint32_t hFill,
-        uint32_t wFill,
-        const ttnn::Tensor& any,
-        const std::optional<ttnn::MemoryConfig>& memory_config = std::nullopt);
-
     static ttnn::Tensor invoke(
         uint32_t N,
         uint32_t C,

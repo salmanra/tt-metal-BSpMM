@@ -8,9 +8,9 @@ from loguru import logger
 import ttnn
 from ttnn import ShardTensorToMesh, ConcatMeshToTensor
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_equal, comp_pcc
-from models.utility_functions import skip_for_grayskull, skip_for_wormhole_b0
+from models.common.utility_functions import skip_for_wormhole_b0
 from tests.ttnn.unit_tests.operations.ccl.test_all_gather import is_unsupported_case
-
+from tests.tests_common.skip_reasons import LEGACY_CCL_SKIP
 
 USE_NON_FUSED = False
 USE_DATACOPY = False
@@ -29,6 +29,7 @@ def run_all_gather_matmul_on_t3000_impl(
     matmul_config,
     matmul_weights_dtype,
     max_in0_block_w,
+    use_bias,
     # Memory configs
     mem_config_input,
     mem_config_ag,
@@ -49,26 +50,36 @@ def run_all_gather_matmul_on_t3000_impl(
     if is_known_failure:
         pytest.skip(f"Skipping unsupported case {message}.")
 
-    devices = t3k_mesh_device.get_devices()
-
     logger.info(f"All Gather output shape: {ag_output_shape}")
     logger.info(f"dim: {dim}")
 
     ##### Create input tensor for the all gather #####
     _, _, _, hidden_dim = ag_output_shape
     input_tensor = torch.randn(ag_output_shape).float()
-    input_tensors = torch.chunk(input_tensor, num_devices, dim)
-    tt_input_tensors = []
-    for i, t in enumerate(input_tensors):
-        tt_input_tensors.append(
-            ttnn.Tensor(t, ag_input_dtype, {}, ttnn.Tile(tile)).to(layout).to(devices[i], mem_config_input)
-        )
-    input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
+    input_tensor_mesh = ttnn.from_torch(
+        input_tensor,
+        device=t3k_mesh_device,
+        layout=layout,
+        dtype=ag_input_dtype,
+        memory_config=mem_config_input,
+        mesh_mapper=ttnn.create_mesh_mapper(
+            t3k_mesh_device,
+            ttnn.MeshMapperConfig(
+                [ttnn.PlacementReplicate(), ttnn.PlacementShard(dim)], ttnn.MeshShape(1, num_devices)
+            ),
+        ),
+        tile=ttnn.Tile(tile),
+    )
 
     ##### Create the weight matrix for the matmul #####
-    weights_tensor = torch.randn([1, 1, hidden_dim, matmul_output_dim * num_devices]).float()
+    if use_bias:
+        weights_tensor = torch.randn([hidden_dim, matmul_output_dim * num_devices]).float()
+        weights_tensor_padded = weights_tensor.unsqueeze(0).unsqueeze(0)
+    else:
+        weights_tensor = torch.randn([1, 1, hidden_dim, matmul_output_dim * num_devices]).float()
+        weights_tensor_padded = weights_tensor
     weight_tt = ttnn.from_torch(
-        weights_tensor,
+        weights_tensor_padded,
         dtype=matmul_weights_dtype,
         layout=layout,
         device=t3k_mesh_device,
@@ -76,6 +87,21 @@ def run_all_gather_matmul_on_t3000_impl(
         mesh_mapper=ShardTensorToMesh(t3k_mesh_device, dim=dim),
         tile=ttnn.Tile(tile),
     )
+
+    if use_bias:
+        bias_tensor = torch.randn([1, matmul_output_dim * num_devices]).float()
+        bias_tensor_padded = bias_tensor.unsqueeze(0).unsqueeze(0)
+        bias_tt = ttnn.from_torch(
+            bias_tensor_padded,
+            dtype=matmul_weights_dtype,
+            layout=layout,
+            device=t3k_mesh_device,
+            memory_config=mem_config_weights,
+            mesh_mapper=ShardTensorToMesh(t3k_mesh_device, dim=dim),
+            tile=ttnn.Tile(tile),
+        )
+    else:
+        bias_tt = None
 
     ##### Configs for ttnn.matmul #####
     if matmul_config == "matmul_1d":
@@ -117,37 +143,44 @@ def run_all_gather_matmul_on_t3000_impl(
     )
 
     ##### Perform the torch ops #####
-    matmul_output = torch.matmul(input_tensor, weights_tensor)
+    if use_bias:
+        matmul_output = torch.nn.functional.linear(input_tensor, weights_tensor.T.contiguous(), bias_tensor)
+    else:
+        matmul_output = torch.matmul(input_tensor, weights_tensor)
 
     ##### Perform the TT ops #####
     def run_op():
-        if USE_NON_FUSED:
-            # all_gather
-            tt_all_gather_out_tensor = ttnn.all_gather(
-                input_tensor_mesh, dim, num_links=num_links, memory_config=mem_config_ag
-            )
+        # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+        pytest.skip(LEGACY_CCL_SKIP)
+        # if USE_NON_FUSED:
+        # # all_gather
+        # tt_all_gather_out_tensor = ttnn.all_gather(
+        #     input_tensor_mesh, dim, num_links=num_links, memory_config=mem_config_ag
+        # )
 
-            # matmul
-            tt_matmul_out_tensor = ttnn.matmul(
-                tt_all_gather_out_tensor,
-                weight_tt,
-                memory_config=mem_config_mm,
-                program_config=program_config,
-                compute_kernel_config=compute_kernel_config,
-            )
-            return tt_all_gather_out_tensor, tt_matmul_out_tensor, None
-        else:
-            return ttnn.experimental.all_gather_matmul(
-                input_tensor_mesh,
-                weight_tt,
-                dim,
-                (0, 4),
-                num_links=num_links,
-                memory_config_ag=mem_config_ag,
-                memory_config_mm=mem_config_mm,
-                program_config=program_config,
-                compute_kernel_config=compute_kernel_config,
-            )
+        # # matmul
+        # tt_matmul_out_tensor = ttnn.matmul(
+        #     tt_all_gather_out_tensor,
+        #     weight_tt,
+        #     bias_tt,
+        #     memory_config=mem_config_mm,
+        #     program_config=program_config,
+        #     compute_kernel_config=compute_kernel_config,
+        # )
+        # return tt_all_gather_out_tensor, tt_matmul_out_tensor, None
+        # else:
+        #     return ttnn.experimental.all_gather_matmul(
+        #         input_tensor_mesh,
+        #         weight_tt,
+        #         dim,
+        #         (0, 4),
+        #         bias=bias_tt,
+        #         num_links=num_links,
+        #         memory_config_ag=mem_config_ag,
+        #         memory_config_mm=mem_config_mm,
+        #         program_config=program_config,
+        #         compute_kernel_config=compute_kernel_config,
+        #     )
 
     if enable_trace:
         # Compile the op
@@ -167,15 +200,13 @@ def run_all_gather_matmul_on_t3000_impl(
         logger.info(f"Done executing trace")
 
         # Synchronize the devices
-        for d in devices:
-            ttnn.synchronize_device(d)
+        ttnn.synchronize_device(t3k_mesh_device)
     else:
         for i in range(num_iters):
             tt_all_gather_out_tensor, tt_matmul_out_tensor, tt_datacopy_out_tensor = run_op()
 
             # Synchronize the devices
-            for d in devices:
-                ttnn.synchronize_device(d)
+            ttnn.synchronize_device(t3k_mesh_device)
 
             logger.info(f"Done iteration {i}")
 
@@ -214,7 +245,6 @@ def run_all_gather_matmul_on_t3000_impl(
     assert eq
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "matmul_config",
     [
@@ -293,6 +323,13 @@ def run_all_gather_matmul_on_t3000_impl(
     ],
 )
 @pytest.mark.parametrize(
+    "use_bias",
+    [
+        True,
+        False,
+    ],
+)
+@pytest.mark.parametrize(
     "mem_config_input, mem_config_ag, mem_config_mm",
     [
         (
@@ -300,13 +337,6 @@ def run_all_gather_matmul_on_t3000_impl(
             ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
             ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
         )
-    ],
-)
-@pytest.mark.parametrize(
-    "enable_async",
-    [
-        True,
-        False,
     ],
 )
 def test_all_gather_matmul_on_t3000_post_commit(
@@ -321,12 +351,11 @@ def test_all_gather_matmul_on_t3000_post_commit(
     matmul_config,
     matmul_weights_dtype,
     max_in0_block_w,
+    use_bias,
     mem_config_input,
     mem_config_ag,
     mem_config_mm,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
 ):
     run_all_gather_matmul_on_t3000_impl(
         t3k_mesh_device,
@@ -340,13 +369,13 @@ def test_all_gather_matmul_on_t3000_post_commit(
         matmul_config,
         matmul_weights_dtype,
         max_in0_block_w,
+        use_bias,
         mem_config_input,
         mem_config_ag,
         mem_config_mm,
     )
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "matmul_config",
     [
@@ -404,13 +433,6 @@ def test_all_gather_matmul_on_t3000_post_commit(
         )
     ],
 )
-@pytest.mark.parametrize(
-    "enable_async",
-    [
-        True,
-        False,
-    ],
-)
 def test_all_gather_matmul_1d_on_t3000_post_commit(
     t3k_mesh_device,
     num_devices,
@@ -426,9 +448,7 @@ def test_all_gather_matmul_1d_on_t3000_post_commit(
     mem_config_input,
     mem_config_ag,
     mem_config_mm,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
 ):
     run_all_gather_matmul_on_t3000_impl(
         t3k_mesh_device,
@@ -442,13 +462,13 @@ def test_all_gather_matmul_1d_on_t3000_post_commit(
         matmul_config,
         matmul_weights_dtype,
         max_in0_block_w,
+        False,
         mem_config_input,
         mem_config_ag,
         mem_config_mm,
     )
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "matmul_config",
     [
@@ -535,13 +555,6 @@ def test_all_gather_matmul_1d_on_t3000_post_commit(
     ids=("llama_selfout",),
 )
 @pytest.mark.parametrize(
-    "enable_async",
-    [
-        True,
-        False,
-    ],
-)
-@pytest.mark.parametrize(
     "device_params", [{"trace_region_size": 90112}], indirect=True
 )  # TODO: Update once trace fails
 def test_all_gather_matmul_1d_llama_selfout_on_t3000_post_commit(
@@ -560,9 +573,7 @@ def test_all_gather_matmul_1d_llama_selfout_on_t3000_post_commit(
     mem_config_ag,
     mem_config_mm,
     mem_config_weights,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
 ):
     run_all_gather_matmul_on_t3000_impl(
         t3k_mesh_device,
@@ -576,6 +587,7 @@ def test_all_gather_matmul_1d_llama_selfout_on_t3000_post_commit(
         matmul_config,
         matmul_weights_dtype,
         max_in0_block_w,
+        False,
         mem_config_input,
         mem_config_ag,
         mem_config_mm,

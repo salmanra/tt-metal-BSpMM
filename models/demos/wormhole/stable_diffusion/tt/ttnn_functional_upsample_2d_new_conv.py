@@ -3,23 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
-import ttnn
-
-from models.utility_functions import (
-    torch_to_tt_tensor_rm,
-    tt_to_torch_tensor,
-)
-
-from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_upsample_nearest_2d import upsample_nearest2d
-from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import (
-    run_ttnn_conv_with_pre_and_post_tensor_formatting,
-    conv_cache,
-)
-from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import (
-    permute_conv_parameters,
-)
 from loguru import logger
 
+import ttnn
+from models.demos.wormhole.stable_diffusion.sd_helper_funcs import reshard_for_output_channels_divisibility
+from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_upsample_nearest_2d import upsample_nearest2d
+from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import (
+    get_default_compute_config,
+    permute_conv_parameters,
+)
 
 config_override = {
     (320, 320, 64, 64): {"act_block_h": 64},
@@ -36,9 +28,7 @@ config_override = {
 
 
 class upsample2d:
-    def __init__(
-        self, device, parameters, reader_patterns_cache, batch_size, input_height, input_width, compute_kernel_config
-    ):
+    def __init__(self, device, parameters, batch_size, input_height, input_width, compute_kernel_config):
         self.input_height = input_height
         self.input_width = input_width
         self.device = device
@@ -89,40 +79,40 @@ class upsample2d:
         #     tt_out = ttnn.to_memory_config(tt_out, self.conv.conv.input_sharded_memory_config)
         # tt_out = self.conv(tt_out)
         conv_config = ttnn.Conv2dConfig(
-            dtype=ttnn.bfloat8_b,
             weights_dtype=ttnn.bfloat8_b,
-            activation="",
             shard_layout=ttnn.TensorMemoryLayout.BLOCK_SHARDED,
-            input_channels_alignment=32,
-            transpose_shards=False,
             reshard_if_not_optimal=False,  # Reshard has error : 1616 Bytes unique+common runtime args targeting kernel reshard_reader on (x=0,y=0) are too large. Cannot be written as they will run into memory region reserved for result. Max allowable size is 1024 Bytes
+            enable_act_double_buffer=True,
+            enable_weights_double_buffer=True,
         )
-        compute_config = ttnn.init_device_compute_kernel_config(
-            self.device.arch(),
-            math_fidelity=ttnn.MathFidelity.LoFi,
-            math_approx_mode=True,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=False,
-        )
+        compute_config = get_default_compute_config(self.device)
         if self.conv_config_override and "act_block_h" in self.conv_config_override:
             conv_config.act_block_h_override = self.conv_config_override["act_block_h"]
-        [tt_out, [self.conv_weight_tensor, self.conv_bias_tensor]] = ttnn.conv2d(
+
+        conv_kwargs = {
+            "in_channels": self.conv_in_channels,
+            "out_channels": self.conv_out_channels,
+            "batch_size": self.batch_size,
+            "input_height": self.conv_input_height,
+            "input_width": self.conv_input_width,
+            "kernel_size": (3, 3),
+            "stride": (1, 1),
+            "padding": (1, 1),
+            "dilation": (1, 1),
+            "groups": 1,
+            "device": self.device,
+            "conv_config": conv_config,
+            "slice_config": ttnn.Conv2dL1FullSliceConfig,
+        }
+
+        tt_out, [self.conv_weight_tensor, self.conv_bias_tensor] = ttnn.conv2d(
             input_tensor=tt_out,
-            in_channels=self.conv_in_channels,
-            out_channels=self.conv_out_channels,
-            kernel_size=(3, 3),
-            stride=(1, 1),
-            padding=(1, 1),
-            device=self.device,
-            batch_size=self.batch_size,
-            input_height=self.conv_input_height,
-            input_width=self.conv_input_width,
             weight_tensor=self.conv_weight_tensor,
             bias_tensor=self.conv_bias_tensor,
-            conv_config=conv_config,
+            **conv_kwargs,
             compute_config=compute_config,
-            conv_op_cache=conv_cache,
-            return_output_dim=False,
+            dtype=ttnn.bfloat8_b,
             return_weights_and_bias=True,
         )
+        tt_out = reshard_for_output_channels_divisibility(tt_out, self.conv_out_channels)
         return tt_out

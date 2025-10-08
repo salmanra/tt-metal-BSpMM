@@ -3,23 +3,19 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import json
-import pytest
-import torch
+
 import evaluate
 import numpy as np
+import pytest
+import torch
 from loguru import logger
-
-from models.utility_functions import (
-    disable_compilation_reports,
-    disable_persistent_kernel_cache,
-    profiler,
-)
-from models import generation_utils
+from transformers import BloomConfig, BloomForCausalLM, BloomTokenizerFast
 from ttnn.model_preprocessing import preprocess_model_parameters
-from transformers import BloomTokenizerFast, BloomForCausalLM, BloomConfig
-from models.demos.grayskull.functional_bloom.tt.ttnn_optimized_functional_bloom import *
-from models.demos.grayskull.functional_bloom.tt import ttnn_functional_bloom, ttnn_optimized_functional_bloom
+
+from models.common import generation_utils
+from models.common.utility_functions import disable_persistent_kernel_cache, profiler
 from models.demos.grayskull.functional_bloom.dataset_utils import get_data
+from models.demos.grayskull.functional_bloom.tt import ttnn_functional_bloom, ttnn_optimized_functional_bloom
 
 
 def generate_next_token(
@@ -231,12 +227,10 @@ def test_demo(
     functional_model,
     model_location_generator,
     device,
-    use_program_cache,
     batch_size=8,
     num_tokens_to_decode=10,
 ):
     disable_persistent_kernel_cache()
-    disable_compilation_reports()
 
     return run_bloom_causal_LM_inference(
         model_version="bigscience/bloom-560m",
@@ -261,13 +255,11 @@ def test_demo_hellaswag(
     model_location_generator,
     functional_model,
     device,
-    use_program_cache,
     loop_count,
     batch_size=8,
     num_tokens_to_decode=10,
 ):
     disable_persistent_kernel_cache()
-    disable_compilation_reports()
 
     return run_bloom_causal_LM_inference_hellaswag(
         model_version="bigscience/bloom-560m",

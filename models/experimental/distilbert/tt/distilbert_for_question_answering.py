@@ -6,7 +6,7 @@ from typing import Optional, Tuple, Union
 import torch.nn as nn
 from dataclasses import dataclass
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
@@ -14,7 +14,7 @@ from models.utility_functions import (
 import ttnn
 from dataclasses import dataclass
 from models.experimental.distilbert.tt.distilbert_model import TtDistilBertModel
-from models.helper_funcs import Linear as TtLinear
+from models.common.helper_funcs import Linear as TtLinear
 
 
 @dataclass
@@ -41,8 +41,8 @@ class TtDistilBertForQuestionAnswering(nn.Module):
         self.qa_weight = torch_to_tt_tensor_rm(state_dict["qa_outputs.weight"], self.device)
         self.qa_bias = torch_to_tt_tensor_rm(state_dict["qa_outputs.bias"], self.device)
         self.qa_linear = TtLinear(
-            self.qa_weight.shape.with_tile_padding()[-1],
-            self.qa_weight.shape.with_tile_padding()[-2],
+            self.qa_weight.padded_shape[-1],
+            self.qa_weight.padded_shape[-2],
             self.qa_weight,
             self.qa_bias,
         )

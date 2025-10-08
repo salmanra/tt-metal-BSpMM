@@ -3,10 +3,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
-import ttnn
-from ttnn import ReplicateTensorToMesh
 
-from models.utility_functions import is_wormhole_b0
+import ttnn
+from models.common.utility_functions import is_wormhole_b0
 
 
 def get_weights_cached(
@@ -50,7 +49,6 @@ def get_weights_cached(
             layout=tt_layout,
             device=mesh_device,
             memory_config=model_config[f"{weight_config_str}_MEMCFG"],
-            mesh_mapper=ReplicateTensorToMesh(mesh_device) if type(mesh_device) == ttnn.MeshDevice else None,
             cache_file_name=str(path),
             preprocess=preprocess_weights,
         )
@@ -87,7 +85,7 @@ def get_default_hifi2_kernel_config():
 
 
 def layernorm(ln_input, ln_eps, ln_gamma, ln_betta, model_config):
-    h_dim = ln_input.shape.with_tile_padding()[-2]  # corresponds to batch size (decode) or seq_len (prefill)
+    h_dim = ln_input.padded_shape[-2]  # corresponds to batch size (decode) or seq_len (prefill)
     if h_dim in [32, 128, 256, 1024, 2048]:
         ln_output = ttnn.interleaved_to_sharded(ln_input, model_config["LAYERNORM_BLOCK_SHARDED_MEM_CFG"][h_dim])
         ln_output = ttnn.layer_norm(
@@ -105,6 +103,7 @@ def layernorm(ln_input, ln_eps, ln_gamma, ln_betta, model_config):
             ln_input,
             epsilon=ln_eps,
             memory_config=model_config["LN_F_OUTPUT_MEMCFG"],
+            compute_kernel_config=ttnn.WormholeComputeKernelConfig(math_fidelity=ttnn.MathFidelity.HiFi4),
         )
         ln_output = ttnn.multiply(ln_output, ln_gamma, memory_config=model_config["LN_F_OUTPUT_MEMCFG"])
         ln_output = ttnn.add(

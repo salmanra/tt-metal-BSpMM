@@ -14,7 +14,7 @@ from tests.ttnn.utils_for_testing import (
     stop_measuring_time,
     get_per_core_size_and_num_cores,
 )
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 # Override the default timeout in seconds for hang detection.
 TIMEOUT = 20
@@ -108,7 +108,6 @@ def run(
     *,
     device,
 ) -> list:
-    device.enable_async(False)
     torch_input_tensors = []
 
     torch_input_tensors.append(torch_random(concat_specs["shape1"], -0.1, 0.1, dtype=torch.bfloat16))

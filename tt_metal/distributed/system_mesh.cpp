@@ -1,262 +1,261 @@
-// SPDX-FileCopyrightText: © 2025 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <stdint.h>
 #include <system_mesh.hpp>
+#include <tt-metalium/mesh_device_view.hpp>
+#include <tt-metalium/shape2d.hpp>
+#include <tt-metalium/distributed_context.hpp>
+#include <tt_stl/indestructible.hpp>
+#include <algorithm>
+#include <cstddef>
+#include <unordered_set>
 
-#include "umd/device/types/cluster_descriptor_types.h"
-#include "tt_metal/distributed/coordinate_translation.hpp"
+#include <tt_stl/assert.hpp>
+#include <tt-logger/tt-logger.hpp>
+#include "mesh_config.hpp"
+#include "mesh_coord.hpp"
+#include "shape_base.hpp"
+#include <tt_stl/small_vector.hpp>
+#include <tt_stl/span.hpp>
+#include "tt_metal/distributed/system_mesh_translation_map.hpp"
+#include "tt_metal/distributed/distributed_coordinate_translator.hpp"
+
+#include "impl/context/metal_context.hpp"
+#include <tt-metalium/control_plane.hpp>
 
 namespace tt::tt_metal::distributed {
+namespace {
 
-class SystemMesh::Impl {
-private:
-    std::unordered_map<MeshDeviceID, std::vector<chip_id_t>> assigned_devices_;
-    std::unordered_map<MeshDeviceID, std::weak_ptr<MeshDevice>> assigned_mesh_device_devices_;
-
-    MeshShape logical_mesh_shape_;
-    CoordinateTranslationMap logical_to_physical_coordinates_;
-    std::unordered_map<LogicalCoordinate, chip_id_t> logical_to_device_id_;
-    std::unordered_map<PhysicalCoordinate, chip_id_t> physical_coordinate_to_device_id_;
-    std::unordered_map<chip_id_t, PhysicalCoordinate> physical_device_id_to_coordinate_;
-
-public:
-    Impl() = default;
-    ~Impl() = default;
-
-    bool is_system_mesh_initialized() const;
-    void initialize();
-    const MeshShape& get_shape() const;
-    size_t get_num_devices() const;
-    std::vector<chip_id_t> get_mapped_physical_device_ids(const MeshDeviceConfig& config) const;
-    std::vector<chip_id_t> request_available_devices(const MeshDeviceConfig& config) const;
-    IDevice* get_device(const chip_id_t physical_device_id) const;
-    void register_mesh_device(const std::shared_ptr<MeshDevice>& mesh_device, const std::vector<IDevice*>& devices);
-
-    chip_id_t get_physical_device_id(size_t logical_row_idx, size_t logical_col_idx) const;
+// Helper type to keep track of device ID and fabric node ID for a given mesh coordinate.
+struct MappedDevice {
+    MaybeRemote<int> device_id;
+    tt::tt_fabric::FabricNodeId fabric_node_id;
 };
 
+// Initializes a mesh container with MappedDevice objects, with configured fabric node IDs.
+MeshContainer<MappedDevice> initialize_mapped_devices(const tt::tt_fabric::MeshId mesh_id, const MeshShape& shape) {
+    std::vector<MappedDevice> system_mesh_devices;
+    system_mesh_devices.reserve(shape.mesh_size());
+    for (int linear_index = 0; linear_index < shape.mesh_size(); ++linear_index) {
+        system_mesh_devices.push_back(MappedDevice{
+            .device_id = MaybeRemote<int>::remote(),
+            .fabric_node_id = tt::tt_fabric::FabricNodeId(mesh_id, linear_index)});
+    }
+    return MeshContainer<MappedDevice>(shape, std::move(system_mesh_devices));
+}
+
+}  // namespace
+class SystemMesh::Impl {
+private:
+    tt::tt_fabric::MeshId mesh_id_;
+    DistributedCoordinateTranslator coordinate_translator_;
+    MeshContainer<MappedDevice> system_mapped_devices_;
+
+    MappedDevice get_system_mapped_device(const MeshCoordinate& coord) const;
+
+public:
+    Impl();
+
+    const DistributedCoordinateTranslator& coordinate_translator() const;
+
+    MappedDevices get_mapped_devices(
+        const std::optional<MeshShape>& shape, const std::optional<MeshCoordinate>& offset = std::nullopt) const;
+};
+
+MappedDevice SystemMesh::Impl::get_system_mapped_device(const MeshCoordinate& coord) const {
+    auto system_mapped_device = system_mapped_devices_.at(coord);
+    if (system_mapped_device.device_id.is_local()) {
+        log_debug(
+            LogDistributed,
+            "Mesh coordinate: {} is local, Physical device ID: {}, Fabric node ID: {}",
+            coord,
+            *system_mapped_device.device_id,
+            system_mapped_device.fabric_node_id);
+    } else {
+        log_debug(
+            LogDistributed,
+            "Mesh coordinate: {} is remote, Fabric node ID: {}",
+            coord,
+            system_mapped_device.fabric_node_id);
+    }
+
+    return system_mapped_device;
+}
+
 // Implementation of public methods
-bool SystemMesh::Impl::is_system_mesh_initialized() const { return !physical_coordinate_to_device_id_.empty(); }
-
-void SystemMesh::Impl::initialize() {
-    physical_device_id_to_coordinate_ = tt::Cluster::instance().get_user_chip_ethernet_coordinates();
-    if (physical_device_id_to_coordinate_.empty()) {
-        // Only WH has ethernet coordinates. Fabric will assign chip ids for BH
-        auto arch = tt::Cluster::instance().arch();
-        TT_FATAL(
-            arch == ARCH::GRAYSKULL or arch == ARCH::BLACKHOLE,
-            "Expected Wormhole chips to have ethernet coordinates assigned by cluster descriptor");
-        const int num_detected_devices = tt::Cluster::instance().number_of_devices();
-        for (auto chip_id = 0; chip_id < num_detected_devices; chip_id++) {
-            PhysicalCoordinate coord{0, chip_id, 0, 0, 0};
-            physical_device_id_to_coordinate_.emplace(chip_id, coord);
-            physical_coordinate_to_device_id_.emplace(coord, chip_id);
-        }
-    } else {
-        for (const auto& [chip_id, physical_coordinate] : this->physical_device_id_to_coordinate_) {
-            physical_coordinate_to_device_id_.emplace(physical_coordinate, chip_id);
-        }
-    }
-
-    std::tie(logical_to_physical_coordinates_, logical_mesh_shape_) = get_system_mesh_coordinate_translation_map();
-    for (const auto& [logical_coordinate, physical_coordinate] : logical_to_physical_coordinates_) {
-        auto physical_device_id_iter = physical_coordinate_to_device_id_.find(physical_coordinate);
-        TT_FATAL(
-            physical_device_id_iter != physical_coordinate_to_device_id_.end(),
-            "Physical (Ethernet) coordinate: {} not found. Have you used `tt-topology` to flash the ethernet "
-            "coordinates with the correct topology?",
-            physical_coordinate);
-        logical_to_device_id_.try_emplace(logical_coordinate, physical_device_id_iter->second);
-    }
-}
-
-const MeshShape& SystemMesh::Impl::get_shape() const { return logical_mesh_shape_; }
-size_t SystemMesh::Impl::get_num_devices() const {
-    auto [num_rows, num_cols] = this->get_shape();
-    return num_rows * num_cols;
-}
-
-chip_id_t SystemMesh::Impl::get_physical_device_id(size_t logical_row_idx, size_t logical_col_idx) const {
-    TT_FATAL(
-        logical_row_idx < logical_mesh_shape_.num_rows,
-        "Row index out of bounds: {} >= {}",
-        logical_row_idx,
-        logical_mesh_shape_.num_rows);
-    TT_FATAL(
-        logical_col_idx < logical_mesh_shape_.num_cols,
-        "Column index out of bounds: {} >= {}",
-        logical_col_idx,
-        logical_mesh_shape_.num_cols);
-    auto logical_coordinate = Coordinate{logical_row_idx, logical_col_idx};
-    return logical_to_device_id_.at(logical_coordinate);
-}
-
-std::vector<chip_id_t> SystemMesh::Impl::get_mapped_physical_device_ids(const MeshDeviceConfig& config) const {
-    std::vector<chip_id_t> physical_device_ids;
-    auto [system_mesh_rows, system_mesh_cols] = this->get_shape();
-    auto [requested_num_rows, requested_num_cols] = config.mesh_shape;
-    auto [row_offset, col_offset] = config.offset;
-
-    // First check if total size fits
-    TT_FATAL(
-        requested_num_rows * requested_num_cols <= system_mesh_rows * system_mesh_cols,
-        "Requested submesh is too big: {}x{}, SystemMesh shape: {}x{}",
-        requested_num_rows,
-        requested_num_cols,
-        system_mesh_rows,
-        system_mesh_cols);
-
-    bool is_single_row_or_column = requested_num_rows == 1 or requested_num_cols == 1;
-    if (is_single_row_or_column) {
-        TT_FATAL(row_offset == 0 and col_offset == 0, "Row and column offsets unsupported for single row mesh");
-        auto line_length = requested_num_rows * requested_num_cols;
-        auto line_coords = MeshDeviceView::get_line_coordinates(
-            line_length, Coordinate{row_offset, col_offset}, system_mesh_rows, system_mesh_cols);
-        for (const auto& logical_coordinate : line_coords) {
-            auto physical_device_id = logical_to_device_id_.at(logical_coordinate);
-            physical_device_ids.push_back(physical_device_id);
-
-            log_debug(
-                LogMetal, "Logical coordinate: {}, Physical device ID: {}", logical_coordinate, physical_device_id);
-        }
-        return physical_device_ids;
-    }
-    bool requires_rotation = requested_num_rows > system_mesh_rows || requested_num_cols > system_mesh_cols;
-
-    if (requires_rotation) {
-        bool can_rotate = requested_num_rows <= system_mesh_cols && requested_num_cols <= system_mesh_rows;
-        if (can_rotate) {
-            // Rotate requested shape; row_offset and col_offset refer to original orientation
-            std::swap(requested_num_rows, requested_num_cols);
-        } else {
-            TT_THROW(
-                "User has requested a submesh that is too big and is not rotatable: {}x{} and SystemMesh is {}x{}.",
-                requested_num_rows,
-                requested_num_cols,
-                system_mesh_rows,
-                system_mesh_cols);
-        }
-    } else {
-        // If no rotation, check dimensions directly
-        TT_FATAL(
-            requested_num_rows <= system_mesh_rows && requested_num_cols <= system_mesh_cols,
-            "Requested submesh is too big: {}x{} and SystemMesh is {}x{}",
-            requested_num_rows,
-            requested_num_cols,
-            system_mesh_rows,
-            system_mesh_cols);
-    }
-
-    size_t original_rows = system_mesh_rows;
-    size_t original_cols = system_mesh_cols;
-
-    // Check that offsets fit in the original mesh
-    TT_FATAL(
-        row_offset + requested_num_rows <= original_rows,
-        "Row offset + requested rows exceeds mesh size: {} + {} > {}",
-        row_offset,
-        requested_num_rows,
-        original_rows);
-    TT_FATAL(
-        col_offset + requested_num_cols <= original_cols,
-        "Column offset + requested columns exceeds mesh size: {} + {} > {}",
-        col_offset,
-        requested_num_cols,
-        original_cols);
-
-    // Map each submesh coordinate to the original logical coordinates
-    for (size_t row = 0; row < requested_num_rows; row++) {
-        for (size_t col = 0; col < requested_num_cols; col++) {
-            Coordinate logical_coordinate;
-            if (requires_rotation) {
-                // After swapping requested_num_rows and requested_num_cols,
-                // (row, col) now iterate over the rotated shape.
-                size_t old_row = row_offset + row;  // top row
-                size_t old_col = col_offset + col;  // increasing columns horizontally
-                logical_coordinate = Coordinate{old_row, old_col};
-            } else {
-                logical_coordinate = Coordinate{row + row_offset, col + col_offset};
-            }
-
-            TT_FATAL(
-                logical_coordinate.row < logical_mesh_shape_.num_rows,
-                "Row coordinate out of bounds: {} >= {}",
-                logical_coordinate.row,
-                logical_mesh_shape_.num_rows);
-            TT_FATAL(
-                logical_coordinate.col < logical_mesh_shape_.num_cols,
-                "Column coordinate out of bounds: {} >= {}",
-                logical_coordinate.col,
-                logical_mesh_shape_.num_cols);
-
-            auto physical_device_id = logical_to_device_id_.at(logical_coordinate);
-            physical_device_ids.push_back(physical_device_id);
-
-            log_debug(
-                LogMetal, "Logical coordinate: {}, Physical device ID: {}", logical_coordinate, physical_device_id);
-        }
-    }
-    return physical_device_ids;
-}
-
-void SystemMesh::Impl::register_mesh_device(
-    const std::shared_ptr<MeshDevice>& mesh_device, const std::vector<IDevice*>& devices) {
-    std::vector<chip_id_t> physical_device_ids;
-    for (auto device : devices) {
-        physical_device_ids.push_back(device->id());
-    }
-    assigned_mesh_device_devices_.insert({mesh_device->id(), mesh_device});
-    assigned_devices_.insert({mesh_device->id(), physical_device_ids});
-}
-
-std::vector<chip_id_t> SystemMesh::Impl::request_available_devices(const MeshDeviceConfig& config) const {
-    auto [requested_num_rows, requested_num_cols] = config.mesh_shape;
-    auto [max_num_rows, max_num_cols] = logical_mesh_shape_;
-    auto [row_offset, col_offset] = config.offset;
-
+SystemMesh::Impl::Impl() :
+    mesh_id_(MetalContext::instance().get_control_plane().get_local_mesh_id_bindings()[0]),
+    coordinate_translator_(
+        MetalContext::instance().get_control_plane().get_physical_mesh_shape(
+            mesh_id_,  //
+            tt::tt_fabric::MeshScope::GLOBAL),
+        MetalContext::instance().get_control_plane().get_physical_mesh_shape(
+            mesh_id_,  //
+            tt::tt_fabric::MeshScope::LOCAL),
+        MetalContext::instance().get_control_plane().get_local_mesh_offset()),
+    system_mapped_devices_(initialize_mapped_devices(mesh_id_, coordinate_translator_.global_shape())) {
     log_debug(
-        LogMetal,
-        "Mapping MeshDevice ({}x{}) with offset: {}, {}",
-        requested_num_rows,
-        requested_num_cols,
-        row_offset,
-        col_offset);
+        LogDistributed,
+        "SystemMesh: Global shape: {}, Local shape: {}, Local offset: {}",
+        coordinate_translator_.global_shape(),
+        coordinate_translator_.local_shape(),
+        coordinate_translator_.local_offset());
 
-    return config.physical_device_ids.empty() ? this->get_mapped_physical_device_ids(config)
-                                              : config.physical_device_ids;
+    // Get local physical coordinates
+    const auto& local_physical_translation_map = get_system_mesh_coordinate_translation_map();
+    TT_FATAL(
+        local_physical_translation_map.shape() == coordinate_translator_.local_shape(),
+        "Local coordinates shape mismatch: {} != {}",
+        local_physical_translation_map.shape(),
+        coordinate_translator_.local_shape());
+
+    // Populate chip IDs for host-local devices.
+    for (const auto& local_coord : MeshCoordinateRange(coordinate_translator_.local_shape())) {
+        TT_FATAL(
+            local_physical_translation_map.at(local_coord).mesh_id() == mesh_id_,
+            "Mesh id mismatch for coordinate {}: {} != {}",
+            local_coord,
+            local_physical_translation_map.at(local_coord).mesh_id(),
+            mesh_id_);
+
+        const auto global_coord = coordinate_translator_.local_to_global(local_coord);
+        log_debug(
+            LogDistributed,
+            "SystemMesh: Populating global coordinate {} with physical coordinate {} at local coordinate {}",
+            global_coord,
+            local_physical_translation_map.at(local_coord),
+            local_coord);
+        system_mapped_devices_.at(global_coord).device_id =
+            MaybeRemote<int>::local(local_physical_translation_map.at(local_coord).chip_id());
+    }
+}
+
+const DistributedCoordinateTranslator& SystemMesh::Impl::coordinate_translator() const {
+    return coordinate_translator_;
+}
+
+SystemMesh::MappedDevices SystemMesh::Impl::get_mapped_devices(
+    const std::optional<MeshShape>& shape, const std::optional<MeshCoordinate>& offset) const {
+    MappedDevices mapped_devices;
+
+    const MeshShape& system_shape = coordinate_translator_.global_shape();
+    const MeshShape requested_shape = shape.value_or(system_shape);
+    mapped_devices.mesh_shape = requested_shape;
+    const size_t system_dimensions = system_shape.dims();
+
+    const MeshCoordinate system_offset = [&offset, system_dimensions]() {
+        if (offset.has_value()) {
+            TT_FATAL(
+                offset->dims() == system_dimensions,
+                "Provided offset dimensions mismatch: {} != {}",
+                offset,
+                system_dimensions);
+            return *offset;
+        } else {
+            return MeshCoordinate::zero_coordinate(system_dimensions);
+        }
+    }();
+
+    if (requested_shape.is_line_topology()) {
+        // TODO: consider if we can do this in 3D.
+        TT_FATAL(system_shape.dims() == 2, "Line topology is only supported for 2D meshes");
+        TT_FATAL(
+            system_shape[0] > system_offset[0] && system_shape[1] > system_offset[1],
+            "The specified offset {} is out of bounds for the system mesh shape {}",
+            system_offset,
+            system_shape);
+        Shape2D system_mesh_2d(system_shape[0], system_shape[1]);
+        Shape2D system_offset_2d(system_offset[0], system_offset[1]);
+
+        auto line_length = requested_shape.mesh_size();
+        for (const auto& logical_coordinate :
+             MeshDeviceView::get_line_coordinates(line_length, system_mesh_2d, system_offset_2d)) {
+            const auto mapped_device = get_system_mapped_device(logical_coordinate);
+            mapped_devices.device_ids.push_back(mapped_device.device_id);
+            mapped_devices.fabric_node_ids.push_back(mapped_device.fabric_node_id);
+        }
+        return mapped_devices;
+    }
+
+    TT_FATAL(
+        requested_shape.dims() == system_dimensions,
+        "Requested mesh shape dimensions mismatch: {} != {}",
+        requested_shape,
+        system_shape);
+
+    // Attempt to fit the requested mesh into the system mesh, potentially rotating it.
+    auto requested_mesh_fits =
+        [this, &system_offset, &system_shape](const tt::stl::SmallVector<uint32_t>& rotated_shape) {
+            for (int i = 0; i < system_shape.dims(); ++i) {
+                if (system_offset[i] + rotated_shape[i] > system_shape[i]) {
+                    return false;
+                }
+            }
+            return true;
+        };
+
+    tt::stl::SmallVector<uint32_t> rotated_shape(requested_shape.cbegin(), requested_shape.cend());
+    size_t rotations = 0;
+    while (!requested_mesh_fits(rotated_shape) && rotations < system_dimensions) {
+        std::rotate(rotated_shape.begin(), rotated_shape.begin() + 1, rotated_shape.end());
+        ++rotations;
+    }
+    // After rotating N times, no luck. The requested mesh it too big.
+    if (rotations == system_dimensions) {
+        TT_THROW(
+            "Requested mesh is too big and is not rotatable: {} and SystemMesh {}, offset {}",
+            requested_shape,
+            system_shape,
+            system_offset);
+    }
+
+    tt::stl::SmallVector<uint32_t> end_coord;
+    for (int i = 0; i < system_dimensions; ++i) {
+        end_coord.push_back(system_offset[i] + rotated_shape[i] - 1);
+    }
+
+    MeshCoordinateRange system_range(system_offset, MeshCoordinate(end_coord));
+
+    // Iterate over the system mesh and map the logical coordinates to system mesh devices.
+    bool is_rotated = rotations > 0;  // Track if we rotated the mesh.
+    if (is_rotated) {
+        TT_FATAL(rotations == 1 and system_shape.dims() == 2, "Mesh rotation is only supported for 2D meshes");
+
+        // Iterate through user-requested shape, transposing the rows and columns
+        for (int i = 0; i < requested_shape[0]; i++) {
+            for (int j = 0; j < requested_shape[1]; j++) {
+                const auto system_coord = MeshCoordinate(j, i);
+                const auto mapped_device = get_system_mapped_device(system_coord);
+                mapped_devices.device_ids.push_back(mapped_device.device_id);
+                mapped_devices.fabric_node_ids.push_back(mapped_device.fabric_node_id);
+            }
+        }
+    } else {
+        for (const auto& system_coord : system_range) {
+            const auto mapped_device = get_system_mapped_device(system_coord);
+            mapped_devices.device_ids.push_back(mapped_device.device_id);
+            mapped_devices.fabric_node_ids.push_back(mapped_device.fabric_node_id);
+        }
+    }
+
+    return mapped_devices;
 }
 
 SystemMesh::SystemMesh() : pimpl_(std::make_unique<Impl>()) {}
-SystemMesh::~SystemMesh() = default;
 
 SystemMesh& SystemMesh::instance() {
-    static SystemMesh instance;
-    if (!instance.pimpl_->is_system_mesh_initialized()) {
-        instance.pimpl_->initialize();
-    }
-    return instance;
+    static tt::stl::Indestructible<SystemMesh> instance;
+    return instance.get();
 }
 
-chip_id_t SystemMesh::get_physical_device_id(size_t logical_row_idx, size_t logical_col_idx) const {
-    return pimpl_->get_physical_device_id(logical_row_idx, logical_col_idx);
-}
+const MeshShape& SystemMesh::shape() const { return pimpl_->coordinate_translator().global_shape(); }
+const MeshShape& SystemMesh::local_shape() const { return pimpl_->coordinate_translator().local_shape(); }
 
-const MeshShape& SystemMesh::get_shape() const { return pimpl_->get_shape(); }
-
-size_t SystemMesh::get_num_devices() const { return pimpl_->get_num_devices(); }
-
-void SystemMesh::register_mesh_device(
-    const std::shared_ptr<MeshDevice>& mesh_device, const std::vector<IDevice*>& devices) {
-    pimpl_->register_mesh_device(mesh_device, devices);
-}
-
-std::vector<chip_id_t> SystemMesh::request_available_devices(const MeshDeviceConfig& config) const {
-    return pimpl_->request_available_devices(config);
-}
-
-std::vector<chip_id_t> SystemMesh::get_mapped_physical_device_ids(const MeshDeviceConfig& config) const {
-    return pimpl_->get_mapped_physical_device_ids(config);
+SystemMesh::MappedDevices SystemMesh::get_mapped_devices(
+    const std::optional<MeshShape>& shape, const std::optional<MeshCoordinate>& offset) const {
+    return pimpl_->get_mapped_devices(shape, offset);
 }
 
 }  // namespace tt::tt_metal::distributed

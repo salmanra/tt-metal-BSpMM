@@ -2,17 +2,18 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import pytest
+import math
 from enum import Enum, auto
+
+import pytest
+import torch
 from loguru import logger
 
 import ttnn
+from models.common.utility_functions import comp_pcc, is_blackhole, is_wormhole_b0, torch2tt_tensor, tt2torch_tensor
 from models.demos.falcon7b_common.tt.falcon_causallm import falcon_lm_head_matmul
 from models.demos.falcon7b_common.tt.falcon_mlp import falcon_dense_4h_to_h_matmul, falcon_dense_h_to_4h_matmul
 from models.demos.falcon7b_common.tt.model_utils import get_falcon_default_core_grid
-from models.utility_functions import comp_pcc, tt2torch_tensor, torch2tt_tensor, is_wormhole_b0, is_blackhole
-import torch
-import math
 
 
 class MatmulOpEnum(Enum):
@@ -144,7 +145,7 @@ def run_falcon_matmul_test(
     logger.debug(f"in1 ({b_shape}): {b_t.memory_config().buffer_type} and {b_t.get_dtype()}")
     logger.debug(f"out ({expected_output_shape}): {out.memory_config().buffer_type} and {out.get_dtype()}")
 
-    assert out.shape.with_tile_padding() == expected_output_shape
+    assert out.padded_shape == expected_output_shape
     pyt_got_back_rm = tt2torch_tensor(out)
 
     ref_bmm = torch.matmul(A, B)
@@ -484,19 +485,15 @@ def test_falcon7b_attnention_sliced(
 @pytest.mark.parametrize("seq_len", [128, 1024, 2048], ids=["seq_len_128", "seq_len_1024", "seq_len_2048"])
 @pytest.mark.parametrize("num_cores", [64])
 @pytest.mark.skipif(is_wormhole_b0() or is_blackhole(), reason="non-determinstic hang, see issue #5882")
-@pytest.mark.parametrize("async_mode", [True, False], ids=["async_on", "async_off"])
 def test_falcon7b_attention_softmax_sequence(
     device,
     seq_len,
     num_cores,
-    async_mode,
-    use_program_cache,
     function_level_defaults,
 ):
     compute_grid_size = device.compute_with_storage_grid_size()
     if num_cores > (compute_grid_size.x * compute_grid_size.y):
         pytest.skip(f"Need {num_cores} cores to run this test but core grid is {compute_grid_size}")
-    device.enable_async(async_mode)
     grid_size = (8, 8)
     num_heads = 64
 

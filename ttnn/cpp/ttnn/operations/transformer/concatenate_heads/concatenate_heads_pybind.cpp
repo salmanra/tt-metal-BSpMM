@@ -7,7 +7,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 #include "concatenate_heads.hpp"
 
 namespace ttnn::operations::transformer {
@@ -18,7 +18,6 @@ void py_bind_concatenate_heads(pybind11::module& module) {
         module,
         ttnn::transformer::concatenate_heads,
         R"doc(
-
             Takes in a tensor of shape ``[batch_size, num_heads, sequence_size, head_size]``, concatenates heads back along the width dimension and returns the tensor of shape ``[batch_size, sequence_size, num_heads * head_size]``
 
             Args:

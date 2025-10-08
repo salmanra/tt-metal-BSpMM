@@ -10,8 +10,8 @@
 
 #include <tt-metalium/host_api.hpp>
 #include <tt-metalium/bfloat16.hpp>
-#include <tt-metalium/dprint_server.hpp>
 #include <tt-metalium/tt_metal.hpp>
+#include "tt_metal/jit_build/build_env_manager.hpp"
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // TODO: explain what test does
@@ -67,7 +67,12 @@ int main(int argc, char** argv) {
         tt_metal::IDevice* device = tt_metal::CreateDevice(device_id);
         // Remove old compiled kernels
         static const std::string kernel_name = "test_compile_args";
-        auto binary_path_str = device->build_env().get_out_kernel_root_path() + kernel_name;
+        auto binary_path_str =
+            kernel
+                ->binaries(
+                    tt::tt_metal::BuildEnvManager::get_instance().get_device_build_env(device->build_id()).build_env)
+                .get_out_kernel_root_path() +
+            kernel_name;
         std::filesystem::remove_all(binary_path_str);
 
         pass &= test_compile_args({0, 68, 0, 124}, device);
@@ -80,7 +85,7 @@ int main(int argc, char** argv) {
             std::distance(std::filesystem::directory_iterator(binary_path), std::filesystem::directory_iterator{});
         TT_FATAL(num_built_kernels == 2, "Expected compute kernel test_compile_args to be compiled twice!");
 
-        if (tt::llrt::RunTimeOptions::get_instance().get_watcher_enabled()) {
+        if (tt::tt_metal::MetalContext::instance().rtoptions().get_watcher_enabled()) {
             // Test that the kernel_args.csv file was generated for both kernels
             log_info(LogTest, "Test kernel args logging");
             auto kernel_args_path = binary_path.parent_path() / "kernel_args.csv";

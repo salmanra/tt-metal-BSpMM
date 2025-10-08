@@ -7,10 +7,6 @@
 #include "compute_kernel_api/common_globals.h"
 #ifdef TRISC_MATH
 #include "llk_math_eltwise_unary_sfpu_recip.h"
-#define MAIN math_main()
-#define MATH(x) x
-#else
-#define MATH(x)
 #endif
 
 namespace ckernel {
@@ -18,8 +14,12 @@ namespace ckernel {
 /**
  * Please refer to documentation for any_init.
  */
-ALWI void recip_tile_init() { MATH((llk_math_eltwise_unary_sfpu_reciprocal_init<APPROX>())); }
+template <bool legacy_compat = true>
+ALWI void recip_tile_init() {
+    MATH((llk_math_eltwise_unary_sfpu_reciprocal_init<APPROX, legacy_compat>()));
+}
 
+// clang-format off
 /**
  * Performs element-wise computation of the reciprocal on each element of a tile
  * in DST register at index tile_index. The DST register buffer must be in
@@ -29,12 +29,15 @@ ALWI void recip_tile_init() { MATH((llk_math_eltwise_unary_sfpu_reciprocal_init<
  *
  * Return value: None
  *
- * | Argument       | Description                                                                | Type     | Valid
- * Range                                           | Required |
+ * | Argument       | Description                                                                | Type     | Valid Range                                           | Required |
  * |----------------|----------------------------------------------------------------------------|----------|-------------------------------------------------------|----------|
- * | idst           | The index of the tile in DST register buffer to perform the computation on | uint32_t | Must be
- * less than the size of the DST register buffer | True     |
+ * | idst           | The index of the tile in DST register buffer to perform the computation on | uint32_t | Must be less than the size of the DST register buffer | True     |
+ * | vector_mode | Specifies the vector mode for computation (e.g., Row, Column). (default: VectorMode::RC) | int      | Subject to specific hardware/kernel limits          | False    |
  */
-ALWI void recip_tile(uint32_t idst) { MATH((llk_math_eltwise_unary_sfpu_reciprocal<APPROX, DST_ACCUM_MODE>(idst))); }
+// clang-format on
+template <bool legacy_compat = true>
+ALWI void recip_tile(uint32_t idst, int vector_mode = (int)VectorMode::RC) {
+    MATH((llk_math_eltwise_unary_sfpu_reciprocal<APPROX, DST_ACCUM_MODE, legacy_compat>(idst, vector_mode)));
+}
 
 }  // namespace ckernel

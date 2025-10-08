@@ -6,12 +6,15 @@ from typing import Optional, Tuple
 from loguru import logger
 import enum
 
+import pytest
 import torch
 
 import ttnn
 
+from tests.sweep_framework.sweep_utils.utils import gen_pytest_parametrize_args
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
+from tests.sweep_framework.sweep_utils.roofline_utils import get_run_return
 
 TIMEOUT = 5
 
@@ -500,7 +503,8 @@ for p in parameters.values():
     p.update(general)
 
 
-def run(
+def run_matmul(
+    device,
     batch_sizes,
     input_shapes,
     batch_matrix_multiply,
@@ -513,8 +517,6 @@ def run(
     input_b_dtype,
     output_dtype,
     input_layout,
-    *,
-    device,
 ) -> list:
     (m_size, k_size, n_size) = input_shapes
     input_shape_a = (*batch_sizes, m_size, k_size)
@@ -545,7 +547,7 @@ def run(
     )
 
     start_time = start_measuring_time()
-    output_tensor = ttnn.matmul(
+    op_output_tensor = ttnn.matmul(
         input_tensor_a,
         input_tensor_b,
         memory_config=output_memory_config,
@@ -553,8 +555,78 @@ def run(
         program_config=program_config,
         compute_kernel_config=compute_kernel_config,
     )
-    output_tensor = ttnn.to_torch(output_tensor)
+    output_tensor = ttnn.to_torch(op_output_tensor)
     e2e_perf = stop_measuring_time(start_time)
 
     expected_pcc = 0.99
-    return [check_with_pcc(torch_output_tensor, output_tensor, expected_pcc), e2e_perf]
+    tensors = [input_tensor_a, input_tensor_b, op_output_tensor]
+    flop_counts = [m_size, n_size, 2, k_size] + list(batch_sizes)
+    return get_run_return(torch_output_tensor, output_tensor, expected_pcc, tensors, e2e_perf, flop_counts)
+
+
+@pytest.mark.parametrize(**gen_pytest_parametrize_args(parameters))
+def test_matmul(
+    device,
+    batch_sizes,
+    input_shapes,
+    batch_matrix_multiply,
+    program_config,
+    input_a_memory_config,
+    input_b_memory_config,
+    output_memory_config,
+    compute_kernel_config,
+    input_a_dtype,
+    input_b_dtype,
+    output_dtype,
+    input_layout,
+):
+    (result, msg), e2e_perf = run_matmul(
+        device,
+        batch_sizes,
+        input_shapes,
+        batch_matrix_multiply,
+        program_config,
+        input_a_memory_config,
+        input_b_memory_config,
+        output_memory_config,
+        compute_kernel_config,
+        input_a_dtype,
+        input_b_dtype,
+        output_dtype,
+        input_layout,
+    )
+    assert result, msg
+    logger.info(f"e2e_perf: {e2e_perf}")
+
+
+def run(
+    batch_sizes,
+    input_shapes,
+    batch_matrix_multiply,
+    program_config,
+    input_a_memory_config,
+    input_b_memory_config,
+    output_memory_config,
+    compute_kernel_config,
+    input_a_dtype,
+    input_b_dtype,
+    output_dtype,
+    input_layout,
+    *,
+    device,
+) -> list:
+    return run_matmul(
+        device,
+        batch_sizes,
+        input_shapes,
+        batch_matrix_multiply,
+        program_config,
+        input_a_memory_config,
+        input_b_memory_config,
+        output_memory_config,
+        compute_kernel_config,
+        input_a_dtype,
+        input_b_dtype,
+        output_dtype,
+        input_layout,
+    )

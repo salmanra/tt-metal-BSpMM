@@ -13,18 +13,14 @@ namespace operations::experimental::reshape {
 
 struct ViewOperation {
     static ttnn::Tensor invoke(const ttnn::Tensor& input_tensor, const ttnn::Shape& shape);
-    static ttnn::Tensor invoke(const ttnn::Tensor& input_tensor, const ttnn::SimpleShape& shape);
     static ttnn::Tensor invoke(
-        const ttnn::Tensor& input_tensor,
-        const ttnn::SimpleShape& logical_shape,
-        const ttnn::SimpleShape& padded_shape);
+        const ttnn::Tensor& input_tensor, const ttnn::Shape& logical_shape, const ttnn::Shape& padded_shape);
 };
 
 }  // namespace operations::experimental::reshape
 
 namespace experimental {
-constexpr auto view = ttnn::register_operation_with_auto_launch_op<
-    "ttnn::experimental::view",
-    ttnn::operations::experimental::reshape::ViewOperation>();
+constexpr auto view =
+    ttnn::register_operation<"ttnn::experimental::view", ttnn::operations::experimental::reshape::ViewOperation>();
 }  // namespace experimental
 }  // namespace ttnn

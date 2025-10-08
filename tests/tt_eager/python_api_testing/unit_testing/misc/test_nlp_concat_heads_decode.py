@@ -14,10 +14,9 @@ from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import (
     comp_pcc,
 )
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
-    skip_for_grayskull,
     get_devices_for_t3000,
     nearest_32,
 )
@@ -34,7 +33,7 @@ def num_to_corerange(x):
     )
 
 
-def run_test_concat_head(devices, n_local_heads, padded_local_heads, head_dim, batch, sub_core_grids=None):
+def run_test_concat_head(device, n_local_heads, padded_local_heads, head_dim, batch, sub_core_grids=None):
     ## Split Heads
     padded_batch = nearest_32(batch)
     seq_len = 1
@@ -64,7 +63,7 @@ def run_test_concat_head(devices, n_local_heads, padded_local_heads, head_dim, b
 
     # Prepare tt input
     concat_head_input_tt = torch2tt_tensor(concat_head_input, tt_device=None).to(
-        device=devices[0], mem_config=SCORES_BATCHED_MM_OUTPUT_MEMCFG
+        device=device, mem_config=SCORES_BATCHED_MM_OUTPUT_MEMCFG
     )
 
     concat_head_output = ttnn.experimental.nlp_concat_heads_decode(
@@ -86,7 +85,6 @@ def run_test_concat_head(devices, n_local_heads, padded_local_heads, head_dim, b
     assert out_pass_q
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "n_local_heads, padded_local_heads, head_dim, batch_size",
     ((8, 32, 128, 32), (17, 32, 96, 32), (32, 32, 64, 32), (8, 32, 128, 16)),
@@ -97,17 +95,16 @@ def test_concat_head(
     head_dim,
     batch_size,
     all_devices,
-    use_program_cache,
 ):
     devices = get_devices_for_t3000(all_devices, num_devices=1)
+    device = devices[0]
     torch.manual_seed(0)
 
     for i in range(3):
         # multiple loops to test program caching
-        run_test_concat_head(devices, n_local_heads, padded_local_heads, head_dim, batch_size)
+        run_test_concat_head(device, n_local_heads, padded_local_heads, head_dim, batch_size)
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "n_local_heads, padded_local_heads, head_dim, batch_size, sub_core_grids",
     (
@@ -132,11 +129,11 @@ def test_concat_head_subcoregrids(
     batch_size,
     sub_core_grids,
     all_devices,
-    use_program_cache,
 ):
     devices = get_devices_for_t3000(all_devices, num_devices=1)
+    device = devices[0]
     torch.manual_seed(0)
 
     for i in range(3):
         # multiple loops to test program caching
-        run_test_concat_head(devices, n_local_heads, padded_local_heads, head_dim, batch_size, sub_core_grids)
+        run_test_concat_head(device, n_local_heads, padded_local_heads, head_dim, batch_size, sub_core_grids)

@@ -2,29 +2,49 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <boost/move/utility_core.hpp>
+#include <fmt/base.h>
+#include <enchantum/enchantum.hpp>
+#include <stdint.h>
+#include <tt-logger/tt-logger.hpp>
+#include <initializer_list>
+#include <memory>
+#include <optional>
 #include <ostream>
-#include "gtest/gtest.h"
+#include <string_view>
+#include <tuple>
+#include <vector>
 
-#include <tt-metalium/bfloat16.hpp>
-#include "ttnn/device.hpp"
-#include "ttnn/operations/core/core.hpp"
-#include "ttnn/async_runtime.hpp"
-#include "ttnn/operations/functions.hpp"
-#include <tt-metalium/logger.hpp>
-
+#include <tt-metalium/buffer.hpp>
+#include <tt-metalium/buffer_types.hpp>
 #include "common_tensor_test_utils.hpp"
-
+#include "gtest/gtest.h"
+#include <tt-metalium/shape.hpp>
+#include "ttnn/async_runtime.hpp"
+#include "ttnn/common/queue_id.hpp"
+#include "ttnn/tensor/layout/page_config.hpp"
+#include "ttnn/tensor/layout/tensor_layout.hpp"
+#include "ttnn/tensor/shape/shape.hpp"
+#include "ttnn/tensor/storage.hpp"
+#include "ttnn/tensor/tensor.hpp"
+#include "ttnn/tensor/tensor_impl.hpp"
+#include "ttnn/tensor/tensor_spec.hpp"
+#include "ttnn/tensor/types.hpp"
+#include "ttnn/types.hpp"
 #include "ttnn_test_fixtures.hpp"
+
+namespace tt {
+namespace tt_metal {
+class IDevice;
+}  // namespace tt_metal
+}  // namespace tt
 
 namespace {
 
-void run_create_tensor_test(tt::tt_metal::IDevice* device, const ttnn::SimpleShape& input_shape) {
-    MemoryConfig mem_cfg = MemoryConfig{
-        .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED,
-        .buffer_type = BufferType::DRAM,
-        .shard_spec = std::nullopt};
+void run_create_tensor_test(tt::tt_metal::distributed::MeshDevice* device, const ttnn::Shape& input_shape) {
+    MemoryConfig mem_cfg = MemoryConfig{tt::tt_metal::TensorMemoryLayout::INTERLEAVED, tt::tt_metal::BufferType::DRAM};
 
-    const uint32_t io_cq = 0;
+    const ttnn::QueueId io_cq = ttnn::QueueId(0);
     constexpr DataType dtype = DataType::BFLOAT16;
     constexpr uint32_t datum_size_bytes = 2;
 
@@ -39,11 +59,11 @@ void run_create_tensor_test(tt::tt_metal::IDevice* device, const ttnn::SimpleSha
 
     TensorSpec tensor_spec(input_shape, TensorLayout(dtype, PageConfig(Layout::TILE), mem_cfg));
     ASSERT_EQ(input_buf_size_datums * datum_size_bytes, tensor_spec.compute_packed_buffer_size_bytes());
-    auto input_buffer = tt::tt_metal::tensor_impl::allocate_buffer_on_device(device, tensor_spec);
+    auto input_buffer = tt::tt_metal::tensor_impl::allocate_device_buffer(device, tensor_spec);
 
-    auto input_storage = tt::tt_metal::DeviceStorage{input_buffer};
+    auto input_storage = tt::tt_metal::DeviceStorage{input_buffer, {tt::tt_metal::distributed::MeshCoordinate{0, 0}}};
 
-    Tensor input_tensor = Tensor(input_storage, input_shape, dtype, Layout::TILE);
+    Tensor input_tensor = Tensor(input_storage, tensor_spec, TensorTopology{});
 
     ttnn::write_buffer(io_cq, input_tensor, {host_data});
 
@@ -57,7 +77,7 @@ void run_create_tensor_test(tt::tt_metal::IDevice* device, const ttnn::SimpleSha
 }
 
 struct CreateTensorParams {
-    ttnn::SimpleShape shape;
+    ttnn::Shape shape;
 };
 
 }  // namespace
@@ -66,7 +86,7 @@ class CreateTensorTest : public ttnn::TTNNFixtureWithDevice,
                          public ::testing::WithParamInterface<CreateTensorParams> {};
 
 TEST_P(CreateTensorTest, Tile) {
-    CreateTensorParams params = GetParam();
+    const CreateTensorParams& params = GetParam();
     run_create_tensor_test(device_, params.shape);
 }
 
@@ -74,19 +94,19 @@ INSTANTIATE_TEST_SUITE_P(
     CreateTensorTestWithShape,
     CreateTensorTest,
     ::testing::Values(
-        CreateTensorParams{.shape = ttnn::SimpleShape({1, 1, 32, 32})},
-        CreateTensorParams{.shape = ttnn::SimpleShape({2, 1, 32, 32})},
-        CreateTensorParams{.shape = ttnn::SimpleShape({0, 0, 0, 0})},
-        CreateTensorParams{.shape = ttnn::SimpleShape({0, 1, 32, 32})},
-        CreateTensorParams{.shape = ttnn::SimpleShape({0})}));
+        CreateTensorParams{.shape = ttnn::Shape({1, 1, 32, 32})},
+        CreateTensorParams{.shape = ttnn::Shape({2, 1, 32, 32})},
+        CreateTensorParams{.shape = ttnn::Shape({0, 0, 0, 0})},
+        CreateTensorParams{.shape = ttnn::Shape({0, 1, 32, 32})},
+        CreateTensorParams{.shape = ttnn::Shape({0})}));
 
 std::ostream& operator<<(std::ostream& os, const tt::tt_metal::DataType& value) {
-    os << magic_enum::enum_name(value);
+    os << enchantum::to_string(value);
     return os;
 }
 
 using CombinationInputParams =
-    std::tuple<ttnn::SimpleShape, tt::tt_metal::DataType, tt::tt_metal::Layout, tt::tt_metal::MemoryConfig>;
+    std::tuple<ttnn::Shape, tt::tt_metal::DataType, tt::tt_metal::Layout, tt::tt_metal::MemoryConfig>;
 class EmptyTensorTest : public ttnn::TTNNFixtureWithDevice,
                         public ::testing::WithParamInterface<CombinationInputParams> {};
 
@@ -96,25 +116,23 @@ TEST_P(EmptyTensorTest, Combinations) {
     auto dtype = std::get<1>(params);
     auto layout = std::get<2>(params);
     auto memory_config = std::get<3>(params);
-    tt::log_info(
-        "Running test with shape={}, dtype={}, layout={}, memory_config={}", shape, dtype, layout, memory_config);
+    log_info(
+        tt::LogTest,
+        "Running test with shape={}, dtype={}, layout={}, memory_config={}",
+        shape,
+        dtype,
+        layout,
+        memory_config);
 
     if (layout == tt::tt_metal::Layout::ROW_MAJOR && dtype == tt::tt_metal::DataType::BFLOAT8_B) {
         GTEST_SKIP() << "Skipping test with ROW_MAJOR layout and BFLOAT8_B dtype!";
     }
 
-    auto tensor_layout =
-        tt::tt_metal::TensorLayout::fromLegacyPaddedShape(dtype, PageConfig(layout), memory_config, shape);
-
-    // Ignoring too large single bank allocations
-    if (memory_config.memory_layout == TensorMemoryLayout::SINGLE_BANK) {
-        if (tensor_layout.compute_page_size_bytes(shape) >= 500 * 1024) {
-            GTEST_SKIP() << "Skipping test with page size exceeding single bank size of 500 kB!";
-        }
-    }
+    auto tensor_layout = tt::tt_metal::TensorLayout::fromPaddedShape(
+        dtype, PageConfig(layout), memory_config, /* logical */ shape, /* padded */ shape);
 
     auto tensor = tt::tt_metal::create_device_tensor(shape, dtype, layout, device_, memory_config);
-    EXPECT_EQ(tensor.get_logical_shape(), shape);
+    EXPECT_EQ(tensor.logical_shape(), shape);
 
     test_utils::test_tensor_on_device(shape, tensor_layout, device_);
 }
@@ -124,20 +142,20 @@ INSTANTIATE_TEST_SUITE_P(
     EmptyTensorTest,
     ::testing::Combine(
         ::testing::Values(
-            ttnn::SimpleShape({}),
-            ttnn::SimpleShape({0}),
-            ttnn::SimpleShape({1}),
-            ttnn::SimpleShape({1, 2}),
-            ttnn::SimpleShape({1, 2, 3}),
-            ttnn::SimpleShape({1, 2, 3, 4}),
-            // ttnn::SimpleShape({0, 0, 0, 0}), fails with width sharded case
-            ttnn::SimpleShape({1, 1, 1, 1}),
-            // ttnn::SimpleShape({0, 1, 32, 32}), fails with width sharded case
-            ttnn::SimpleShape({1, 1, 32, 32}),
-            ttnn::SimpleShape({2, 1, 32, 32}),
-            ttnn::SimpleShape({64, 1, 256, 1}),
-            ttnn::SimpleShape({1, 1, 21120, 16}),
-            ttnn::SimpleShape({1, 2, 3, 4, 5})),
+            ttnn::Shape({}),
+            ttnn::Shape({0}),
+            ttnn::Shape({1}),
+            ttnn::Shape({1, 2}),
+            ttnn::Shape({1, 2, 3}),
+            ttnn::Shape({1, 2, 3, 4}),
+            // ttnn::Shape({0, 0, 0, 0}), fails with width sharded case
+            ttnn::Shape({1, 1, 1, 1}),
+            // ttnn::Shape({0, 1, 32, 32}), fails with width sharded case
+            ttnn::Shape({1, 1, 32, 32}),
+            ttnn::Shape({2, 1, 32, 32}),
+            ttnn::Shape({64, 1, 256, 1}),
+            ttnn::Shape({1, 1, 21120, 16}),
+            ttnn::Shape({1, 2, 3, 4, 5})),
 
         ::testing::Values(
             tt::tt_metal::DataType::BFLOAT16,
@@ -148,19 +166,9 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::Values(tt::tt_metal::Layout::TILE, tt::tt_metal::Layout::ROW_MAJOR),
 
         ::testing::Values(
-            tt::tt_metal::MemoryConfig{
-                .memory_layout = tt::tt_metal::TensorMemoryLayout::SINGLE_BANK, .buffer_type = ttnn::BufferType::L1},
+            tt::tt_metal::MemoryConfig{tt::tt_metal::TensorMemoryLayout::INTERLEAVED, tt::tt_metal::BufferType::L1},
 
-            tt::tt_metal::MemoryConfig{
-                .memory_layout = tt::tt_metal::TensorMemoryLayout::SINGLE_BANK, .buffer_type = ttnn::BufferType::DRAM},
-
-            tt::tt_metal::MemoryConfig{
-                .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED,
-                .buffer_type = tt::tt_metal::BufferType::L1},
-
-            tt::tt_metal::MemoryConfig{
-                .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED,
-                .buffer_type = tt::tt_metal::BufferType::DRAM}
+            tt::tt_metal::MemoryConfig{tt::tt_metal::TensorMemoryLayout::INTERLEAVED, tt::tt_metal::BufferType::DRAM}
 
             // tt::tt_metal::MemoryConfig{
             //     .memory_layout = tt::tt_metal::TensorMemoryLayout::HEIGHT_SHARDED,

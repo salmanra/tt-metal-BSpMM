@@ -4,19 +4,19 @@
 
 #pragma once
 
-#include <tt-metalium/hal_exp.hpp>
-#include "cpp/ttnn/tensor/tensor_impl.hpp"
+#include <tt-metalium/hal.hpp>
+#include "ttnn/tensor/tensor_impl.hpp"
 #include "ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
-#include "cpp/ttnn/operations/ccl/ccl_host_types.hpp"
+#include "ttnn/operations/ccl/ccl_host_types.hpp"
 #include "ttnn/distributed/types.hpp"
-#include <limits>
+#include <string>
 
 namespace ttnn {
 namespace ccl {
 
 struct EriscDatamoverConfig {
-    std::size_t total_l1_buffer_space = tt::tt_metal::experimental::hal::get_erisc_l1_unreserved_size();
-    std::size_t usable_l1_base_address = tt::tt_metal::experimental::hal::get_erisc_l1_unreserved_base();
+    std::size_t total_l1_buffer_space = tt::tt_metal::hal::get_erisc_l1_unreserved_size();
+    std::size_t usable_l1_base_address = tt::tt_metal::hal::get_erisc_l1_unreserved_base();
 
     static constexpr std::size_t semaphore_size = 32;
     static constexpr std::size_t handshake_location_size = 16;    // ethernet word size
@@ -49,14 +49,14 @@ public:
     CCLOpConfig(std::vector<Tensor>& input_tensors, const std::vector<Tensor>& output_tensors, Topology topology);
 
     uint32_t get_page_size() const;
-    Tile get_tile() const;
+    tt::tt_metal::Tile get_tile() const;
     Topology get_topology() const;
     bool is_input_sharded() const;
     bool is_output_sharded() const;
     bool get_shard_grid_size() const;
     Tensor const& get_input_tensor(std::size_t i) const;
     Tensor const& get_output_tensor(std::size_t i) const;
-    std::map<string, string> emit_worker_defines() const;
+    std::map<std::string, std::string> emit_worker_defines() const;
 
 private:
     uint32_t page_size;
@@ -66,7 +66,7 @@ private:
     bool output_sharded;
     bool is_row_major;
     tt::DataFormat df;
-    Tile tile;
+    tt::tt_metal::Tile tile;
 
     std::vector<Tensor> const* input_tensors;
     std::vector<Tensor> const* output_tensors;
@@ -95,7 +95,7 @@ private:
         uint32_t num_eth_messages_to_forward;
         uint32_t channel;
         uint32_t largest_message_size_bytes;
-        uint32_t num_buffers;
+        uint32_t num_buffers{};
         bool is_sender;
     };
 
@@ -250,7 +250,8 @@ public:
     }
 
     [[nodiscard]]
-    std::vector<uint32_t> get_compile_time_args() const {
+    std::vector<uint32_t> get_compile_time_args(uint32_t risc_id) const {
+        // TODO: use risc_id accordingly
         return std::vector<uint32_t>{
             static_cast<uint32_t>(this->enable_sender ? 1 : 0),
             static_cast<uint32_t>(this->enable_receiver ? 1 : 0),
@@ -267,7 +268,7 @@ public:
     [[nodiscard]]
     std::vector<uint32_t> get_runtime_args() const {
         std::vector<uint32_t> args;
-        uint32_t size = 3 + active_channels.size() * 6;
+        uint32_t size = 3 + (active_channels.size() * 6);
         for (auto const& channel : active_channels) {
             size += channel.worker_coords.size();
         }
@@ -276,7 +277,7 @@ public:
         // Handshake address
         args.push_back(handshake_addr);
 
-        bool senders_below_receivers = active_channels.size() == 0 || this->active_channels.front().is_sender;
+        bool senders_below_receivers = active_channels.empty() || this->active_channels.front().is_sender;
 
         // Receiver channel args
         uint32_t receiver_channels_offset = senders_below_receivers ? this->num_senders : 0;
@@ -304,7 +305,7 @@ public:
     void dump_to_log() const {
         auto const rt_args = this->get_runtime_args();
         log_trace(tt::LogOp, "EDM RT Args:");
-        for (auto const& arg : rt_args) {
+        for ([[maybe_unused]] const auto& arg : rt_args) {
             log_trace(tt::LogOp, "\t{}", arg);
         }
     };

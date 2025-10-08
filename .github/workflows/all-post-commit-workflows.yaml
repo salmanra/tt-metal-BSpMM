@@ -7,6 +7,10 @@ on:
         required: false
         default: Release
         type: string
+      version:
+        required: false
+        default: "22.04"
+        type: string
   workflow_dispatch:
     inputs:
       build-type:
@@ -17,7 +21,19 @@ on:
           - Release
           - Debug
           - RelWithDebInfo
-          - CI
+          - ASan
+          - TSan
+      version:
+        required: false
+        default: "22.04"
+        type: choice
+        options:
+          - "22.04"
+          - "24.04"
+      with-retries:
+        default: false
+        type: boolean
+        description: "Re-run failed jobs (max 3)"
   push:
     branches: ["main"]
 
@@ -28,98 +44,74 @@ permissions:
   pages: write
   id-token: write
   packages: write
+  checks: write
 
+run-name: All post-commit tests${{ (github.event_name == 'workflow_dispatch' && inputs.with-retries) && ' (with retries)' || ''}}
 jobs:
-  static-checks:
-    uses: ./.github/workflows/all-static-checks.yaml
-    secrets: inherit
-  build-wheels:
-    needs: build-artifact
-    strategy:
-      matrix:
-        # Since pre-compiled builds only run on 20.04, we can only test on 20.04 for now
-        # The full 22.04 flow can be tested without precompiled
-        os: [ubuntu-20.04]
-    uses: ./.github/workflows/_build-wheels-impl.yaml
-    with:
-      os: ${{ matrix.os }}
-      from-precompiled: true
-    secrets: inherit
-  test-wheels:
-    needs: build-wheels
-    uses: ./.github/workflows/_test-wheels-impl.yaml
-    with:
-      from-precompiled: true
-    secrets: inherit
   build-artifact:
     uses: ./.github/workflows/build-artifact.yaml
+    permissions:
+      packages: write
     secrets: inherit
     with:
       build-type: ${{ inputs.build-type || 'Release' }}
+      build-wheel: true
+      version: ${{ inputs.version || '22.04' }}
+      skip-tt-train: false
   build-artifact-profiler:
     uses: ./.github/workflows/build-artifact.yaml
+    permissions:
+      packages: write
+    secrets: inherit
     with:
       build-type: ${{ inputs.build-type || 'Release' }}
+      build-wheel: true
       tracy: true
-    secrets: inherit
-  # Slow Dispatch Unit Tests
-  sd-unit-tests:
+      version: ${{ inputs.version || '22.04' }}
+
+  # Fabric Unit Tests
+  fabric-unit-tests:
     needs: build-artifact
     secrets: inherit
     strategy:
       fail-fast: false
       matrix:
         test-group: [
-          { arch: grayskull, runner-label: E150 },
-          { arch: wormhole_b0, runner-label: N150 },
           { arch: wormhole_b0, runner-label: N300 },
         ]
-    uses: ./.github/workflows/build-and-unit-tests.yaml
+    uses: ./.github/workflows/fabric-build-and-unit-tests.yaml
     with:
       arch: ${{ matrix.test-group.arch }}
       runner-label: ${{ matrix.test-group.runner-label }}
-  # Fast Dispatch Unit Tests
-  fast-dispatch-unit-tests:
-    needs: build-wheels
-    secrets: inherit
-    strategy:
-      fail-fast: false
-      matrix:
-        test-group: [
-          { arch: grayskull, runner-label: E150 },
-          { arch: wormhole_b0, runner-label: N150 },
-          { arch: wormhole_b0, runner-label: N300 },
-        ]
-    uses: ./.github/workflows/fast-dispatch-build-and-unit-tests.yaml
-    with:
-      os: ubuntu-20.04
-      arch: ${{ matrix.test-group.arch }}
-      runner-label: ${{ matrix.test-group.runner-label }}
+      docker-image: ${{ needs.build-artifact.outputs.dev-docker-image }}
+      build-artifact-name: ${{ needs.build-artifact.outputs.build-artifact-name }}
+      wheel-artifact-name: ${{ needs.build-artifact.outputs.wheel-artifact-name }}
   # TTNN FD Unit tests
   ttnn-unit-tests:
-    needs: build-wheels
+    needs: build-artifact
     secrets: inherit
     strategy:
       fail-fast: false
       matrix:
         test-group: [
-          { arch: grayskull, runner-label: E150 },
-          { arch: wormhole_b0, runner-label: N150 },
-          { arch: wormhole_b0, runner-label: N300 },
+          { arch: wormhole_b0, runner-label: N300 }
         ]
     uses: ./.github/workflows/ttnn-post-commit.yaml
     with:
       arch: ${{ matrix.test-group.arch }}
       runner-label: ${{ matrix.test-group.runner-label }}
+      docker-image: ${{ needs.build-artifact.outputs.dev-docker-image }}
+      build-artifact-name: ${{ needs.build-artifact.outputs.build-artifact-name }}
+      wheel-artifact-name: ${{ needs.build-artifact.outputs.wheel-artifact-name }}
+
   # FD Model Tests
   models-unit-tests:
-    needs: build-wheels
+    needs: build-artifact
     secrets: inherit
     strategy:
       fail-fast: false
       matrix:
         test-group: [
-          { arch: grayskull, runner-label: E150 },
           { arch: wormhole_b0, runner-label: N150 },
           { arch: wormhole_b0, runner-label: N300 },
         ]
@@ -127,6 +119,8 @@ jobs:
     with:
       arch: ${{ matrix.test-group.arch }}
       runner-label: ${{ matrix.test-group.runner-label }}
+      docker-image: ${{ needs.build-artifact.outputs.dev-docker-image }}
+      wheel-artifact-name: ${{ needs.build-artifact.outputs.wheel-artifact-name }}
   # FD C++ Unit Tests
   cpp-unit-tests:
     needs: build-artifact
@@ -135,7 +129,6 @@ jobs:
       fail-fast: false
       matrix:
         test-group: [
-          { arch: grayskull, runner-label: E150 },
           { arch: wormhole_b0, runner-label: N150 },
           { arch: wormhole_b0, runner-label: N300 },
         ]
@@ -143,11 +136,10 @@ jobs:
     with:
       arch: ${{ matrix.test-group.arch }}
       runner-label: ${{ matrix.test-group.runner-label }}
-  code-analysis:
-    uses: ./.github/workflows/code-analysis.yaml
-    secrets: inherit
-    with:
-      os: ubuntu-22.04-amd64
+      docker-image: ${{ needs.build-artifact.outputs.dev-docker-image }}
+      build-artifact-name: ${{ needs.build-artifact.outputs.build-artifact-name }}
+      wheel-artifact-name: ${{ needs.build-artifact.outputs.wheel-artifact-name }}
+      gtest_filter: "*-*NIGHTLY_*"
   tt-train-cpp-unit-tests:
     needs: build-artifact
     secrets: inherit
@@ -156,26 +148,83 @@ jobs:
       matrix:
         test-group: [
           { arch: wormhole_b0, runner-label: N150 },
-          # Disabled due to https://github.com/tenstorrent/tt-metal/issues/16012
-          # { arch: wormhole_b0, runner-label: N300 },
+          { arch: wormhole_b0, runner-label: N300 },
         ]
     uses: ./.github/workflows/tt-train-post-commit.yaml
     with:
       arch: ${{ matrix.test-group.arch }}
       runner-label: ${{ matrix.test-group.runner-label }}
-  profiler-regression:
-    needs: build-artifact-profiler
+      docker-image: ${{ needs.build-artifact.outputs.dev-docker-image }}
+      build-artifact-name: ${{ needs.build-artifact.outputs.build-artifact-name }}
+      gtest_filter: "*-*NIGHTLY_*"
+  # TT-CNN Unit tests
+  tt-cnn-unit-tests:
+    needs: build-artifact
+    secrets: inherit
+    strategy:
+      fail-fast: false
+      matrix:
+        test-group: [
+          { arch: wormhole_b0, runner-label: N150 },
+          { arch: wormhole_b0, runner-label: N300 },
+        ]
+    uses: ./.github/workflows/tt-cnn-post-commit.yaml
+    with:
+      arch: ${{ matrix.test-group.arch }}
+      runner-label: ${{ matrix.test-group.runner-label }}
+      docker-image: ${{ needs.build-artifact.outputs.dev-docker-image }}
+      build-artifact-name: ${{ needs.build-artifact.outputs.build-artifact-name }}
+      wheel-artifact-name: ${{ needs.build-artifact.outputs.wheel-artifact-name }}
+
+  run-profiler-regression:
+    needs: [build-artifact-profiler]
+    strategy:
+      fail-fast: false
+      matrix:
+        test-group: [
+          { arch: wormhole_b0, runner-label: N150 },
+          { arch: wormhole_b0, runner-label: N300 },
+        ]
     uses: ./.github/workflows/run-profiler-regression.yaml
     secrets: inherit
+    with:
+      arch: ${{ matrix.test-group.arch}}
+      runner-label: ${{ matrix.test-group.runner-label}}
+      docker-image: ${{ needs.build-artifact-profiler.outputs.dev-docker-image }}
+      build-artifact-name: ${{ needs.build-artifact-profiler.outputs.build-artifact-name }}
+      wheel-artifact-name: ${{ needs.build-artifact-profiler.outputs.wheel-artifact-name }}
+  t3000-apc-fast-tests:
+    if: ${{ github.event.pull_request.head.repo.fork == false }}
+    needs: build-artifact
+    secrets: inherit
+    uses: ./.github/workflows/t3000-fast-tests-impl.yaml
+    with:
+      docker-image: ${{ needs.build-artifact.outputs.dev-docker-image }}
+      build-artifact-name: ${{ needs.build-artifact.outputs.build-artifact-name }}
+      wheel-artifact-name: ${{ needs.build-artifact.outputs.wheel-artifact-name }}
+  galaxy-apc-fast-tests:
+    if: ${{ github.event.pull_request.head.repo.fork == false }}
+    needs: build-artifact
+    secrets: inherit
+    strategy:
+      fail-fast: false
+      matrix:
+        test-group: [
+          { arch: wormhole_b0, runner-label: in-service, topology: topology-6u },
+        ]
+    uses: ./.github/workflows/galaxy-apc-fast-tests-impl.yaml
+    with:
+      docker-image: ${{ needs.build-artifact.outputs.dev-docker-image }}
+      wheel-artifact-name: ${{ needs.build-artifact.outputs.wheel-artifact-name }}
+      build-artifact-name: ${{ needs.build-artifact.outputs.build-artifact-name }}
+      runner-label: ${{ matrix.test-group.runner-label }}
+      topology: ${{ matrix.test-group.topology }}
   build-docs:
     needs: build-artifact
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     uses: ./.github/workflows/docs-latest-public.yaml
     secrets: inherit
-  build:
-    needs: build-artifact
-    uses: ./.github/workflows/build.yaml
-    secrets: inherit
-  # We used to use this for post-commit, but we didn't have enough runners
-  # to support the number of developers running this workflow
-  # build-and-test-measure-perf:
-  # build-and-test-measure-perf-device:
+    with:
+      docker-image: ${{ needs.build-artifact.outputs.dev-docker-image }}
+      build-artifact-name: ${{ needs.build-artifact.outputs.build-artifact-name }}
+      wheel-artifact-name: ${{ needs.build-artifact.outputs.wheel-artifact-name }}

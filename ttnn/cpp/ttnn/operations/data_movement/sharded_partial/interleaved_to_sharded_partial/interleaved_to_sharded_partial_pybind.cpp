@@ -5,7 +5,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 #include "interleaved_to_sharded_partial.hpp"
 #include "ttnn/types.hpp"
 #include <tt-metalium/core_coord.hpp>
@@ -30,10 +30,8 @@ void bind_interleaved_to_sharded_partial(
                int64_t& slice_index,
                tt::tt_metal::TensorMemoryLayout shard_scheme,
                tt::tt_metal::ShardOrientation shard_orientation,
-               const std::optional<ttnn::DataType>& output_dtype,
-               uint8_t queue_id) -> ttnn::Tensor {
+               const std::optional<ttnn::DataType>& output_dtype) -> ttnn::Tensor {
                 return self(
-                    queue_id,
                     input_tensor,
                     grid,
                     shard_shape,
@@ -52,8 +50,6 @@ void bind_interleaved_to_sharded_partial(
             py::arg("shard_orientation"),
             py::kw_only(),
             py::arg("output_dtype") = std::nullopt,
-            py::arg("queue_id") = 0,
-
         });
 }
 
@@ -78,7 +74,6 @@ void py_bind_interleaved_to_sharded_partial(pybind11::module& module) {
 
         Keyword Args:
             * :attr:`output_dtype` (Optional[ttnn.DataType]): Output data type, defaults to same as input.
-            * :attr:`queue_id`: command queue id
 
         Example:
 

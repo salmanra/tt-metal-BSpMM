@@ -2,22 +2,47 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <boost/move/utility_core.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
+#include <stddef.h>
+#include <stdint.h>
+#include <exception>
+#include <iostream>
+#include <map>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <tuple>
+#include <vector>
+
+#include <tt-metalium/graph_tracking.hpp>
 #include "gtest/gtest.h"
-#include "ttnn_test_fixtures.hpp"
-#include "ttnn/device.hpp"
-#include "ttnn/tensor/tensor.hpp"
-#include "ttnn/graph/graph_processor.hpp"
+#include <tt-metalium/shape.hpp>
+#include "ttnn/decorators.hpp"
 #include "ttnn/graph/graph_consts.hpp"
+#include "ttnn/graph/graph_processor.hpp"
 #include "ttnn/graph/graph_trace_utils.hpp"
 #include "ttnn/operations/normalization/softmax/softmax.hpp"
+#include "ttnn/tensor/layout/page_config.hpp"
+#include "ttnn/tensor/layout/tensor_layout.hpp"
+#include "ttnn/tensor/shape/shape.hpp"
+#include "ttnn/tensor/tensor.hpp"
+#include "ttnn/tensor/types.hpp"
+#include "ttnn/types.hpp"
+#include "ttnn_test_fixtures.hpp"
 
-#include <string>
+namespace tt {
+namespace tt_metal {
+class IDevice;
+}  // namespace tt_metal
+}  // namespace tt
 
 namespace ttnn::graph::test {
 
 struct BufferTestParam {
-    ttnn::SimpleShape shape_a;
-    ttnn::SimpleShape shape_b;
+    ttnn::Shape shape_a;
+    ttnn::Shape shape_b;
 };
 
 class BufferTestFixture
@@ -29,7 +54,7 @@ TEST_P(BufferTestFixture, BufferTest) {
     auto params = std::get<0>(param_combination);
     auto run_mode = std::get<1>(param_combination);
 
-    tt::tt_metal::IDevice* device = &(this->getDevice());
+    tt::tt_metal::IDevice* device = device_;
     {
         ttnn::graph::GraphProcessor::begin_graph_capture(run_mode);
         {
@@ -104,8 +129,8 @@ INSTANTIATE_TEST_SUITE_P(
     BufferTestFixture,
     ::testing::Combine(
         ::testing::Values(BufferTestParam{
-            .shape_a = ttnn::SimpleShape(tt::tt_metal::Array4D{1, 1, 32, 32}),
-            .shape_b = ttnn::SimpleShape(tt::tt_metal::Array4D{32, 1, 32, 32})}),
+            .shape_a = ttnn::Shape(tt::tt_metal::Array4D{1, 1, 32, 32}),
+            .shape_b = ttnn::Shape(tt::tt_metal::Array4D{32, 1, 32, 32})}),
         ::testing::Values(
             tt::tt_metal::IGraphProcessor::RunMode::NO_DISPATCH, tt::tt_metal::IGraphProcessor::RunMode::NORMAL)),
     [](const testing::TestParamInfo<std::tuple<BufferTestParam, tt::tt_metal::IGraphProcessor::RunMode>>& info) {
@@ -126,11 +151,11 @@ INSTANTIATE_TEST_SUITE_P(
 
 class TestScopedGraphCapture : public ttnn::TTNNFixtureWithDevice {};
 TEST_F(TestScopedGraphCapture, ScopedGraphCapture) {
-    tt::tt_metal::IDevice* device = &(this->getDevice());
+    tt::tt_metal::IDevice* device = device_;
 
     auto operation = [&device](tt::tt_metal::DataType datatype) {
         const auto input_a = ttnn::TensorSpec(
-            ttnn::SimpleShape(tt::tt_metal::Array4D{1, 4, 512, 512}),
+            ttnn::Shape(tt::tt_metal::Array4D{1, 4, 512, 512}),
             tt::tt_metal::TensorLayout(
                 datatype, tt::tt_metal::PageConfig(tt::tt_metal::Layout::TILE), ttnn::L1_MEMORY_CONFIG));
         const auto input_tensor_a = tt::tt_metal::create_device_tensor(input_a, device);
@@ -180,8 +205,8 @@ TEST_F(TestScopedGraphCapture, ScopedGraphCapture) {
             std::vector<std::string>(
                 {"tt::tt_metal::create_device_tensor",
                  "ttnn::softmax",
-                 "ttnn::prim::old_infra_device_operation",
-                 "Softmax",
+                 "ttnn::prim::softmax",
+                 "SoftmaxDeviceOperation",
                  "tt::tt_metal::create_device_tensor"}));
     }
 

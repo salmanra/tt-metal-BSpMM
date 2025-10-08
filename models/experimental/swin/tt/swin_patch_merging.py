@@ -2,12 +2,11 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Optional, Tuple
-import torch
+from typing import Tuple
 import torch.nn as nn
 
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
@@ -52,7 +51,7 @@ class TtSwinPatchMerging(nn.Module):
 
     def forward(self, input_feature: ttnn.Tensor, input_dimensions: Tuple[int, int]) -> ttnn.Tensor:
         height, width = input_dimensions
-        _, batch_size, dim, num_channels = input_feature.shape.with_tile_padding()
+        _, batch_size, dim, num_channels = input_feature.padded_shape
 
         input_feature = fallback_ops.reshape(input_feature, batch_size, height, width, num_channels)
 

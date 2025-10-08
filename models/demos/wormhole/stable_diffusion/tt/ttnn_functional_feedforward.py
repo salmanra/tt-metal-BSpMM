@@ -1,18 +1,17 @@
 # SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
 
 # SPDX-License-Identifier: Apache-2.0
+import math
+
+import torch
 
 import ttnn
 from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_geglu import geglu
-from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import (
-    determine_largest_subblock_size,
-)
-import torch
-import math
+from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import determine_largest_subblock_size
 
 
 def compare(tensor, name, reshape=False):
-    from models.utility_functions import comp_pcc
+    from models.common.utility_functions import comp_pcc
 
     tensor = ttnn.from_device(tensor)
     tensor = ttnn.to_torch(tensor)

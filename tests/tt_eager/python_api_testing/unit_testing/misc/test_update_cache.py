@@ -6,9 +6,9 @@ import torch
 import pytest
 import ttnn
 from loguru import logger
-from models.utility_functions import nearest_32, pad_by_zero
+from models.common.utility_functions import nearest_32, pad_by_zero
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_pcc, comp_equal
-from models.utility_functions import is_grayskull, skip_for_blackhole
+from models.common.utility_functions import is_grayskull, skip_for_blackhole
 
 
 @skip_for_blackhole("Mismatching on BH, see #12349")
@@ -20,9 +20,7 @@ from models.utility_functions import is_grayskull, skip_for_blackhole
 @pytest.mark.parametrize("input_dtype", [ttnn.bfloat16, ttnn.bfloat8_b])
 class TestUpdateCache:
     @pytest.mark.parametrize("seq_len", [32, 512, 2048])
-    def test_fill_cache(
-        self, seq_len, head_dim, max_seq_len, num_users, num_heads, in_sharded, input_dtype, device, use_program_cache
-    ):
+    def test_fill_cache(self, seq_len, head_dim, max_seq_len, num_users, num_heads, in_sharded, input_dtype, device):
         if not in_sharded and num_heads > 1 and seq_len == 2048:
             pytest.skip(
                 "For interleaved, each core can only have 1 tile along seq_len if num_heads > 1, so there is a restriction on max seq_len!"
@@ -44,8 +42,8 @@ class TestUpdateCache:
                 input_shard_spec = ttnn.ShardSpec(
                     shard_grid,
                     [
-                        xt.volume() // xt.shape.with_tile_padding()[-1] // num_cores,
-                        xt.shape.with_tile_padding()[-1],
+                        xt.volume() // xt.padded_shape[-1] // num_cores,
+                        xt.padded_shape[-1],
                     ],
                     ttnn.ShardOrientation.ROW_MAJOR,
                 )
@@ -84,7 +82,6 @@ class TestUpdateCache:
         input_dtype,
         cache_dtype,
         device,
-        use_program_cache,
     ):
         if num_users > 32 or (num_users + batch_offset) > 32:
             pytest.skip("Batch offset is only used when num_users < 32 and batch_offset + num_users <= 32")
@@ -111,8 +108,8 @@ class TestUpdateCache:
             input_shard_spec = ttnn.ShardSpec(
                 shard_grid,
                 [
-                    xt.volume() // xt.shape.with_tile_padding()[-1] // num_cores,
-                    xt.shape.with_tile_padding()[-1],
+                    xt.volume() // xt.padded_shape[-1] // num_cores,
+                    xt.padded_shape[-1],
                 ],
                 ttnn.ShardOrientation.ROW_MAJOR,
             )
@@ -152,7 +149,7 @@ class TestUpdateCache:
 class TestUpdateCacheFP32:
     @pytest.mark.parametrize("seq_len", [32, 512, 1024])
     def test_fill_cache_fp32(
-        self, seq_len, head_dim, max_seq_len, num_users, num_heads, in_sharded, input_dtype, device, use_program_cache
+        self, seq_len, head_dim, max_seq_len, num_users, num_heads, in_sharded, input_dtype, device
     ):
         if is_grayskull() and input_dtype == ttnn.float32:
             pytest.skip("Skipping float32 tests on Grayskull")
@@ -177,8 +174,8 @@ class TestUpdateCacheFP32:
                 input_shard_spec = ttnn.ShardSpec(
                     shard_grid,
                     [
-                        xt.volume() // xt.shape.with_tile_padding()[-1] // num_cores,
-                        xt.shape.with_tile_padding()[-1],
+                        xt.volume() // xt.padded_shape[-1] // num_cores,
+                        xt.padded_shape[-1],
                     ],
                     ttnn.ShardOrientation.ROW_MAJOR,
                 )
@@ -217,7 +214,6 @@ class TestUpdateCacheFP32:
         input_dtype,
         cache_dtype,
         device,
-        use_program_cache,
     ):
         if is_grayskull() and input_dtype == ttnn.float32:
             pytest.skip("Skipping float32 tests on Grayskull")
@@ -242,8 +238,8 @@ class TestUpdateCacheFP32:
             input_shard_spec = ttnn.ShardSpec(
                 shard_grid,
                 [
-                    xt.volume() // xt.shape.with_tile_padding()[-1] // num_cores,
-                    xt.shape.with_tile_padding()[-1],
+                    xt.volume() // xt.padded_shape[-1] // num_cores,
+                    xt.padded_shape[-1],
                 ],
                 ttnn.ShardOrientation.ROW_MAJOR,
             )

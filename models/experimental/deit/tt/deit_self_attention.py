@@ -4,12 +4,12 @@
 
 from torch import nn
 
-from typing import Optional, Tuple, List
+from typing import Optional
 
 import ttnn
 from tt_lib.fallback_ops import fallback_ops
-from models.utility_functions import torch_to_tt_tensor_rm
-from models.helper_funcs import Linear as TtLinear
+from models.common.utility_functions import torch_to_tt_tensor_rm
+from models.common.helper_funcs import Linear as TtLinear
 from models.experimental.deit.tt.deit_config import DeiTConfig
 
 
@@ -39,7 +39,7 @@ class TtDeiTSelfAttention(nn.Module):
         self.value = TtLinear(config.hidden_size, self.all_head_size, self.value_weight, self.value_bias)
 
     def transpose_for_scores(self, x: ttnn.Tensor) -> ttnn.Tensor:
-        new_x_shape = list(x.shape.with_tile_padding())[1:-1] + [
+        new_x_shape = list(x.padded_shape)[1:-1] + [
             self.num_attention_heads,
             self.attention_head_size,
         ]
@@ -66,7 +66,7 @@ class TtDeiTSelfAttention(nn.Module):
 
         attention_scores = ttnn.matmul(query_layer, key_layer_transposed)
 
-        attention_head_size_tt = ttnn.full(attention_scores.shape.with_tile_padding(), self.attention_head_size)
+        attention_head_size_tt = ttnn.full(attention_scores.padded_shape, self.attention_head_size)
         attention_head_size_tt = ttnn.sqrt(attention_head_size_tt)
         attention_head_size_tt = ttnn.reciprocal(attention_head_size_tt)
 
@@ -81,7 +81,7 @@ class TtDeiTSelfAttention(nn.Module):
 
         context_layer = ttnn.matmul(attention_probs, value_layer)
         context_layer = ttnn.permute(context_layer, (0, 2, 1, 3))
-        new_context_layer_shape = (1,) + tuple(context_layer.shape.with_tile_padding())[:-2] + (self.all_head_size,)
+        new_context_layer_shape = (1,) + tuple(context_layer.padded_shape)[:-2] + (self.all_head_size,)
         context_layer = fallback_ops.reshape(context_layer, *new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)

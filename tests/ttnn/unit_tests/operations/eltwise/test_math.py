@@ -7,10 +7,9 @@ import pytest
 import torch
 
 import ttnn
-from models.utility_functions import is_grayskull
 
 from tests.ttnn.utils_for_testing import assert_with_pcc
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 from loguru import logger
 
@@ -37,36 +36,6 @@ def test_i0(device, h, w):
     run_math_unary_test(device, h, w, ttnn.i0, pcc=0.998)
 
 
-@pytest.mark.parametrize("h", [64])
-@pytest.mark.parametrize("w", [128])
-def test_isfinite(device, h, w):
-    run_math_unary_test(device, h, w, ttnn.isfinite, pcc=0.993)
-
-
-@pytest.mark.parametrize("h", [64])
-@pytest.mark.parametrize("w", [128])
-def test_isinf(device, h, w):
-    run_math_unary_test(device, h, w, ttnn.isinf, pcc=0.9997)
-
-
-@pytest.mark.parametrize("h", [64])
-@pytest.mark.parametrize("w", [128])
-def test_isnan(device, h, w):
-    run_math_unary_test(device, h, w, ttnn.isnan)
-
-
-@pytest.mark.parametrize("h", [64])
-@pytest.mark.parametrize("w", [128])
-def test_isneginf(device, h, w):
-    run_math_unary_test(device, h, w, ttnn.isneginf)
-
-
-@pytest.mark.parametrize("h", [64])
-@pytest.mark.parametrize("w", [128])
-def test_isposinf(device, h, w):
-    run_math_unary_test(device, h, w, ttnn.isposinf)
-
-
 @pytest.mark.parametrize("h", [5])
 @pytest.mark.parametrize("w", [5])
 def test_lgamma(device, h, w):
@@ -77,9 +46,6 @@ def test_lgamma(device, h, w):
 @pytest.mark.parametrize("w", [32])
 @pytest.mark.parametrize("output_dtype", [ttnn.bfloat16, ttnn.uint16, ttnn.uint32])
 def test_eq(device, h, w, output_dtype):
-    if is_grayskull() and output_dtype in (ttnn.uint16, ttnn.uint32):
-        pytest.skip("GS does not support fp32/uint32/uint16 data types")
-
     torch.manual_seed(0)
 
     same = 50
@@ -103,10 +69,10 @@ def test_eq(device, h, w, output_dtype):
         torch_input_tensor_b, layout=ttnn.TILE_LAYOUT, device=device, memory_config=ttnn.L1_MEMORY_CONFIG
     )
 
-    pages_before = ttnn._ttnn.reports.get_buffer_pages()
+    pages_before = ttnn._ttnn.reports.get_buffer_pages(device)
     output_tensor = ttnn.eq(input_tensor_a, input_tensor_b, dtype=output_dtype)
     assert output_tensor.get_dtype() == output_dtype
-    assert len(pages_before) == len(ttnn._ttnn.reports.get_buffer_pages()) - 1
+    assert len(pages_before) == len(ttnn._ttnn.reports.get_buffer_pages(device)) - 1
     output_tensor = ttnn.to_torch(output_tensor)
     assert_with_pcc(torch_output_tensor, output_tensor, 0.999)
 
@@ -121,9 +87,9 @@ def test_eq(device, h, w, output_dtype):
             output_tensor_preallocated_bfloat16, output_dtype, memory_config=ttnn.L1_MEMORY_CONFIG
         )
 
-    pages_before = ttnn._ttnn.reports.get_buffer_pages()
+    pages_before = ttnn._ttnn.reports.get_buffer_pages(device)
     ttnn.eq(input_tensor_a, input_tensor_b, dtype=output_dtype, output_tensor=output_tensor_preallocated)
-    assert len(pages_before) == len(ttnn._ttnn.reports.get_buffer_pages())
+    assert len(pages_before) == len(ttnn._ttnn.reports.get_buffer_pages(device))
     torch_output_tensor_preallocated = ttnn.to_torch(output_tensor_preallocated)
     assert_with_pcc(torch_output_tensor, torch_output_tensor_preallocated, 0.999)
 

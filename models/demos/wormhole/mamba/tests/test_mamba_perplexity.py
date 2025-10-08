@@ -3,29 +3,26 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import time
-import pytest
-from loguru import logger
-from typing import Tuple, Callable
+from typing import Callable, Tuple
 
 import numpy as np
+import pytest
 import torch
-from transformers import AutoTokenizer
+from loguru import logger
 from tqdm import tqdm
+from transformers import AutoTokenizer
 
 import ttnn
-
-from models.demos.wormhole.mamba.reference.prefill_decode_model import Mamba, MambaPretrainedModelName
-from models.demos.wormhole.mamba.tt import model_config
-from models.demos.wormhole.mamba.tt.model_config import ModelMode
-from models.demos.wormhole.mamba.tt.mamba_model import MambaTT
-
 from models.datasets.llm_dataset_utils import (
-    prepare_textgen_dataset,
-    prepare_textgen_dataloader,
     calculate_acc_metrics,
+    prepare_textgen_dataloader,
+    prepare_textgen_dataset,
     verify_acc_metrics,
 )
-from models.utility_functions import skip_for_grayskull
+from models.demos.wormhole.mamba.reference.prefill_decode_model import Mamba, MambaPretrainedModelName
+from models.demos.wormhole.mamba.tt import model_config
+from models.demos.wormhole.mamba.tt.mamba_model import MambaTT
+from models.demos.wormhole.mamba.tt.model_config import ModelMode
 
 
 def calculate_perplexity(
@@ -126,7 +123,6 @@ def test_mamba_reference_perplexity(
 
 
 @pytest.mark.timeout(1200)
-@skip_for_grayskull("Mamba not supported on Grayskull")
 @pytest.mark.parametrize("device_params", [{"l1_small_size": 16384}], indirect=True)
 @pytest.mark.parametrize(
     "model_version, mode, batch_size, max_seq_len, num_samples, expected_ppl, expected_top1, expected_top5",
@@ -147,7 +143,6 @@ def test_mamba_perplexity(
     expected_ppl: int,
     expected_top1: int,
     expected_top5: int,
-    use_program_cache,
     get_tt_cache_path,
     reset_seeds,
 ):

@@ -12,7 +12,6 @@
 namespace ttnn::operations::experimental::transformer {
 
 ttnn::Tensor NLPConcatHeadsDecodeOperation::invoke(
-    uint8_t queue_id,
     const Tensor& input_tensor,
     const uint32_t num_heads,
     const std::optional<MemoryConfig>& memory_config,
@@ -24,7 +23,7 @@ ttnn::Tensor NLPConcatHeadsDecodeOperation::invoke(
             on_subcoregrids = true;
         }
     }
-    return operation::run(
+    return tt::tt_metal::operation::run(
                NLPConcatHeadsDecodeDeviceOperation{num_heads, on_subcoregrids},
                {input_tensor},
                {},
@@ -32,11 +31,4 @@ ttnn::Tensor NLPConcatHeadsDecodeOperation::invoke(
         .at(0);
 }
 
-ttnn::Tensor NLPConcatHeadsDecodeOperation::invoke(
-    const Tensor& input_tensor,
-    const uint32_t num_heads,
-    const std::optional<MemoryConfig>& memory_config,
-    std::optional<Tensor> optional_output_tensor) {
-    return invoke(ttnn::DefaultQueueId, input_tensor, num_heads, memory_config, std::move(optional_output_tensor));
-}
-};  // namespace ttnn::operations::experimental::transformer
+}  // namespace ttnn::operations::experimental::transformer

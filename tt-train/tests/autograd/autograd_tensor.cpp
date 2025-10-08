@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -26,30 +26,31 @@ protected:
 
 TEST_F(AutogradTensorTest, AutogradTensorFLOAT32) {
     auto tensor = autograd::create_tensor(
-        core::ones(core::create_shape({1, 1, 1, 32}), &autograd::ctx().get_device(), DataType::FLOAT32));
+        ttml::core::ones(ttnn::Shape({1, 1, 1, 32}), &autograd::ctx().get_device(), ttnn::DataType::FLOAT32));
     const auto& half_precision_tensor = tensor->get_value();
     const auto& full_precision_tensor = tensor->get_value(autograd::PreferredPrecision::FULL);
 
-    EXPECT_EQ(half_precision_tensor.dtype(), DataType::BFLOAT16);
-    EXPECT_EQ(full_precision_tensor.dtype(), DataType::FLOAT32);
+    EXPECT_EQ(half_precision_tensor.dtype(), ttnn::DataType::BFLOAT16);
+    EXPECT_EQ(full_precision_tensor.dtype(), ttnn::DataType::FLOAT32);
 }
 
 TEST_F(AutogradTensorTest, AutogradTensorBFLOAT16) {
     auto tensor = autograd::create_tensor(
-        core::ones(core::create_shape({1, 1, 1, 32}), &autograd::ctx().get_device(), DataType::BFLOAT16));
+        ttml::core::ones(ttnn::Shape({1, 1, 1, 32}), &autograd::ctx().get_device(), ttnn::DataType::BFLOAT16));
     const auto& half_precision_tensor = tensor->get_value();
     const auto& full_precision_tensor = tensor->get_value(autograd::PreferredPrecision::FULL);
 
-    EXPECT_EQ(half_precision_tensor.dtype(), DataType::BFLOAT16);
-    EXPECT_EQ(full_precision_tensor.dtype(), DataType::BFLOAT16);
+    EXPECT_EQ(half_precision_tensor.dtype(), ttnn::DataType::BFLOAT16);
+    EXPECT_EQ(full_precision_tensor.dtype(), ttnn::DataType::BFLOAT16);
 }
 
 TEST_F(AutogradTensorTest, AutocastTensor) {
-    auto tt_tensor = core::ones(core::create_shape({1, 1, 1, 32}), &autograd::ctx().get_device(), DataType::FLOAT32);
+    auto tt_tensor =
+        ttml::core::ones(ttnn::Shape({1, 1, 1, 32}), &autograd::ctx().get_device(), ttnn::DataType::FLOAT32);
     auto autocast_tensor = autograd::AutocastTensor(tt_tensor);
     const auto& half_precision_tensor = autocast_tensor.get_tensor();
     const auto& full_precision_tensor = autocast_tensor.get_tensor(autograd::PreferredPrecision::FULL);
 
-    EXPECT_EQ(half_precision_tensor.dtype(), DataType::BFLOAT16);
-    EXPECT_EQ(full_precision_tensor.dtype(), DataType::FLOAT32);
+    EXPECT_EQ(half_precision_tensor.dtype(), ttnn::DataType::BFLOAT16);
+    EXPECT_EQ(full_precision_tensor.dtype(), ttnn::DataType::FLOAT32);
 }

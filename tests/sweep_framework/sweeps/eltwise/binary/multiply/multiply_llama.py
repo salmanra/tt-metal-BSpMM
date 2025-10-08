@@ -10,7 +10,7 @@ import ttnn
 from tests.tt_eager.python_api_testing.sweep_tests.generation_funcs import gen_func_with_cast_tt
 
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 
 # Parameters provided to the test vector generator are defined here.
@@ -97,7 +97,7 @@ def run(
 
     start_time = start_measuring_time()
     result = ttnn.multiply(
-        input_tensor_a, input_tensor_b, input_tensor_a_activation=ttnn.UnaryOpType.SILU, memory_config=sharded_config
+        input_tensor_a, input_tensor_b, input_tensor_a_activations=[ttnn.UnaryOpType.SILU], memory_config=sharded_config
     )
     output_tensor = ttnn.to_torch(result)
     e2e_perf = stop_measuring_time(start_time)

@@ -1,6 +1,8 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
+
+#pragma once
 
 #include <cstdint>
 
@@ -11,7 +13,7 @@
 
 namespace ttml::modules {
 
-class MultiHeadAttention : public ttml::autograd::ModuleBase {
+class MultiHeadAttention : public ttml::modules::ModuleBase {
 private:
     uint32_t m_embedding_dim{};
     uint32_t m_num_heads{};
@@ -22,7 +24,8 @@ private:
 public:
     explicit MultiHeadAttention(uint32_t embedding_dim, uint32_t num_heads, float dropout_prob);
 
-    autograd::TensorPtr operator()(const autograd::TensorPtr& x, const autograd::TensorPtr& mask);
+    [[nodiscard]] autograd::TensorPtr operator()(
+        const autograd::TensorPtr& x, const autograd::TensorPtr& mask) override;
 };
 
 }  // namespace ttml::modules

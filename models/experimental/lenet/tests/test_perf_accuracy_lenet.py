@@ -9,9 +9,8 @@ from loguru import logger
 import pytest
 import ttnn
 import evaluate
-from torch import Generator
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     profiler,
     enable_persistent_kernel_cache,
     disable_persistent_kernel_cache,
@@ -112,7 +111,7 @@ def run_perf_inference(device, pcc, iterations, model_location_generator, reset_
     "pcc, iterations",
     ((0.99, 1000),),
 )
-def test_perf_bare_metal(device, use_program_cache, pcc, iterations, model_location_generator, reset_seeds):
+def test_perf_bare_metal(device, pcc, iterations, model_location_generator, reset_seeds):
     run_perf_inference(device, pcc, iterations, model_location_generator, reset_seeds)
 
 
@@ -121,5 +120,5 @@ def test_perf_bare_metal(device, use_program_cache, pcc, iterations, model_locat
     "pcc, iterations",
     ((0.99, 1000),),
 )
-def test_perf_virtual_machine(device, use_program_cache, pcc, iterations, model_location_generator, reset_seeds):
+def test_perf_virtual_machine(device, pcc, iterations, model_location_generator, reset_seeds):
     run_perf_inference(device, pcc, iterations, model_location_generator, reset_seeds)

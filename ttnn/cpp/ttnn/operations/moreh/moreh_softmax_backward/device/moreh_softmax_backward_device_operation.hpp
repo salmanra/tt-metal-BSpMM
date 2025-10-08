@@ -48,8 +48,8 @@ struct MorehSoftmaxBackwardOperation {
 #define DEFINE_SOFTMAX_BACKWARD_FACTORY(factory_name)                                       \
     struct factory_name {                                                                   \
         struct shared_variables_t {                                                         \
-            KernelHandle unary_reader_kernel_id;                                            \
-            KernelHandle unary_writer_kernel_id;                                            \
+            tt::tt_metal::KernelHandle unary_reader_kernel_id;                              \
+            tt::tt_metal::KernelHandle unary_writer_kernel_id;                              \
             std::size_t num_cores;                                                          \
             std::size_t num_cores_y;                                                        \
         };                                                                                  \
@@ -95,8 +95,8 @@ struct MorehSoftmaxBackwardOperation {
         const Tensor& output_grad_tensor,
         uint32_t dim,
         const std::optional<Tensor>& input_grad_tensor,
-        const MorehSoftmaxBackwardOp op,
-        const MorehSoftmaxBackwardOpParallelizationStrategy strategy,
+        MorehSoftmaxBackwardOp op,
+        MorehSoftmaxBackwardOpParallelizationStrategy strategy,
         const std::optional<MemoryConfig>& memory_config,
         const std::optional<DeviceComputeKernelConfig>& compute_kernel_config);
 };

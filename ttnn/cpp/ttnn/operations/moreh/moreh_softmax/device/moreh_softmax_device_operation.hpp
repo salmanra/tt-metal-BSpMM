@@ -29,7 +29,7 @@ bool is_moreh_softmax_h_small_available(const Tensor& tensor, const DeviceComput
 
 struct MorehSoftmaxOperation {
     struct operation_attributes_t {
-        uint32_t dim;
+        uint32_t dim{};
         const MorehSoftmaxOp op;
         const MorehSoftmaxOpParallelizationStrategy strategy;
         const MemoryConfig memory_config;
@@ -47,8 +47,8 @@ struct MorehSoftmaxOperation {
 #define DEFINE_SOFTMAX_FACTORY(factory_name)                                                \
     struct factory_name {                                                                   \
         struct shared_variables_t {                                                         \
-            KernelHandle unary_reader_kernel_id;                                            \
-            KernelHandle unary_writer_kernel_id;                                            \
+            tt::tt_metal::KernelHandle unary_reader_kernel_id;                              \
+            tt::tt_metal::KernelHandle unary_writer_kernel_id;                              \
             std::size_t num_cores;                                                          \
             std::size_t num_cores_y;                                                        \
         };                                                                                  \
@@ -93,8 +93,8 @@ struct MorehSoftmaxOperation {
         const Tensor& input_tensor,
         uint32_t dim,
         const std::optional<Tensor>& output_tensor,
-        const MorehSoftmaxOp op,
-        const MorehSoftmaxOpParallelizationStrategy strategy,
+        MorehSoftmaxOp op,
+        MorehSoftmaxOpParallelizationStrategy strategy,
         const std::optional<MemoryConfig>& memory_config,
         const std::optional<DeviceComputeKernelConfig>& compute_kernel_config);
 };

@@ -12,7 +12,6 @@ namespace operations::data_movement {
 
 struct ReshardOperation {
     static ttnn::Tensor invoke(
-        uint8_t queue_id,
         const ttnn::Tensor& input_tensor,
         const MemoryConfig& memory_config,
         const std::optional<Tensor>& optional_output_tensor);
@@ -20,6 +19,5 @@ struct ReshardOperation {
 
 }  // namespace operations::data_movement
 
-constexpr auto reshard =
-    ttnn::register_operation_with_auto_launch_op<"ttnn::reshard", ttnn::operations::data_movement::ReshardOperation>();
+constexpr auto reshard = ttnn::register_operation<"ttnn::reshard", ttnn::operations::data_movement::ReshardOperation>();
 }  // namespace ttnn

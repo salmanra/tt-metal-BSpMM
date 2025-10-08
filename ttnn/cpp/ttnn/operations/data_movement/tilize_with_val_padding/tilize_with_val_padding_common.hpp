@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <variant>
+#include <cstdint>
+
 namespace ttnn {
-typedef std::variant<uint32_t, float> PadValue;
+using PadValue = std::variant<uint32_t, float>;
 }

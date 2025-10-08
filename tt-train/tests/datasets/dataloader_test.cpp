@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -70,6 +70,7 @@ TEST_F(DataLoaderTest, TestLastBatchHandling) {
 
 // Test that shuffling works correctly
 TEST_F(DataLoaderTest, TestShuffling) {
+    ttml::autograd::ctx().set_seed(1337U);
     ttml::datasets::DataLoader<InMemoryDatasetFloatVecInt> dataloader(*dataset, 2, true);
 
     auto first_batch_before_shuffle = *dataloader.begin();

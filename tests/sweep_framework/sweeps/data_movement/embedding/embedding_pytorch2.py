@@ -9,7 +9,7 @@ import random
 import ttnn
 
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 TIMEOUT = 10
 # seed for random
@@ -111,8 +111,6 @@ def run(
     *,
     device,
 ):
-    device.enable_async(False)
-
     # Extract the weight and indices shape from embedding_specs
     weight_shape = embedding_specs["weight_shape"]
     indices_shape = embedding_specs["indices_shape"]

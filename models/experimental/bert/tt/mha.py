@@ -8,14 +8,12 @@ import math
 
 import torch
 from transformers import BertForQuestionAnswering
-import numpy as np
 
 import ttnn
-from tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
+from tt_lib.utils import pad_activation, pad_weight
 from models.experimental.bert.fused_ops.linear import Linear as TtLinear
 from tt_lib.fused_ops.softmax import softmax
-from models.utility_functions import (
-    enable_persistent_kernel_cache,
+from models.common.utility_functions import (
     comp_pcc,
     comp_allclose,
 )
@@ -50,10 +48,10 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device):
             untilized_x = ttnn.untilize(x)
             reshaped_unt = ttnn.reshape_on_device(
                 untilized_x,
-                x.shape.with_tile_padding()[0],
-                x.shape.with_tile_padding()[2],
+                x.padded_shape[0],
+                x.padded_shape[2],
                 num_heads,
-                x.shape.with_tile_padding()[3] // num_heads,
+                x.padded_shape[3] // num_heads,
             )
 
             # N, 128, 2, 64
@@ -75,7 +73,7 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device):
             outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
             """
             ctx = ttnn.transpose(x, 1, -2)
-            ushape = ctx.shape.with_tile_padding()
+            ushape = ctx.padded_shape
             reshaped = ttnn.reshape_on_device(ctx, ushape[0], 1, ushape[1], ushape[2] * ushape[3])
             retval = ttnn.tilize(reshaped)
             return retval
@@ -101,7 +99,7 @@ def mha(qw, qb, kw, kb, vw, vb, hidden_dim, num_heads, device):
             C,
             H,
             W,
-        ) = qkt.shape.with_tile_padding()  # Need to reshape right now since multi-C not supported for broadcast yet
+        ) = qkt.padded_shape  # Need to reshape right now since multi-C not supported for broadcast yet
         new_shape = [N, 1, C * H, W]
         ttnn.reshape_on_device(qkt, *new_shape)
         attention_score_input = multiply_by_sqrt_hidden_dim(qkt)

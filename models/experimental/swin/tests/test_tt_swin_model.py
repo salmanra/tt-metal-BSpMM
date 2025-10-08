@@ -7,7 +7,7 @@ import pytest
 from loguru import logger
 
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     torch_to_tt_tensor_rm,
     tt_to_torch_tensor,
     comp_allclose,
@@ -15,7 +15,6 @@ from models.utility_functions import (
 )
 
 from models.experimental.swin.tt.swin_model import TtSwinModel
-from models.experimental.swin.swin_utils import get_shape
 from transformers import SwinModel
 from transformers import AutoFeatureExtractor
 

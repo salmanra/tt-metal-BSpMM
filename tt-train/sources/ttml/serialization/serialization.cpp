@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,12 +6,13 @@
 
 #include <core/ttnn_all_includes.hpp>
 #include <cstdint>
+#include <enchantum/enchantum.hpp>
 #include <ttnn/tensor/types.hpp>
 
 #include "autograd/auto_context.hpp"
-#include "autograd/module_base.hpp"
 #include "core/system_utils.hpp"
 #include "core/tt_tensor_utils.hpp"
+#include "modules/module_base.hpp"
 #include "msgpack_file.hpp"
 #include "optimizers/optimizer_base.hpp"
 #include "optimizers/sgd.hpp"
@@ -28,7 +29,7 @@ std::span<const uint8_t> to_bytes(T& value) {
 }
 
 template <>
-std::span<const uint8_t> to_bytes(ttnn::SimpleShape& value) {
+std::span<const uint8_t> to_bytes(ttnn::Shape& value) {
     auto ptr = reinterpret_cast<const uint8_t*>(value.view().data());
     return std::span<const uint8_t>(ptr, sizeof(value[0]) * value.rank());
 }
@@ -48,16 +49,16 @@ void from_bytes(std::span<const uint8_t> bytes, T& value) {
 }
 
 template <>
-void from_bytes(std::span<const uint8_t> bytes, ttnn::SimpleShape& value) {
+void from_bytes(std::span<const uint8_t> bytes, ttnn::Shape& value) {
     if (bytes.size() % sizeof(uint32_t) != 0) {
         std::ostringstream oss;
         oss << "Invalid byte size for conversion to type T. Expected divisible by" << sizeof(uint32_t)
-            << " Actual: " << bytes.size() << ", type: " << typeid(ttnn::SimpleShape).name();
+            << " Actual: " << bytes.size() << ", type: " << typeid(ttnn::Shape).name();
         throw std::invalid_argument(oss.str());
     }
     ttnn::SmallVector<uint32_t> data(bytes.size() / sizeof(uint32_t));
     std::memcpy(data.data(), bytes.data(), bytes.size());
-    value = ttnn::SimpleShape(std::move(data));
+    value = ttnn::Shape(std::move(data));
 }
 
 template <typename T>
@@ -68,9 +69,9 @@ void get_enum(MsgPackFile& file, std::string_view name, T& value) {
 }
 
 void write_ttnn_tensor(MsgPackFile& file, std::string_view name, const tt::tt_metal::Tensor& tensor) {
-    auto shape = tensor.get_logical_shape();
-    auto data_type = tensor.get_dtype();
-    auto layout = tensor.get_layout();
+    auto shape = tensor.logical_shape();
+    auto data_type = tensor.dtype();
+    auto layout = tensor.layout();
     auto storage_type = tensor.storage_type();
 
     file.put(std::string(name) + "/shape", to_bytes(shape));
@@ -81,22 +82,17 @@ void write_ttnn_tensor(MsgPackFile& file, std::string_view name, const tt::tt_me
     // we currently assume that there are two types of runs: single device and DDP
     // once we decide to use other parallelization techniques (tensor parallel, FSDP) we need to update this code
     if (data_type == tt::tt_metal::DataType::BFLOAT16) {
-        auto* device = &ttml::autograd::ctx().get_device();
-        ttml::core::MeshToXTensorVariant<float> composer = ttml::core::VectorMeshToXTensor<float>(device->shape());
-        auto data_all_devices = ttml::core::to_xtensor<float>(tensor, composer);
+        auto data_all_devices = ttml::core::to_xtensor<float>(tensor, core::IdentityComposer{});
         // pick weights from first device
         auto data = data_all_devices.front();
         file.put(std::string(name) + "/data", std::span<const float>(data.data(), data.size()));
     } else if (data_type == tt::tt_metal::DataType::UINT32) {
-        auto* device = &ttml::autograd::ctx().get_device();
-        ttml::core::MeshToXTensorVariant<uint32_t> composer =
-            ttml::core::VectorMeshToXTensor<uint32_t>(device->shape());
-        auto data_all_devices = ttml::core::to_xtensor<uint32_t>(tensor, composer);
+        auto data_all_devices = ttml::core::to_xtensor<uint32_t>(tensor, ttml::core::IdentityComposer{});
         // pick weights from first device
         auto data = data_all_devices.front();
         file.put(std::string(name) + "/data", std::span<const uint32_t>(data.data(), data.size()));
     } else {
-        throw std::runtime_error(fmt::format("Unsupported data type: {}", magic_enum::enum_name(data_type)));
+        throw std::runtime_error(fmt::format("Unsupported data type: {}", enchantum::to_string(data_type)));
     }
 }
 
@@ -105,10 +101,10 @@ void read_ttnn_tensor(MsgPackFile& file, std::string_view name, tt::tt_metal::Te
     tt::tt_metal::Layout layout{};
     tt::tt_metal::StorageType storage_type{};
 
-    auto shape = core::create_shape({1, 1, 1, 1});
+    auto shape = ttnn::Shape({1, 1, 1, 1});
     std::vector<uint8_t> bytes;
     file.get(std::string(name) + "/shape", bytes);
-    from_bytes<ttnn::SimpleShape>(bytes, shape);
+    from_bytes<ttnn::Shape>(bytes, shape);
 
     get_enum(file, std::string(name) + "/data_type", data_type);
     get_enum(file, std::string(name) + "/layout", layout);
@@ -121,10 +117,10 @@ void read_ttnn_tensor(MsgPackFile& file, std::string_view name, tt::tt_metal::Te
     } else if (data_type == tt::tt_metal::DataType::UINT32) {
         std::vector<uint32_t> data;
         file.get(std::string(name) + "/data", data);
-        tensor =
-            core::from_vector<uint32_t, DataType::UINT32>(data, shape, &ttml::autograd::ctx().get_device(), layout);
+        tensor = core::from_vector<uint32_t, tt::tt_metal::DataType::UINT32>(
+            data, shape, &ttml::autograd::ctx().get_device(), layout);
     } else {
-        throw std::runtime_error(fmt::format("Unsupported data type: {}", magic_enum::enum_name(data_type)));
+        throw std::runtime_error(fmt::format("Unsupported data type: {}", enchantum::to_string(data_type)));
     }
 }
 
@@ -176,19 +172,18 @@ void write_optimizer(MsgPackFile& file, std::string_view name, const optimizers:
 
 void read_optimizer(MsgPackFile& file, std::string_view name, optimizers::OptimizerBase* optimizer) {
     assert(optimizer);
-    size_t steps = 0;
     auto state_dict = optimizer->get_state_dict();
     read_state_dict(file, name, state_dict);
     optimizer->set_state_dict(state_dict);
 }
 
-void write_module(MsgPackFile& file, std::string_view name, const autograd::ModuleBase* module) {
+void write_module(MsgPackFile& file, std::string_view name, const modules::ModuleBase* module) {
     assert(module);
     auto named_parameters = module->parameters();
     write_named_parameters(file, name, named_parameters);
 }
 
-void read_module(MsgPackFile& file, std::string_view name, autograd::ModuleBase* module) {
+void read_module(MsgPackFile& file, std::string_view name, modules::ModuleBase* module) {
     assert(module);
     auto named_parameters = module->parameters();
     read_named_parameters(file, name, named_parameters);

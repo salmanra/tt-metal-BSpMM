@@ -6,6 +6,7 @@
 
 #include "moreh_layer_norm_device_operation.hpp"
 #include <tt-metalium/work_split.hpp>
+#include <tt-metalium/tensor_accessor_args.hpp>
 #include "ttnn/operations/moreh/moreh_helper_functions.hpp"
 #include "ttnn/operations/core/compute_kernel/compute_kernel_config.hpp"
 
@@ -33,7 +34,6 @@ MorehLayerNormOperation::ProgramFactory::cached_program_t MorehLayerNormOperatio
     auto& mean_inp = tensor_args.mean;
     auto& rstd_inp = tensor_args.rstd;
 
-    auto& output_tensors = output_tensor;
     const std::optional<const Tensor>& output = output_tensor.at(0);
 
     std::optional<Tensor> mean = std::nullopt;
@@ -64,8 +64,8 @@ MorehLayerNormOperation::ProgramFactory::cached_program_t MorehLayerNormOperatio
     ////////////////////////////////////////////////////////////////////////////
     //                         Parameters Setup
     ////////////////////////////////////////////////////////////////////////////
-    const auto input_shape = input.get_shape().value;
-    const auto input_shape_without_padding = input.get_shape().value.without_padding();
+    const auto input_shape = input.padded_shape();
+    const auto input_shape_without_padding = input.logical_shape();
     const auto input_rank = input_shape.rank();
 
     const bool is_lastdim_layer_norm = normalized_dims == 1;
@@ -86,8 +86,7 @@ MorehLayerNormOperation::ProgramFactory::cached_program_t MorehLayerNormOperatio
     uint32_t mean_rstd_width = 0;
 
     if (mean_has_value) {
-        const auto mean_rstd_shape = mean->get_shape().value;
-        const auto mean_rstd_shape_without_padding = mean_rstd_shape.without_padding();
+        const auto mean_rstd_shape_without_padding = mean->logical_shape();
         mean_rstd_height = mean_rstd_shape_without_padding[-2];
         mean_rstd_width = mean_rstd_shape_without_padding[-1];
     }
@@ -148,15 +147,16 @@ MorehLayerNormOperation::ProgramFactory::cached_program_t MorehLayerNormOperatio
     const uint32_t im6_t = (gamma_has_value || beta_has_value) ? 2 * block_size : 0;  // x * gamm + beta
     const uint32_t im7_t = 2;                                                         // Sum[x]
 
-    const auto cb_data_format = tt::tt_metal::datatype_to_dataformat_converter(input.get_dtype());
-    const auto single_tile_size = tt::tt_metal::detail::TileSize(cb_data_format);
+    const auto cb_data_format = tt::tt_metal::datatype_to_dataformat_converter(input.dtype());
+    const auto single_tile_size = tt::tile_size(cb_data_format);
     auto intermed_cb_format = fp32_dest_acc_en ? tt::DataFormat::Float32 : cb_data_format;
-    const auto intermed_single_tile_size = tt::tt_metal::detail::TileSize(intermed_cb_format);
+    const auto intermed_single_tile_size = tt::tile_size(intermed_cb_format);
 
     const uint32_t cb_usage =
-        (in0_t + in1_t + in2_t + in3_t + in4_t + in5_t + in6_t + out0_t + out1_t + out2_t) * single_tile_size +
-        (im0_t + im1_t + im2_t + im3_t + im4_t + im5_t + im6_t + im7_t) * intermed_single_tile_size;
-    const uint32_t available_L1 = device->l1_size_per_core() - device->get_base_allocator_addr(HalMemType::L1);
+        ((in0_t + in1_t + in2_t + in3_t + in4_t + in5_t + in6_t + out0_t + out1_t + out2_t) * single_tile_size) +
+        ((im0_t + im1_t + im2_t + im3_t + im4_t + im5_t + im6_t + im7_t) * intermed_single_tile_size);
+    const uint32_t available_L1 =
+        device->l1_size_per_core() - device->allocator()->get_base_allocator_addr(HalMemType::L1);
     const bool use_large_algorithm = cb_usage >= available_L1;
 
     if (use_large_algorithm) {
@@ -196,21 +196,19 @@ MorehLayerNormOperation::ProgramFactory::cached_program_t MorehLayerNormOperatio
     ////////////////////////////////////////////////////////////////////////////
     //                      DataMovementKernel SetUp
     ////////////////////////////////////////////////////////////////////////////
-    const std::vector<uint32_t> reader_compile_time_args{
-        static_cast<uint32_t>(is_dram(input)),
-        static_cast<uint32_t>(is_dram(gamma)),
-        static_cast<uint32_t>(is_dram(beta)),
-        block_size};
+    std::vector<uint32_t> reader_compile_time_args{block_size};
+    tt::tt_metal::TensorAccessorArgs(input.buffer()).append_to(reader_compile_time_args);
+    tt::tt_metal::TensorAccessorArgs(gamma ? gamma->buffer() : nullptr).append_to(reader_compile_time_args);
+    tt::tt_metal::TensorAccessorArgs(beta ? beta->buffer() : nullptr).append_to(reader_compile_time_args);
 
-    const std::vector<uint32_t> writer_compile_time_args{
-        static_cast<uint32_t>(is_dram(output)),
-        static_cast<uint32_t>(is_dram(mean_as_tensor)),
-        static_cast<uint32_t>(is_dram(rstd_as_tensor)),
-        static_cast<uint32_t>(mean_has_value),
-        static_cast<uint32_t>(rstd_has_value),
-        block_size};
+    std::vector<uint32_t> writer_compile_time_args{mean_has_value, rstd_has_value, block_size};
+    tt::tt_metal::TensorAccessorArgs(output->buffer()).append_to(writer_compile_time_args);
+    tt::tt_metal::TensorAccessorArgs(mean_as_tensor ? mean_as_tensor->buffer() : nullptr)
+        .append_to(writer_compile_time_args);
+    tt::tt_metal::TensorAccessorArgs(rstd_as_tensor ? rstd_as_tensor->buffer() : nullptr)
+        .append_to(writer_compile_time_args);
 
-    std::map<string, string> reader_defines{};
+    std::map<std::string, std::string> reader_defines{};
     std::map<std::string, std::string> compute_defines{};
     if (gamma_has_value) {
         reader_defines["GAMMA_HAS_VALUE"] = "1";
@@ -303,7 +301,7 @@ MorehLayerNormOperation::ProgramFactory::cached_program_t MorehLayerNormOperatio
     union {
         float f;
         uint32_t u;
-    } scaler;
+    } scaler{};
 
     if (normalized_dims == 1) {
         scaler.f = 1.0f / static_cast<float>(origin_W);
@@ -320,7 +318,7 @@ MorehLayerNormOperation::ProgramFactory::cached_program_t MorehLayerNormOperatio
     union {
         float f;
         uint32_t u;
-    } e;
+    } e{};
     e.f = eps;  // epsilon
 
     const auto input_addr = input.buffer()->address();

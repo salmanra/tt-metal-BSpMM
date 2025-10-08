@@ -12,13 +12,8 @@ void kernel_main() {
     constexpr uint32_t onetile = 1;
     uint32_t tile_bytes = get_tile_size(cb_id_out0);
 
-#ifdef KERNEL_COMPILE_TIME_ARG_0
-    constexpr bool write_to_dram = get_compile_time_arg_val(0);
-#else
-    constexpr bool write_to_dram = true;
-#endif
-
-    const InterleavedPow2AddrGen<write_to_dram> s = {dst_addr, 11};
+    constexpr auto dst_args = TensorAccessorArgs<0>();
+    const auto s = TensorAccessor(dst_args, dst_addr, tile_bytes);
 
     for (uint32_t i = 0; i < num_tiles; i++) {
         uint64_t dst_noc_addr = get_noc_addr(i, s);

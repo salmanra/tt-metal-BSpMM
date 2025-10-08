@@ -6,9 +6,9 @@ import torch
 
 import ttnn
 import pytest
-from models.utility_functions import comp_allclose_and_pcc
+from models.common.utility_functions import comp_allclose_and_pcc
 from loguru import logger
-from models.utility_functions import is_wormhole_b0
+from models.common.utility_functions import is_wormhole_b0
 
 from tests.ttnn.unit_tests.operations.test_utils import (
     get_compute_kernel_options,
@@ -431,7 +431,7 @@ def test_softmax_backward_for_dim_nc(shape_dim, dtype, compute_kernel_options, d
         ttnn.bfloat16,
     ],
 )
-def test_softmax_callback(shape_dim_strategy, dtype, device, use_program_cache):
+def test_softmax_callback(shape_dim_strategy, dtype, device):
     shape, dim, strategy = shape_dim_strategy
     torch.manual_seed(0)
     rtol = atol = 0.05
@@ -463,7 +463,7 @@ def test_softmax_callback(shape_dim_strategy, dtype, device, use_program_cache):
         ttnn.bfloat16,
     ],
 )
-def test_softmax_backward_callback(shape_dim_strategy, dtype, device, use_program_cache):
+def test_softmax_backward_callback(shape_dim_strategy, dtype, device):
     shape, dim, strategy = shape_dim_strategy
     torch.manual_seed(0)
     rtol = atol = 0.05

@@ -2,22 +2,24 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <tt_stl/assert.hpp>
 #include <core_coord.hpp>
-
+#include <nlohmann/json.hpp>
+#include <tt_stl/reflection.hpp>
+#include <tt_stl/span.hpp>
 #include <algorithm>
 #include <cstdint>
+#include <iterator>
 #include <limits>
-#include <mutex>
+#include <map>
 #include <optional>
+#include <ostream>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "umd/device/tt_xy_pair.h"
-#include <assert.hpp>
 #include "tracy/Tracy.hpp"
-#include <reflection.hpp>
-#include <span.hpp>
 
 auto fmt::formatter<CoreCoord>::format(const CoreCoord& core_coord, format_context& ctx) const
     -> format_context::iterator {
@@ -177,28 +179,21 @@ CoreRangeSet::CoreRangeSet(const std::set<CoreRange>& core_ranges) : ranges_(cor
 
 CoreRangeSet::CoreRangeSet(const CoreRange& core_range) : ranges_{core_range} {}
 
-void swap(CoreRangeSet& first, CoreRangeSet& second) {
-    std::scoped_lock lock(first.ranges_guard, second.ranges_guard);
-    std::swap(first.ranges_, second.ranges_);
+CoreRangeSet::CoreRangeSet(tt::stl::Span<const CoreCoord> core_coords) {
+    std::vector<CoreRange> core_ranges;
+    core_ranges.reserve(core_coords.size());
+    for (const auto& core_coord : core_coords) {
+        core_ranges.push_back(CoreRange(core_coord));
+    }
+    CoreRangeSet unmerged_set(std::move(core_ranges));
+    *this = unmerged_set.merge_ranges();
 }
 
-CoreRangeSet::CoreRangeSet(const CoreRangeSet& other) {
-    std::scoped_lock lock(other.ranges_guard);
-    this->ranges_ = other.ranges_;
-}
+void swap(CoreRangeSet& first, CoreRangeSet& second) noexcept { std::swap(first.ranges_, second.ranges_); }
 
-CoreRangeSet& CoreRangeSet::operator=(const CoreRangeSet& other) {
-    std::scoped_lock lock(other.ranges_guard);
-    this->ranges_ = other.ranges_;
-    return *this;
-}
+CoreRangeSet::CoreRangeSet(const CoreRangeSet& other) = default;
 
 CoreRangeSet::CoreRangeSet(CoreRangeSet&& other) noexcept { swap(*this, other); }
-
-CoreRangeSet& CoreRangeSet::operator=(CoreRangeSet&& other) noexcept {
-    swap(*this, other);
-    return *this;
-}
 
 CoreRangeSet::CoreRangeSet(std::vector<CoreRange>&& core_ranges) : ranges_(std::move(core_ranges)) {
     ZoneScoped;
@@ -331,7 +326,6 @@ bool CoreRangeSet::contains(const CoreRange& other) const {
     } else if (this->num_cores() < num_remaining_cores) {
         return false;
     }
-    uint32_t num_intersect_cores = 0;
     for (const auto& cr : this->ranges_) {
         const auto& intersection = cr.intersection(other);
         if (intersection.has_value()) {
@@ -370,7 +364,7 @@ bool CoreRangeSet::contains(const CoreRangeSet& other) const {
 const std::vector<CoreRange>& CoreRangeSet::ranges() const { return this->ranges_; }
 
 std::string CoreRangeSet::str() const {
-    if (this->ranges().size() > 0) {
+    if (!this->ranges().empty()) {
         std::string core_range_set_str = "{";
         for (const auto& core_range : this->ranges_) {
             core_range_set_str += core_range.str() + ", ";
@@ -392,7 +386,7 @@ uint32_t CoreRangeSet::num_cores() const {
 }
 
 CoreRange CoreRangeSet::bounding_box() const {
-    TT_FATAL(this->ranges().size() > 0, "Cannot get bounding_box of an empty CoreRangeSet!");
+    TT_FATAL(!this->ranges().empty(), "Cannot get bounding_box of an empty CoreRangeSet!");
     size_t min_x = UINT32_MAX, min_y = UINT32_MAX, max_x = 0, max_y = 0;
     for (const auto& cr : this->ranges()) {
         min_x = std::min(min_x, cr.start_coord.x);
@@ -427,6 +421,70 @@ void CoreRangeSet::validate_no_overlap() {
             }
         }
     }
+}
+
+CoreRangeSet CoreRangeSet::subtract(const CoreRangeSet& other) const {
+    const CoreRangeSet& this_merged = this->merge_ranges();
+    const CoreRangeSet& other_merged = other.merge_ranges();
+
+    // Early returns for empty sets and non-intersecting sets
+    if (other_merged.empty() || this_merged.empty() || !this_merged.intersects(other_merged)) {
+        return this_merged;
+    }
+
+    std::vector<CoreRange> result_ranges;
+
+    for (const auto& current_range : this_merged.ranges_) {
+        std::vector<CoreRange> current_remaining = {current_range};
+
+        for (const auto& subtract_range : other_merged.ranges_) {
+            std::vector<CoreRange> new_remaining;
+
+            for (const auto& remaining : current_remaining) {
+                auto intersection_opt = remaining.intersection(subtract_range);
+                if (!intersection_opt.has_value()) {
+                    new_remaining.push_back(remaining);
+                    continue;
+                }
+
+                const CoreRange& intersection = intersection_opt.value();
+
+                if (remaining.start_coord.x < intersection.start_coord.x) {
+                    CoreRange left{
+                        remaining.start_coord, CoreCoord{intersection.start_coord.x - 1, remaining.end_coord.y}};
+                    new_remaining.push_back(left);
+                }
+
+                if (remaining.end_coord.x > intersection.end_coord.x) {
+                    CoreRange right{
+                        CoreCoord{intersection.end_coord.x + 1, remaining.start_coord.y}, remaining.end_coord};
+                    new_remaining.push_back(right);
+                }
+
+                if (remaining.start_coord.y < intersection.start_coord.y) {
+                    CoreRange bottom{
+                        CoreCoord{
+                            std::max(remaining.start_coord.x, intersection.start_coord.x), remaining.start_coord.y},
+                        CoreCoord{
+                            std::min(remaining.end_coord.x, intersection.end_coord.x), intersection.start_coord.y - 1}};
+                    new_remaining.push_back(bottom);
+                }
+
+                if (remaining.end_coord.y > intersection.end_coord.y) {
+                    CoreRange top{
+                        CoreCoord{
+                            std::max(remaining.start_coord.x, intersection.start_coord.x),
+                            intersection.end_coord.y + 1},
+                        CoreCoord{std::min(remaining.end_coord.x, intersection.end_coord.x), remaining.end_coord.y}};
+                    new_remaining.push_back(top);
+                }
+            }
+            current_remaining = new_remaining;
+        }
+        result_ranges.insert(result_ranges.end(), current_remaining.begin(), current_remaining.end());
+    }
+
+    return CoreRangeSet(std::move(result_ranges));
 }
 
 bool operator==(const CoreRangeSet& a, const CoreRangeSet& b) {
@@ -577,6 +635,28 @@ std::vector<CoreCoord> corerange_to_cores(const CoreRangeSet& crs, std::optional
     return all_cores;
 }
 
+CoreRangeSet select_from_corerangeset(
+    const CoreRangeSet& crs, uint32_t start_index, uint32_t end_index, bool row_wise) {
+    auto all_cores = corerange_to_cores(crs, end_index + 1, row_wise);
+    std::vector<CoreRange> selected_cores;
+    for (uint32_t i = start_index; i <= end_index; i++) {
+        selected_cores.push_back(CoreRange(all_cores[i], all_cores[i]));
+    }
+    return CoreRangeSet(selected_cores);
+}
+std::optional<CoreRange> select_contiguous_range_from_corerangeset(const CoreRangeSet& crs, uint32_t x, uint32_t y) {
+    for (const auto& core_range : crs.ranges()) {
+        const auto& start_coord = core_range.start_coord;
+        const auto& end_coord = core_range.end_coord;
+        if (start_coord.x + x > end_coord.x || start_coord.y + y > end_coord.y) {
+            continue;
+        }
+        CoreCoord new_end_coord = {start_coord.x + x, start_coord.y + y};
+        return CoreRange(start_coord, new_end_coord);
+    }
+    return std::nullopt;
+}
+
 bool operator!=(const CoreRangeSet& a, const CoreRangeSet& b) { return !(a == b); }
 
 auto fmt::formatter<CoreRangeSet>::format(const CoreRangeSet& core_range_set, format_context& ctx) const
@@ -611,7 +691,7 @@ std::size_t hash<CoreRangeSet>::operator()(const CoreRangeSet& core_range_set) c
 
 }  // namespace std
 
-namespace tt::stl::json {
+namespace ttsl::json {
 
 nlohmann::json to_json_t<CoreCoord>::operator()(const CoreCoord& core_coord) noexcept {
     return {{"x", to_json(core_coord.x)}, {"y", to_json(core_coord.y)}};
@@ -646,4 +726,4 @@ CoreRangeSet from_json_t<CoreRangeSet>::operator()(const nlohmann::json& json) n
     return CoreRangeSet(from_json<std::vector<CoreRange>>(json));
 }
 
-}  // namespace tt::stl::json
+}  // namespace ttsl::json

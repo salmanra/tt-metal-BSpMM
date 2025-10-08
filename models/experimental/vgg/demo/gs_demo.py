@@ -11,7 +11,7 @@ from loguru import logger
 from pathlib import Path
 
 from models.experimental.vgg.tt.vgg import *
-from models.utility_functions import torch_to_tt_tensor, unpad_from_zero
+from models.common.utility_functions import torch_to_tt_tensor, unpad_from_zero
 from models.experimental.vgg.vgg_utils import store_weights, get_tt_cache_path
 
 
@@ -49,7 +49,7 @@ def test_gs_demo(device, imagenet_sample_input, imagenet_label_dict, batch_size,
         tt_images = ttnn.concat(tt_images)
 
         tt_output = tt_vgg(tt_images)
-        tt_output = unpad_from_zero(tt_output, tt_output.shape.with_tile_padding())
+        tt_output = unpad_from_zero(tt_output, tt_output.padded_shape)
         tt_output = tt_output.cpu()
 
         logger.info(f"GS's predicted Output: {class_labels[torch.argmax(tt_output).item()]}\n")

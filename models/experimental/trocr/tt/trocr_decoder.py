@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import ttnn
 from tt_lib import fallback_ops
 
-from models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
+from models.common.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
 from models.experimental.trocr.tt.trocr_configuration import TtTrOCRConfig
 from models.experimental.trocr.tt.trocr_decoder_layer import TtTrOCRDecoderLayer
 from models.experimental.trocr.tt.trocr_embed_tokens import TtTrOCREmbedTokens
@@ -160,7 +160,7 @@ class TtTrOCRDecoder(nn.Module):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
             input = input_ids
-            input_ids = fallback_ops.reshape(input_ids, 1, 1, -1, input.shape.with_tile_padding()[-1])
+            input_ids = fallback_ops.reshape(input_ids, 1, 1, -1, input.padded_shape[-1])
 
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -189,7 +189,7 @@ class TtTrOCRDecoder(nn.Module):
                 bias=self.layernorm_embedding_bias,
             )
 
-        input_shape = input.shape.with_tile_padding()
+        input_shape = input.padded_shape
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length

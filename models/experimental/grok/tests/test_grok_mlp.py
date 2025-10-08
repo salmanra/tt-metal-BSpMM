@@ -18,15 +18,16 @@ from ttnn import ReplicateTensorToMesh, ConcatMeshToTensor
 from models.experimental.grok.tt.grok_mlp import TtGrokMLP
 from models.experimental.grok.reference.model import MoeMLP, RMSNorm
 from models.experimental.grok.tt.model_config import TtModelArgs
-from models.utility_functions import (
+from models.common.utility_functions import (
     comp_pcc,
     comp_allclose,
 )
+from tests.tests_common.skip_reasons import LEGACY_CCL_SKIP
 
 
+@pytest.mark.skip(reason=LEGACY_CCL_SKIP)
 @pytest.mark.timeout(500)
-def test_grok_mlp_inference(t3k_mesh_device, use_program_cache, reset_seeds):
-    t3k_mesh_device.enable_async(True)
+def test_grok_mlp_inference(t3k_mesh_device, reset_seeds):
     # Specify different dtypes for each feedForward weights
     dtypes = {
         "linear": ttnn.bfloat4_b,
@@ -34,7 +35,7 @@ def test_grok_mlp_inference(t3k_mesh_device, use_program_cache, reset_seeds):
         "linear_v": ttnn.bfloat4_b,
     }
 
-    model_args = TtModelArgs(t3k_mesh_device.get_device(0), dummy_weights=os.getenv("CI") == "true")
+    model_args = TtModelArgs(t3k_mesh_device, dummy_weights=os.getenv("CI") == "true")
     model_args.n_layers = 1
     state_dict = model_args.load_state_dict()
 

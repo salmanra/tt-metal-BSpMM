@@ -13,8 +13,8 @@
 #define MOREH_ABS_POW_FACTORY_H(name)                                                       \
     struct name {                                                                           \
         struct shared_variables_t {                                                         \
-            KernelHandle reader_kernels_id;                                                 \
-            KernelHandle writer_kernels_id;                                                 \
+            tt::tt_metal::KernelHandle reader_kernels_id;                                   \
+            tt::tt_metal::KernelHandle writer_kernels_id;                                   \
             std::size_t num_cores_to_be_used;                                               \
             std::size_t num_cores_y;                                                        \
         };                                                                                  \
@@ -62,7 +62,7 @@ struct MorehAbsPowOperation {
     static tensor_return_value_t create_output_tensors(const operation_attributes_t&, const tensor_args_t&);
     static std::tuple<operation_attributes_t, tensor_args_t> invoke(
         const Tensor& input,
-        const float p,
+        float p,
         const std::optional<Tensor>& output,
         const std::optional<MemoryConfig>& memory_config,
         const std::optional<DeviceComputeKernelConfig>& compute_kernel_config);

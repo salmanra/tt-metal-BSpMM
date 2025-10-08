@@ -16,13 +16,13 @@ def format_tensor(x, target_layout, device, output_mem_config, pad_value=0.0):
         return x
 
     if x.get_layout() == ttnn.ROW_MAJOR_LAYOUT and target_layout == ttnn.TILE_LAYOUT:
-        x_padded_shape = ttnn.pad_to_tile_shape(x.shape.with_tile_padding(), False, False, True, True)
-        if x.shape.with_tile_padding() != x_padded_shape:
+        x_padded_shape = ttnn.pad_to_tile_shape(x.padded_shape)
+        if x.padded_shape != x_padded_shape:
             return ttnn.format_input_tensor(x, device, x_padded_shape, pad_value, target_layout, output_mem_config)
         else:
             return ttnn.tilize(x, memory_config=output_mem_config, use_multicore=True)
     elif x.get_layout() == ttnn.TILE_LAYOUT and target_layout == ttnn.ROW_MAJOR_LAYOUT:
-        if x.shape.with_tile_padding() != x.shape:
+        if x.padded_shape != x.shape:
             return ttnn.format_output_tensor(x, x.shape_without_padding(), device, target_layout, output_mem_config)
         else:
             return ttnn.untilize(x, memory_config=output_mem_config, use_multicore=True)
@@ -80,7 +80,7 @@ def cache_weights_in_weka(device, model_location_generator):
                 ttnn.bfloat16,
                 ttnn.ROW_MAJOR_LAYOUT,
             )
-        ttnn.dump_tensor(file_name + str(key) + ".bin", value)
+        ttnn.dump_tensor(file_name + str(key) + ".tensorbin", value)
 
 
 def store_weights(model_version, file_name, dtype, base_addresses):
@@ -114,7 +114,7 @@ def store_weights(model_version, file_name, dtype, base_addresses):
                 ttnn.ROW_MAJOR_LAYOUT,
             )
 
-        ttnn.dump_tensor(file_name + str(key) + str(dtype) + ".bin", value)
+        ttnn.dump_tensor(file_name + str(key) + str(dtype) + ".tensorbin", value)
 
 
 def get_tt_cache_path(model_version):

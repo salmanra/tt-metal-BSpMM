@@ -8,7 +8,7 @@ import copy
 import torch
 import torch.nn as nn
 import ttnn
-from models.utility_functions import comp_allclose
+from models.common.utility_functions import comp_allclose
 from loguru import logger
 
 from tests.ttnn.utils_for_testing import assert_equal
@@ -102,7 +102,7 @@ def test_full_like_float(device, input_shape, fill_value, dtype, layout):
         ttnn.TILE_LAYOUT,  # Currently only support tile layout
     ],
 )
-def test_full_like_callback(device, input_shape, fill_value, layout, use_program_cache):
+def test_full_like_callback(device, input_shape, fill_value, layout):
     for i in range(2):
         torch_input = torch.randint(0, 100, (input_shape), dtype=torch.int32)
         torch_output = torch.full_like(torch_input, fill_value)

@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
+# SPDX-FileCopyrightText: © 2023 Tenstorrent AI ULC
 
 # SPDX-License-Identifier: Apache-2.0
 
@@ -7,15 +7,10 @@ import json
 import importlib
 import os
 import pathlib
+import re
 from types import ModuleType
 
 from loguru import logger
-
-# Sets env and updates shared libs rpath
-# This is a tweak required for a proper wheel functioning
-import ttnn.library_tweaks
-
-library_tweaks.setup_ttnn_so()
 
 import ttnn._ttnn
 
@@ -58,7 +53,7 @@ def save_config_to_json_file(json_path):
     with open(json_path, "w") as f:
         normalized_config = {}
         for key in dir(CONFIG):
-            if "__" in key:
+            if re.match("^_.+_$", key):
                 continue
             value = getattr(CONFIG, key)
             if isinstance(value, pathlib.Path):
@@ -94,23 +89,67 @@ def manage_config(name, value):
 
 
 from ttnn._ttnn.multi_device import (
-    get_device_tensor,
+    CppMeshToTensor,
+    CppTensorToMesh,
+    PlacementReplicate,
+    PlacementShard,
+    MeshMapperConfig,
+    MeshComposerConfig,
     get_device_tensors,
-    aggregate_as_tensor,
-    get_t3k_physical_device_ids_ring,
+    from_host_shards,
+    combine_device_tensors,
+    replicate_tensor_to_mesh_mapper,
+    shard_tensor_to_mesh_mapper,
+    create_mesh_mapper,
+    concat_mesh_to_tensor_composer,
+    create_mesh_composer,
+    compute_distribution_to_mesh_mapping,
+    aggregate_tensor,
+    distribute_tensor,
+    using_distributed_env,
 )
 
-from ttnn._ttnn.events import create_event, record_event, wait_for_event
+from ttnn._ttnn.events import (
+    MeshEvent,
+    record_event,
+    wait_for_event,
+    event_synchronize,
+)
+
+from ttnn._ttnn.operations.trace import (
+    MeshTraceId,
+    begin_trace_capture,
+    end_trace_capture,
+    execute_trace,
+    release_trace,
+)
+
+from ttnn._ttnn.operations.debug import (
+    apply_device_delay,
+)
 
 from ttnn._ttnn.global_circular_buffer import (
     create_global_circular_buffer,
 )
 
+from ttnn._ttnn.fabric import FabricConfig, FabricReliabilityMode, FabricTensixConfig, set_fabric_config
+
+# Import cluster functions and types
+from ttnn._ttnn import cluster
+
 from ttnn._ttnn.global_semaphore import (
     create_global_semaphore,
     get_global_semaphore_address,
     reset_global_semaphore_value,
-    create_global_semaphore_with_same_address,
+)
+
+from ttnn._ttnn.mesh_socket import (
+    create_socket_pair,
+    MeshSocket,
+    SocketConfig,
+    SocketMemoryConfig,
+    SocketConnection,
+    MeshCoreCoord,
 )
 
 from ttnn.types import (
@@ -128,6 +167,8 @@ from ttnn.types import (
     MemoryConfig,
     BufferType,
     TensorMemoryLayout,
+    ShardShapeAlignment,
+    ShardDistributionStrategy,
     DRAM_MEMORY_CONFIG,
     L1_MEMORY_CONFIG,
     L1_BLOCK_SHARDED_MEMORY_CONFIG,
@@ -135,8 +176,8 @@ from ttnn.types import (
     L1_WIDTH_SHARDED_MEMORY_CONFIG,
     ShardStrategy,
     ShardOrientation,
-    ShardMode,
     ShardSpec,
+    NdShardSpec,
     CoreRangeSet,
     CoreRange,
     CoreCoord,
@@ -147,19 +188,34 @@ from ttnn.types import (
     StorageType,
     DEVICE_STORAGE_TYPE,
     CoreGrid,
+    CoreType,
     CoreRange,
     Shape,
+    TensorSpec,
     Tensor,
+    ThrottleLevel,
     DeviceComputeKernelConfig,
     WormholeComputeKernelConfig,
     GrayskullComputeKernelConfig,
     MeshShape,
-    MeshOffset,
+    MeshCoordinate,
+    MeshCoordinateRange,
+    MeshCoordinateRangeSet,
+    QueueId,
     UnaryWithParam,
     UnaryOpType,
     BinaryOpType,
     BcastOpMath,
     BcastOpDim,
+    CBFormatDescriptor,
+    CBDescriptor,
+    ReaderConfigDescriptor,
+    WriterConfigDescriptor,
+    ComputeConfigDescriptor,
+    KernelDescriptor,
+    SemaphoreDescriptor,
+    ProgramDescriptor,
+    TensorAccessorArgs,
 )
 
 from ttnn.device import (
@@ -169,12 +225,11 @@ from ttnn.device import (
     DispatchCoreConfig,
     open_device,
     close_device,
-    enable_program_cache,
-    disable_and_clear_program_cache,
     manage_device,
     synchronize_device,
     dump_device_memory_state,
     get_memory_view,
+    get_max_worker_l1_unreserved_size,
     GetPCIeDeviceID,
     GetNumPCIeDevices,
     GetNumAvailableDevices,
@@ -182,7 +237,7 @@ from ttnn.device import (
     CreateDevices,
     CloseDevice,
     CloseDevices,
-    DumpDeviceProfiler,
+    ReadDeviceProfiler,
     SetDefaultDevice,
     GetDefaultDevice,
     format_input_tensor,
@@ -191,8 +246,8 @@ from ttnn.device import (
     SubDevice,
     SubDeviceId,
     SubDeviceManagerId,
-    DefaultQueueId,
     init_device_compute_kernel_config,
+    SetRootDir,
 )
 
 from ttnn.profiler import start_tracy_zone, stop_tracy_zone, tracy_message, tracy_frame
@@ -207,27 +262,23 @@ from ttnn.core import (
     has_tile_padding,
     is_sharded,
     get_memory_config,
+    light_metal_begin_capture,
+    light_metal_end_capture,
+    LightMetalReplay,
     create_sharded_memory_config,
     create_sharded_memory_config_,
-    dump_memory_config,
-    load_memory_config,
     dump_stack_trace_on_segfault,
     num_cores_to_corerangeset,
     num_cores_to_corerangeset_in_subcoregrids,
+    get_current_command_queue_id_for_thread,
 )
 
 import ttnn.reflection
 import ttnn.database
 
-
-begin_trace_capture = ttnn._ttnn.operations.core.begin_trace_capture
-end_trace_capture = ttnn._ttnn.operations.core.end_trace_capture
-execute_trace = ttnn._ttnn.operations.core.execute_trace
-release_trace = ttnn._ttnn.operations.core.release_trace
-
-
 from ttnn.decorators import (
     attach_golden_function,
+    command_queue,
     create_module_if_not_exists,
     dump_operations,
     get_golden_function,
@@ -263,6 +314,7 @@ sub = ttnn.subtract
 sub_ = ttnn.subtract_
 mul = ttnn.multiply
 mul_ = ttnn.multiply_
+div_ = ttnn.divide_
 
 
 # TODO: pybind the overloaded operators below
@@ -294,7 +346,10 @@ from ttnn.operations.normalization import (
     LayerNormShardedMultiCoreProgramConfig,
     create_group_norm_weight_bias_rm,
     create_group_norm_input_mask,
+    create_group_norm_input_negative_mask,
+    create_group_norm_reciprocals,
     determine_expected_group_norm_sharded_config_and_grid_size,
+    dram_group_norm_params_from_torch,
 )
 
 from ttnn.operations.embedding import (
@@ -309,19 +364,35 @@ from ttnn.operations.reduction import (
     ReduceType,
 )
 
-from ttnn.operations.ccl import (
-    Topology,
-    teardown_edm_fabric,
-    initialize_edm_fabric,
-)
+from ttnn.operations.ccl import Topology
 
 from ttnn.operations.conv2d import (
     Conv2dConfig,
     get_conv_output_dim,
+    Conv2dSliceConfig,
+    Conv2dDRAMSliceHeight,
+    Conv2dDRAMSliceWidth,
+    Conv2dL1Full,
+    Conv2dL1FullSliceConfig,
     prepare_conv_weights,
     prepare_conv_bias,
+    prepare_conv_transpose2d_weights,
+    prepare_conv_transpose2d_bias,
+    SlidingWindowParallelConfig,
 )
-from ttnn.operations.conv1d import Conv1d, Conv1dConfig
+from ttnn._ttnn.operations.conv import (
+    convert_conv_weight_tensor_to_tiled_layout,
+    convert_conv_weight_tensor_to_special_padding_tiled_layout,
+    convert_conv_weight_tensor_to_grouped_layout,
+)
+
+from ttnn.operations.pool import (
+    prepare_grid_sample_grid,
+)
+
+from ttnn._ttnn.operations.experimental import Conv3dConfig
+
+Conv1dConfig = ttnn._ttnn.operations.conv.Conv2dConfig
 
 from ttnn.operations.transformer import SDPAProgramConfig
 
@@ -335,3 +406,8 @@ from ttnn._ttnn.device import get_arch_name as _get_arch_name
 
 def get_arch_name():
     return _get_arch_name()
+
+
+if "TT_METAL_HOME" not in os.environ:
+    this_dir = os.path.dirname(__file__)
+    SetRootDir(os.path.abspath(this_dir))

@@ -5,20 +5,18 @@
 from typing import Optional, Tuple
 
 import torch
+
 import ttnn
-from ttnn import ReplicateTensorToMesh
+from models.common.utility_functions import is_grayskull, is_wormhole_b0
+from models.demos.falcon7b_common.tests.test_utils import tt_from_torch
 from models.demos.falcon7b_common.tt.falcon_lm_head import falcon_lm_head_matmul_2d
 from models.demos.falcon7b_common.tt.falcon_model import TtFalconModelShared
 from models.demos.falcon7b_common.tt.model_utils import (
+    get_default_hifi2_kernel_config,
     get_falcon_default_core_grid,
     get_weights_cached,
-    get_default_hifi2_kernel_config,
 )
-from models.demos.falcon7b_common.tests.test_utils import tt_from_torch
-from models.utility_functions import (
-    is_grayskull,
-    is_wormhole_b0,
-)
+from ttnn import ReplicateTensorToMesh
 
 
 def falcon_lm_head_matmul(
@@ -28,7 +26,7 @@ def falcon_lm_head_matmul(
     output_mem_config=ttnn.DRAM_MEMORY_CONFIG,
     output_dtype=None,
 ):
-    seq_len = input_tensor_a.shape.with_tile_padding()[2]
+    seq_len = input_tensor_a.padded_shape[2]
     if seq_len > 512:
         # TODO: Review if this path is used? If not, we can delete
         return ttnn.matmul(
@@ -158,7 +156,7 @@ class TtFalconCausalLM(TtFalconModelShared):
         )
 
         if llm_mode == "prefill":
-            if self.model_config["PREFILL_OPTIMIZED_MODE"] and hidden_states.shape.with_tile_padding()[-2] > 512:
+            if self.model_config["PREFILL_OPTIMIZED_MODE"] and hidden_states.padded_shape[-2] > 512:
                 lm_logits = falcon_lm_head_matmul_2d(
                     hidden_states,
                     self.lm_head_sliced_weights,

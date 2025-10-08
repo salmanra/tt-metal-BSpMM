@@ -4,15 +4,14 @@
 
 import torch
 import math
-from torch.nn import functional as F
 from functools import partial
 
 import ttnn
 
 import models.experimental.bloom.bloom_utils as bloom_utils
 import models.experimental.bloom.tt.bloom_block as bloom_block
-from typing import Optional, Tuple, Union
-from models.utility_functions import pad_by_zero
+from typing import Optional, Tuple
+from models.common.utility_functions import pad_by_zero
 
 
 def _make_causal_mask(
@@ -516,7 +515,7 @@ class TtBloomModel(torch.nn.Module):
             i = i + 1
 
         # Add last hidden state
-        hidden_states = self.ln_f(hidden_states)  # , overrideH=hidden_states.shape.with_tile_padding()[-2])
+        hidden_states = self.ln_f(hidden_states)  # , overrideH=hidden_states.padded_shape[-2])
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)

@@ -1,5 +1,5 @@
-Converting torch Model to ttnn
-###############################
+Converting PyTorch Model to TT-NN
+#################################
 
 .. note::
    This particular example only works on Grayskull.
@@ -48,7 +48,7 @@ Following TDD, the first step is to write a test for the model:
     import ttnn
     import torch_bert
 
-    from models.utility_functions import torch_random
+    from models.common.utility_functions import torch_random
     from tests.ttnn.utils_for_testing import assert_with_pcc
 
     @pytest.mark.parametrize("model_name", ["phiyodr/bert-large-finetuned-squad2"])
@@ -110,7 +110,7 @@ Starting off with the test:
     import ttnn
     import ttnn_bert
 
-    from models.utility_functions import torch_random
+    from models.common.utility_functions import torch_random
     from tests.ttnn.utils_for_testing import assert_with_pcc
 
     @pytest.mark.parametrize("model_name", ["phiyodr/bert-large-finetuned-squad2"])
@@ -171,7 +171,7 @@ Starting off with the test:
     import ttnn
     import ttnn_bert
 
-    from models.utility_functions import torch_random
+    from models.common.utility_functions import torch_random
     from tests.ttnn.utils_for_testing import assert_with_pcc
 
     @pytest.mark.parametrize("model_name", ["phiyodr/bert-large-finetuned-squad2"])

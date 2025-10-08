@@ -6,8 +6,6 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/common_values.hpp"
 
-// #include "debug/dprint.h"
-
 // split REDUCE across cores
 void kernel_main() {
     uint32_t reduce_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(0));
@@ -28,8 +26,8 @@ void kernel_main() {
     constexpr uint32_t cb_ex = tt::CBIndex::c_9;          // E[x] partial reduce
     constexpr uint32_t cb_ex_global = tt::CBIndex::c_15;  // E[x] global reduce
     constexpr uint32_t cb_in0 = tt::CBIndex::c_0;         // sharded cb
-    constexpr uint32_t cb_repack = tt::CBIndex::c_26;
-    constexpr uint32_t cb_repack_out = tt::CBIndex::c_31;
+    constexpr uint32_t cb_repack = tt::CBIndex::c_11;
+    constexpr uint32_t cb_repack_out = tt::CBIndex::c_12;
     constexpr uint32_t cb_out0 = tt::CBIndex::c_16;
 
     const uint32_t single_tile_size_bytes = get_tile_size(cb_ex_partial);  // tile size

@@ -23,17 +23,14 @@
 ALWI void ACQ() { acquire_dst(); }
 ALWI void REL() { release_dst(); }
 
-inline void tilize_in(
-    uint32_t in_cb_id, uint32_t in_subblock_h, uint32_t in_block_w, uint32_t in_num_subblocks, uint32_t out_cb_id) {
-    tilize_init_short(in_cb_id, in_block_w, out_cb_id);
+inline void tilize_in(uint32_t in_cb_id, uint32_t in_block_w, uint32_t in_num_subblocks, uint32_t out_cb_id) {
+    tilize_init(in_cb_id, in_block_w, out_cb_id);
     for (uint32_t in_subblock = 0; in_subblock < in_num_subblocks; ++in_subblock) {
-        for (uint32_t h = 0; h < in_subblock_h; ++h) {
-            cb_wait_front(in_cb_id, in_block_w);
-            cb_reserve_back(out_cb_id, in_block_w);
-            tilize_block(in_cb_id, in_block_w, out_cb_id);
-            cb_push_back(out_cb_id, in_block_w);
-            cb_pop_front(in_cb_id, in_block_w);
-        }
+        cb_wait_front(in_cb_id, in_block_w);
+        cb_reserve_back(out_cb_id, in_block_w);
+        tilize_block(in_cb_id, in_block_w, out_cb_id);
+        cb_push_back(out_cb_id, in_block_w);
+        cb_pop_front(in_cb_id, in_block_w);
     }
     tilize_uninit(in_cb_id, out_cb_id);
 }
@@ -71,7 +68,7 @@ inline void eltwise_mul_and_add_block_v2(
             cb_push_back(out_cb_id, 1);
             cb_pop_front(eltwise_mul_partials_cb_cb_id, 1);
         } else {
-            add_tiles_init();
+            add_tiles_init(eltwise_mul_partials_cb_cb_id, out_cb_id);
             cb_wait_front(eltwise_mul_partials_cb_cb_id, 1);
             cb_wait_front(out_cb_id, 1);
             ACQ();
@@ -102,7 +99,7 @@ void MAIN {
     constexpr uint32_t in0_block_num_tiles =
         get_compile_time_arg_val(2);  // out_subblock_h*in0_block_w*in0_num_subblocks;
     constexpr uint32_t in0_subblock_num_tiles = get_compile_time_arg_val(3);  // out_subblock_h*in0_block_w
-    constexpr uint32_t in0_subblock_h = get_compile_time_arg_val(4);
+    constexpr uint32_t reader_num_h_subblocks = get_compile_time_arg_val(4);
     constexpr uint32_t in1_num_subblocks =
         get_compile_time_arg_val(5);  // outer column block size (in inner column blocks)
     constexpr uint32_t in1_block_num_tiles =
@@ -122,15 +119,14 @@ void MAIN {
     constexpr uint32_t out_block_w = in1_block_w;
 
     // CB indices
-    constexpr uint32_t in0_cb_id = tt::CBIndex::c_0;
-    constexpr uint32_t in1_cb_id = tt::CBIndex::c_1;
-    constexpr uint32_t in0_pretilize_cb_id = tt::CBIndex::c_6;
-    constexpr uint32_t in0_cb_second_reader_id = tt::CBIndex::c_7;
-    constexpr uint32_t eltwise_mul_partials_cb = tt::CBIndex::c_24;
-    constexpr uint32_t tilized_in0_cb_id = tt::CBIndex::c_25;
-    constexpr uint32_t temp_sum_cb = tt::CBIndex::c_27;
-    constexpr uint32_t prev_eltwise_cb = tt::CBIndex::c_29;
-    constexpr uint32_t out_cb_id = tt::CBIndex::c_16;
+    constexpr uint32_t in0_cb_id = get_compile_time_arg_val(18);
+    constexpr uint32_t in1_cb_id = get_compile_time_arg_val(19);
+    constexpr uint32_t in0_pretilize_cb_id = get_compile_time_arg_val(20);
+    constexpr uint32_t in0_cb_second_reader_id = get_compile_time_arg_val(21);
+    constexpr uint32_t eltwise_mul_partials_cb = get_compile_time_arg_val(22);
+    constexpr uint32_t tilized_in0_cb_id = get_compile_time_arg_val(23);
+    constexpr uint32_t out_cb_id = get_compile_time_arg_val(24);
+    constexpr uint32_t temp_sum_cb = get_compile_time_arg_val(25);
 
     constexpr uint32_t in0_num_subblocks_read = in0_num_subblocks;
 
@@ -144,7 +140,7 @@ void MAIN {
             if constexpr (tilize_in0) {
                 reconfig_data_format_srca(in0_cb_id);
                 pack_reconfig_data_format(tilized_in0_cb_id);
-                tilize_in(in0_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks_read, tilized_in0_cb_id);
+                tilize_in(in0_cb_id, in0_block_w, in0_num_subblocks_read, tilized_in0_cb_id);
             }
             reconfig_data_format_srca(tilized_in0_cb_id);
             pack_reconfig_data_format(eltwise_mul_partials_cb);

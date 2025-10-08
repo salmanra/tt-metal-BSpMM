@@ -11,7 +11,7 @@ from tests.sweep_framework.sweep_utils.utils import gen_shapes
 from tests.tt_eager.python_api_testing.sweep_tests.generation_funcs import gen_func_with_cast_tt
 
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 
 # Parameters provided to the test vector generator are defined here.
@@ -47,7 +47,7 @@ def run(
     torch.manual_seed(0)
 
     torch_input_tensor = gen_func_with_cast_tt(
-        partial(torch_random, low=0.0001, high=100, dtype=torch.float32), input_dtype
+        partial(torch_random, low=1, high=100, dtype=torch.float32), input_dtype
     )(input_shape)
     golden_function = ttnn.get_golden_function(ttnn.digamma)
     torch_output_tensor = golden_function(torch_input_tensor)

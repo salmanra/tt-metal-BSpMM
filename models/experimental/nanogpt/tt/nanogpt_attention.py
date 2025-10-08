@@ -5,9 +5,9 @@
 import torch.nn as nn
 import ttnn
 import math
-from models.helper_funcs import Linear
+from models.common.helper_funcs import Linear
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
@@ -23,17 +23,25 @@ class TtCausalSelfAttention(nn.Module):
 
         self.device = device
         # Get the weights
-        self.tt_weight_c_attn = ttnn.load_tensor(tt_cache_path + base_address + ".c_attn.weight" + str(dtype) + ".bin")
+        self.tt_weight_c_attn = ttnn.load_tensor(
+            tt_cache_path + base_address + ".c_attn.weight" + str(dtype) + ".tensorbin"
+        )
 
-        self.tt_weight_c_proj = ttnn.load_tensor(tt_cache_path + base_address + ".c_proj.weight" + str(dtype) + ".bin")
+        self.tt_weight_c_proj = ttnn.load_tensor(
+            tt_cache_path + base_address + ".c_proj.weight" + str(dtype) + ".tensorbin"
+        )
 
         self.tt_weight_c_attn = ttnn.transpose(self.tt_weight_c_attn, -2, -1)
         self.tt_weight_c_proj = ttnn.transpose(self.tt_weight_c_proj, -2, -1)
 
         # Load biases
-        self.tt_bias_c_attn = ttnn.load_tensor(tt_cache_path + base_address + ".c_attn.bias" + str(dtype) + ".bin")
+        self.tt_bias_c_attn = ttnn.load_tensor(
+            tt_cache_path + base_address + ".c_attn.bias" + str(dtype) + ".tensorbin"
+        )
 
-        self.tt_bias_c_proj = ttnn.load_tensor(tt_cache_path + base_address + ".c_proj.bias" + str(dtype) + ".bin")
+        self.tt_bias_c_proj = ttnn.load_tensor(
+            tt_cache_path + base_address + ".c_proj.bias" + str(dtype) + ".tensorbin"
+        )
 
         self.n_head = self.config.n_head
         self.n_embd = self.config.n_embd
@@ -67,7 +75,7 @@ class TtCausalSelfAttention(nn.Module):
             B,
             T,
             C,
-        ) = x.shape.with_tile_padding()  # batch size, sequence length, embedding dimensionality (n_embd)
+        ) = x.padded_shape  # batch size, sequence length, embedding dimensionality (n_embd)
 
         x1 = self.c_attn(x)
 
@@ -94,7 +102,7 @@ class TtCausalSelfAttention(nn.Module):
         key_layer_transposed = ttnn.transpose(k, -2, -1)
         att = ttnn.matmul(q, key_layer_transposed)
 
-        const_att = self.const_tensor(att.shape.with_tile_padding(), 1.0 / math.sqrt(k.shape.with_tile_padding()[-1]))
+        const_att = self.const_tensor(att.padded_shape, 1.0 / math.sqrt(k.padded_shape[-1]))
 
         att = ttnn.mul(att, const_att)
 

@@ -15,7 +15,7 @@
 
 namespace ttnn::operations::normalization {
 
-operation::ProgramWithCallbacks layernorm_multi_core(
+tt::tt_metal::operation::ProgramWithCallbacks layernorm_multi_core(
     const Tensor& a,
     const std::optional<const Tensor>& b,
     const std::optional<const Tensor>& gamma,
@@ -23,9 +23,12 @@ operation::ProgramWithCallbacks layernorm_multi_core(
     Tensor& output,
     LayerNormType norm_type,
     float eps,
+    bool legacy_reduction,
+    bool legacy_rsqrt,
+    bool use_welford,
     DeviceComputeKernelConfig compute_kernel_config);
 
-operation::ProgramWithCallbacks layernorm_multi_core_sharded(
+tt::tt_metal::operation::ProgramWithCallbacks layernorm_multi_core_sharded(
     const Tensor& a,
     const std::optional<const Tensor>& b,
     const std::optional<const Tensor>& gamma,
@@ -39,6 +42,8 @@ operation::ProgramWithCallbacks layernorm_multi_core_sharded(
     uint32_t subblock_wt,
     uint32_t block_ht,
     uint32_t block_wt,
+    bool legacy_reduction,
+    bool legacy_rsqrt,
     DeviceComputeKernelConfig compute_kernel_config);
 
 struct LayerNorm {
@@ -55,7 +60,7 @@ struct LayerNorm {
         const std::vector<std::optional<const Tensor>>& optional_input_tensors) const;
     std::vector<TensorSpec> compute_output_specs(const std::vector<Tensor>& input_tensors) const;
     std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors) const;
-    operation::ProgramWithCallbacks create_program(
+    tt::tt_metal::operation::ProgramWithCallbacks create_program(
         const std::vector<Tensor>& input_tensors,
         const std::vector<std::optional<const Tensor>>& optional_input_tensors,
         std::vector<Tensor>& output_tensors) const;

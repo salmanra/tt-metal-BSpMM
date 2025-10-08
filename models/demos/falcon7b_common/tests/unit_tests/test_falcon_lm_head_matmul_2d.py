@@ -2,14 +2,13 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from loguru import logger
 import pytest
 import torch
+from loguru import logger
 
 import ttnn
-
+from models.common.utility_functions import comp_pcc, torch2tt_tensor, tt2torch_tensor
 from models.demos.falcon7b_common.tt.falcon_lm_head import falcon_lm_head_matmul_2d
-from models.utility_functions import comp_pcc, tt2torch_tensor, torch2tt_tensor
 
 
 def run_falcon_lm_head_matmul_2d(
@@ -68,7 +67,7 @@ def run_falcon_lm_head_matmul_2d(
     for i in range(num_slices):
         b_t_slices[i].deallocate(True)
 
-    assert out.shape.with_tile_padding() == expected_output_shape
+    assert out.padded_shape == expected_output_shape
 
     # check pcc
     out = tt2torch_tensor(out)

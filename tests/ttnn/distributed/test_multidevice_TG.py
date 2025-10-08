@@ -9,6 +9,7 @@ import ttnn
 import tempfile
 from loguru import logger
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_pcc
+from tests.tests_common.skip_reasons import LEGACY_CCL_SKIP
 
 from ttnn import (
     ShardTensorToMesh,
@@ -16,10 +17,9 @@ from ttnn import (
     ReplicateTensorToMesh,
     ConcatMeshToTensor,
     ConcatMesh2dToTensor,
-    ListMeshToTensor,
     MeshToTensor,
 )
-from models.utility_functions import nearest_32
+from models.common.utility_functions import nearest_32
 
 
 @pytest.mark.skip("1D device mesh not supported")
@@ -384,7 +384,7 @@ def test_galaxy_eltwise_add(M, N, mesh_device):
         memory_config=LN_OUTPUT_MEMCFG,
     )
 
-    out = ttnn.to_torch(out, mesh_composer=ListMeshToTensor(mesh_device))[0]
+    out = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(out.cpu())][0]
 
     out_pass, out_pcc = comp_pcc(gt, out, pcc=0.99999)
     logger.info(f"PCC value: {out_pcc}")
@@ -564,17 +564,19 @@ def test_galaxy_nlp_create_heads_decode(
     )
 
     # compare
-    q_heads_tt_cpu = ttnn.to_torch(q_heads_tt, mesh_composer=ListMeshToTensor(mesh_device))[0][..., :n_local_heads, :]
+    q_heads_tt_cpu = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(q_heads_tt.cpu())][0][
+        ..., :n_local_heads, :
+    ]
     out_pass_q, output_pcc_q = comp_pcc(q_heads_tt_cpu, q_heads_pt, pcc=0.9999)
     logger.info(f"PCC value: {output_pcc_q}")
 
-    k_heads_tt_cpu = ttnn.to_torch(k_heads_tt, mesh_composer=ListMeshToTensor(mesh_device))[0][
+    k_heads_tt_cpu = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(k_heads_tt.cpu())][0][
         ..., :n_local_kv_heads, :
     ]
     out_pass_k, output_pcc_k = comp_pcc(k_heads_tt_cpu, k_heads_pt, pcc=0.9999)
     logger.info(f"PCC value: {output_pcc_k}")
 
-    v_heads_tt_cpu = ttnn.to_torch(v_heads_tt, mesh_composer=ListMeshToTensor(mesh_device))[0][
+    v_heads_tt_cpu = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(v_heads_tt.cpu())][0][
         ..., :n_local_kv_heads, :
     ]
     out_pass_v, output_pcc_v = comp_pcc(v_heads_tt_cpu, v_heads_pt, pcc=0.9999)
@@ -690,8 +692,8 @@ def test_galaxy_rotary_matmul(batch, seq_len, head_dim, n_local_heads, n_local_k
     query_layer_gt = q_heads_pt @ rot_mat_pt
     key_layer_gt = k_heads_pt @ rot_mat_pt
 
-    query_layer_cpu = ttnn.to_torch(query_layer, mesh_composer=ListMeshToTensor(mesh_device))[0]
-    key_layer_cpu = ttnn.to_torch(key_layer, mesh_composer=ListMeshToTensor(mesh_device))[0]
+    query_layer_cpu = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(query_layer.cpu())][0]
+    key_layer_cpu = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(key_layer.cpu())][0]
 
     out_pass_q, out_pcc_q = comp_pcc(query_layer_cpu, query_layer_gt, pcc=0.999)
     logger.info(f"PCC value: {out_pcc_q}")
@@ -709,9 +711,7 @@ def test_galaxy_rotary_matmul(batch, seq_len, head_dim, n_local_heads, n_local_k
 @pytest.mark.parametrize("input_dtype", [ttnn.DataType.BFLOAT16])
 class TestUpdateCache:
     @pytest.mark.parametrize("seq_len", [128, 2048])
-    def test_fill_cache(
-        self, seq_len, head_dim, max_seq_len, num_users, num_heads, input_dtype, mesh_device, use_program_cache
-    ):
+    def test_fill_cache(self, seq_len, head_dim, max_seq_len, num_users, num_heads, input_dtype, mesh_device):
         torch.manual_seed(1234)
 
         cache_dtype = input_dtype
@@ -758,7 +758,7 @@ class TestUpdateCache:
             cachett = ttnn.fill_cache(cachett, xt, i)
             cache[i : i + 1, :, : x.shape[-2], :] = x
 
-        tt_got_back = ttnn.to_torch(cachett, mesh_composer=ListMeshToTensor(mesh_device))[0]
+        tt_got_back = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(cachett.cpu())][0]
         eq, output = comp_pcc(cache, tt_got_back)
         logger.info(output)
         assert eq
@@ -777,7 +777,6 @@ class TestUpdateCache:
         input_dtype,
         cache_dtype,
         mesh_device,
-        use_program_cache,
     ):
         torch.manual_seed(1234)
 
@@ -833,7 +832,7 @@ class TestUpdateCache:
         cachett = ttnn.update_cache(cachett, xt, cache_idx, batch_offset=batch_offset)
         cache[0:num_users, 0:num_heads, cache_idx : cache_idx + x.shape[-2], 0 : x.shape[-1]] = x
 
-        tt_got_back = ttnn.to_torch(cachett, mesh_composer=ListMeshToTensor(mesh_device))[0]
+        tt_got_back = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(cachett.cpu())][0]
 
         eq_cache, output_cache = comp_pcc(cache, tt_got_back)  # checks the entire kv cache
         eq_update, output_update = comp_pcc(
@@ -978,7 +977,7 @@ def run_test_sdpa_decode_single_iter(
         memory_config=height_sharded_memcfg if sharded_out else dram_memcfg,
     )
 
-    tt_back = ttnn.to_torch(tt_back, mesh_composer=ListMeshToTensor(mesh_device))[0]
+    tt_back = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(tt_back.cpu())][0]
     tt_back = tt_back[:, :, :nh, :]
 
     Q_slice = Q[:, :, :nh, :].permute(1, 2, 0, 3)  # b, nh, 1, d
@@ -1078,7 +1077,7 @@ def test_galaxy_nlp_concat_heads_decode(
     concat_head_output_pt = concat_head_input[:, :, :n_local_heads].reshape(1, 1, batch, head_dim * n_local_heads)
 
     # Compare
-    concat_head_output_tt_cpu = ttnn.to_torch(concat_head_output, mesh_composer=ListMeshToTensor(mesh_device))[0]
+    concat_head_output_tt_cpu = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(concat_head_output.cpu())][0]
     concat_head_output_tt_unpadded = concat_head_output_tt_cpu[:, :, :batch, :]
     out_pass, output_pcc = comp_pcc(concat_head_output_tt_unpadded, concat_head_output_pt, pcc=0.9999)
     logger.info(f"PCC value: {output_pcc}")
@@ -1172,7 +1171,7 @@ def test_galaxy_layernorm(M, N, mesh_device):
 
     # Compare
     beta = torch.zeros(1, 1, N // 32, 32)
-    norm_output_tt_cpu = ttnn.to_torch(norm_output, mesh_composer=ListMeshToTensor(mesh_device))[0]
+    norm_output_tt_cpu = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(norm_output.cpu())][0]
     ref_rmsnorm = rmsnorm(layernorm_input, norm_weights.flatten(), beta.flatten(), norm_eps)
 
     out_pass, output_pcc = comp_pcc(norm_output_tt_cpu, ref_rmsnorm, pcc=0.999)
@@ -1203,6 +1202,7 @@ def test_device_submesh(mesh_device):
 
 
 @pytest.mark.parametrize("mesh_device", [pytest.param((1, 4), id="1x4_grid")], indirect=True)
+@pytest.mark.skip(reason=LEGACY_CCL_SKIP)
 def test_device_line_all_gather_1x4(mesh_device):
     rows, cols, tile_size = 1, 4, 32
     full_tensor = torch.rand((1, 1, tile_size * rows, tile_size * cols), dtype=torch.bfloat16)
@@ -1211,7 +1211,8 @@ def test_device_line_all_gather_1x4(mesh_device):
         full_tensor, mesh_mapper=ShardTensor2dMesh(mesh_device, mesh_shape=(rows, cols), dims=(-2, -1))
     )
     ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device)
-    ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=3, num_links=1, topology=ttnn.Topology.Linear)
+    # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+    # ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=3, num_links=1, topology=ttnn.Topology.Linear)
 
     device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(ttnn_tensor)
     for index, device_tensor in enumerate(device_tensors):
@@ -1221,6 +1222,7 @@ def test_device_line_all_gather_1x4(mesh_device):
 
 
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 1), id="8x1_grid")], indirect=True)
+@pytest.mark.skip(reason=LEGACY_CCL_SKIP)
 def test_device_line_all_gather_8x1(mesh_device):
     rows, cols, tile_size = 8, 1, 32
     full_tensor = torch.rand((1, 1, tile_size * rows, tile_size * cols), dtype=torch.bfloat16)
@@ -1229,9 +1231,10 @@ def test_device_line_all_gather_8x1(mesh_device):
         full_tensor, mesh_mapper=ShardTensor2dMesh(mesh_device, mesh_shape=(rows, cols), dims=(-2, -1))
     )
     ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device)
-    ttnn_tensor = ttnn.all_gather(
-        ttnn_tensor, dim=2, cluster_axis=0, mesh_device=mesh_device, num_links=1, topology=ttnn.Topology.Linear
-    )
+    # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+    # ttnn_tensor = ttnn.all_gather(
+    #     ttnn_tensor, dim=2, cluster_axis=0, mesh_device=mesh_device, num_links=1, topology=ttnn.Topology.Linear
+    # )
 
     device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(ttnn_tensor)
     for index, device_tensor in enumerate(device_tensors):
@@ -1242,6 +1245,7 @@ def test_device_line_all_gather_8x1(mesh_device):
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4_grid")], indirect=True)
 @pytest.mark.parametrize("cluster_axis", (0, 1))
 @pytest.mark.parametrize("dim", (2, 3))
+@pytest.mark.skip(reason=LEGACY_CCL_SKIP)
 def test_device_line_all_gather_8x4_data(mesh_device, cluster_axis: int, dim: int):
     """
     Test the line-all-gather operation on a 8x4 mesh.
@@ -1271,14 +1275,15 @@ def test_device_line_all_gather_8x4_data(mesh_device, cluster_axis: int, dim: in
         full_tensor, mesh_mapper=ShardTensor2dMesh(mesh_device, mesh_shape=(rows, cols), dims=(-2, -1))
     )
     ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device)
-    ttnn_tensor = ttnn.all_gather(
-        ttnn_tensor,
-        dim=dim,
-        cluster_axis=cluster_axis,
-        mesh_device=mesh_device,
-        num_links=1,
-        topology=ttnn.Topology.Linear,
-    )
+    # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+    # ttnn_tensor = ttnn.all_gather(
+    #     ttnn_tensor,
+    #     dim=dim,
+    #     cluster_axis=cluster_axis,
+    #     mesh_device=mesh_device,
+    #     num_links=1,
+    #     topology=ttnn.Topology.Linear,
+    # )
 
     device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(ttnn_tensor)
 
@@ -1375,6 +1380,7 @@ def test_shard_and_concat_2d_various_shapes(mesh_device, tensor_shape):
 
 
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4_grid")], indirect=True)
+@pytest.mark.skip(reason="Uneven Sharding across devices is not supported by TT-Mesh")
 def test_shard_and_concat_2d_non_divisible(mesh_device):
     rows, cols = mesh_device.shape
     # Create a tensor with dimensions not perfectly divisible by the mesh shape
@@ -1393,6 +1399,7 @@ def test_shard_and_concat_2d_non_divisible(mesh_device):
 
 
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 1), id="8x1_grid")], indirect=True)
+@pytest.mark.skip(reason=LEGACY_CCL_SKIP)
 def test_line_all_gather_column_major(mesh_device):
     """
     The input tensor is size [1, 1, 32, 32*8] and it will get sharded onto an 8-row (8x1) device-mesh as follows:
@@ -1417,10 +1424,11 @@ def test_line_all_gather_column_major(mesh_device):
     )
     ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device)
     ttnn.visualize_mesh_device(mesh_device, tensor=ttnn_tensor)
-    ttnn_tensor = ttnn.all_gather(
-        ttnn_tensor, dim=3, cluster_axis=0, mesh_device=mesh_device, num_links=1, topology=ttnn.Topology.Linear
-    )
-    tt_outputs = ttnn.to_torch(ttnn_tensor, mesh_composer=ListMeshToTensor(mesh_device))
+    # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+    # ttnn_tensor = ttnn.all_gather(
+    #     ttnn_tensor, dim=3, cluster_axis=0, mesh_device=mesh_device, num_links=1, topology=ttnn.Topology.Linear
+    # )
+    tt_outputs = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(ttnn_tensor.cpu())]
     for output in tt_outputs[1:]:
         assert output.shape == (1, 1, 32, 32 * 8)
         assert torch.allclose(output, tt_outputs[0])
@@ -1429,8 +1437,8 @@ def test_line_all_gather_column_major(mesh_device):
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4_grid")], indirect=True)
 @pytest.mark.parametrize("cluster_axis", (1,))
 @pytest.mark.parametrize("dim", (0,))
-@pytest.mark.parametrize("async_mode", (False, True))
-def test_device_line_all_gather_8x4_data(mesh_device, cluster_axis: int, dim: int, async_mode: bool):
+@pytest.mark.skip(reason=LEGACY_CCL_SKIP)
+def test_device_line_all_gather_8x4_data(mesh_device, cluster_axis: int, dim: int):
     """
     Test the line-all-gather operation on a 8x4 mesh.
     Data Pattern for initial sharding [TILE_SIZE*mesh_device_ROWS, TILE_SIZE*mesh_device_COLS]:
@@ -1446,10 +1454,6 @@ def test_device_line_all_gather_8x4_data(mesh_device, cluster_axis: int, dim: in
     - Every device along the column contains the whole column tensor stacked on `dim` dimension
     - Every device will have the shape: [4, 1, 32, 32]
     """
-    if async_mode:
-        for i in mesh_device.get_device_ids():
-            device = mesh_device.get_device(i)
-            device.enable_async(True)
 
     (rows, cols), tile_size = mesh_device.shape, 32
     full_tensor = torch.zeros((1, 1, tile_size * rows, tile_size * cols), dtype=torch.bfloat16)
@@ -1459,38 +1463,15 @@ def test_device_line_all_gather_8x4_data(mesh_device, cluster_axis: int, dim: in
         full_tensor, mesh_mapper=ShardTensor2dMesh(mesh_device, mesh_shape=(rows, cols), dims=(-2, -1))
     )
     ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device)
-    ttnn_tensor = ttnn.all_gather(
-        ttnn_tensor,
-        dim=dim,
-        cluster_axis=cluster_axis,
-        mesh_device=mesh_device,
-        num_links=1,
-        topology=ttnn.Topology.Linear,
-    )
-
-
-@pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4_grid")], indirect=True)
-def test_visualize_mesh_device_with_tensor_row_major(mesh_device):
-    rows, cols, tile_size = 4, 4, 32
-    full_tensor = torch.rand((1, 1, tile_size * rows, tile_size * cols), dtype=torch.bfloat16)
-
-    ttnn_tensor = ttnn.from_torch(
-        full_tensor, mesh_mapper=ShardTensor2dMesh(mesh_device, mesh_shape=(rows, cols), dims=(-2, -1))
-    )
-    ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device)
-    ttnn.visualize_mesh_device(mesh_device, tensor=ttnn_tensor)
-
-
-@pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4_grid")], indirect=True)
-def test_visualize_mesh_device_with_tensor_col_major(mesh_device):
-    rows, cols, tile_size = 8, 2, 32
-    full_tensor = torch.rand((1, 1, tile_size * rows, tile_size * cols), dtype=torch.bfloat16)
-
-    ttnn_tensor = ttnn.from_torch(
-        full_tensor, mesh_mapper=ShardTensor2dMesh(mesh_device, mesh_shape=(rows, cols), dims=(-2, -1))
-    )
-    ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device)
-    ttnn.visualize_mesh_device(mesh_device, tensor=ttnn_tensor)
+    # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+    # ttnn_tensor = ttnn.all_gather(
+    #     ttnn_tensor,
+    #     dim=dim,
+    #     cluster_axis=cluster_axis,
+    #     mesh_device=mesh_device,
+    #     num_links=1,
+    #     topology=ttnn.Topology.Linear,
+    # )
 
 
 def rms_norm(x, gamma, eps):
@@ -1502,6 +1483,7 @@ def rms_norm(x, gamma, eps):
 @pytest.mark.parametrize("eps", [1e-5])
 @pytest.mark.parametrize("core_grid", [(4, 8)])
 @pytest.mark.parametrize("mesh_device", [pytest.param((8, 4), id="8x4_grid")], indirect=True)
+@pytest.mark.skip(reason=LEGACY_CCL_SKIP)
 def test_sharded_distributed_layernorm(mesh_device, input_width, input_height, core_grid, eps):
     rows, cols = mesh_device.shape
     input_shape = (1, 1, input_height, input_width)
@@ -1551,15 +1533,16 @@ def test_sharded_distributed_layernorm(mesh_device, input_width, input_height, c
         strategy=ttnn.ShardStrategy.WIDTH,
     )
 
-    tt_stats = ttnn.all_gather(
-        tt_stats,
-        3,
-        num_links=1,
-        cluster_axis=1,
-        mesh_device=mesh_device,
-        memory_config=gathered_stats_sharded_memory_config,
-        topology=ttnn.Topology.Linear,
-    )
+    # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+    # tt_stats = ttnn.all_gather(
+    #     tt_stats,
+    #     3,
+    #     num_links=1,
+    #     cluster_axis=1,
+    #     mesh_device=mesh_device,
+    #     memory_config=gathered_stats_sharded_memory_config,
+    #     topology=ttnn.Topology.Linear,
+    # )
 
     tt_output_tensor = ttnn.rms_norm_post_all_gather(
         tt_input_tensor,

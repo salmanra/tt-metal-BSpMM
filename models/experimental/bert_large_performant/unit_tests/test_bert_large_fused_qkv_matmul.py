@@ -5,10 +5,8 @@
 from loguru import logger
 
 
-import numpy as np
-
 import ttnn
-from models.utility_functions import (
+from models.common.utility_functions import (
     comp_pcc,
 )
 from models.demos.metal_BERT_large_11.tt import custom_matmuls
@@ -71,7 +69,7 @@ def run_bert_large_fused_qkv_matmul_test(
         logger.debug(f"bias is on: {bias_t.memory_config().buffer_type}")
     logger.debug(f"out is on: {t2.memory_config().buffer_type}")
 
-    assert t2.shape.with_tile_padding() == [9, 1, 384, 3072]
+    assert t2.padded_shape == [9, 1, 384, 3072]
     pyt_got_back_rm = ttnn.to_torch(t2)
 
     ref_bmm = torch.matmul(A, B)
@@ -134,7 +132,7 @@ def test_bert_large_fused_qkv_matmul_test(
     run_bert_large_fused_qkv_matmul_test(device, dtype, in0_mem_config, in1_mem_config, bias_mem_config, out_mem_config)
 
 
-def test_bert_large_fused_qkv_matmul_with_program_cache(device, use_program_cache):
+def test_bert_large_fused_qkv_matmul_with_program_cache(device):
     dtype = ttnn.bfloat8_b
     mem_config = ttnn.DRAM_MEMORY_CONFIG
     for _ in range(2):

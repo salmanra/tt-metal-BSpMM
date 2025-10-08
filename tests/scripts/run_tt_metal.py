@@ -112,6 +112,7 @@ TT_METAL_SLOW_DISPATCH_TEST_ENTRIES = (
 )
 
 TT_METAL_FAST_DISPATCH_TEST_ENTRIES = (
+    TestEntry("tt_metal/tests/unit_tests_noc", "unit_tests_noc"),
     TestEntry("tt_metal/tests/test_eltwise_binary", "test_eltwise_binary"),
     # TestEntry(
     #     "tt_metal/tests/test_matmul_multi_core_multi_dram",
@@ -130,25 +131,8 @@ TT_METAL_COMMON_TEST_ENTRIES = (
 
 
 PROGRAMMING_EXAMPLE_ENTRIES = (
-    TestEntry("programming_examples/add_2_integers_in_compute", "programming_examples/add_2_integers_in_compute"),
-    TestEntry("programming_examples/add_2_integers_in_riscv", "programming_examples/add_2_integers_in_riscv"),
-    TestEntry("programming_examples/eltwise_binary", "programming_examples/eltwise_binary"),
-    TestEntry("programming_examples/eltwise_sfpu", "programming_examples/eltwise_sfpu"),
-    TestEntry(
-        "programming_examples/hello_world_datamovement_kernel", "programming_examples/hello_world_datamovement_kernel"
-    ),
-    TestEntry(
-        "programming_examples/hello_world_datamovement_kernel", "programming_examples/hello_world_datamovement_kernel"
-    ),
-    TestEntry("programming_examples/hello_world_datatypes_kernel", "programming_examples/hello_world_datatypes_kernel"),
-    TestEntry("programming_examples/loopback", "programming_examples/loopback"),
-    TestEntry("programming_examples/matmul_multi_core", "programming_examples/matmul_multi_core"),
-    TestEntry("programming_examples/matmul_multicore_reuse", "programming_examples/matmul_multicore_reuse"),
     # Does not work on WH yet.
     # TestEntry("programming_examples/matmul_multicore_reuse_mcast", "programming_examples/matmul_multicore_reuse_mcast"),
-    TestEntry("programming_examples/matmul_single_core", "programming_examples/matmul_single_core"),
-    TestEntry("programming_examples/pad_multi_core", "programming_examples/pad_multi_core"),
-    TestEntry("programming_examples/shard_data_rm", "programming_examples/shard_data_rm"),
     TestEntry("programming_examples/contributed/vecadd", "programming_examples/contributed/vecadd"),
 )
 

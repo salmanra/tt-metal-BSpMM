@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 
 #include "ttnn/operations/experimental/transformer/nlp_concat_heads_decode/nlp_concat_heads_decode.hpp"
 
@@ -23,16 +23,14 @@ void bind_nlp_concat_heads_decode(py::module& module) {
                const ttnn::Tensor& input_tensor,
                const uint32_t num_heads,
                const std::optional<ttnn::MemoryConfig>& memory_config,
-               std::optional<ttnn::Tensor> optional_output_tensor,
-               uint8_t queue_id) {
-                return self(queue_id, input_tensor, num_heads, memory_config, optional_output_tensor);
+               std::optional<ttnn::Tensor> optional_output_tensor) {
+                return self(input_tensor, num_heads, memory_config, optional_output_tensor);
             },
             py::arg("input_tensor").noconvert(),
             py::kw_only(),
             py::arg("num_heads").noconvert(),
             py::arg("memory_config") = std::nullopt,
-            py::arg("output_tensor") = std::nullopt,
-            py::arg("queue_id") = 0});
+            py::arg("output_tensor") = std::nullopt});
 }
 
 }  // namespace ttnn::operations::experimental::transformer::detail

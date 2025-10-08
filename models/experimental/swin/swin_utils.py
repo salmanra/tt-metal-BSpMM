@@ -3,17 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
-from torch import nn
 
 from typing import List, Tuple, Union, Optional
 from packaging import version
-from collections import OrderedDict
 from PIL import Image
 import os
 import glob
 from models.sample_data.huggingface_imagenet_classes import IMAGENET2012_CLASSES
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
@@ -43,7 +41,7 @@ def window_partition(input_feature, window_size, device, put_on_device=True):
     """
     Partitions the given input into windows.
     """
-    batch_size, height, width, num_channels = input_feature.shape.with_tile_padding()
+    batch_size, height, width, num_channels = input_feature.padded_shape
     input_feature = tt_to_torch_tensor(input_feature)
     input_feature = input_feature.view(
         batch_size,
@@ -63,7 +61,7 @@ def window_reverse(windows, window_size, height, width, device, put_on_device=Tr
     """
     Merges windows to produce higher resolution features.
     """
-    num_channels = windows.shape.with_tile_padding()[-1]
+    num_channels = windows.padded_shape[-1]
     windows = tt_to_torch_tensor(windows)
     windows = windows.view(
         -1,
@@ -80,7 +78,7 @@ def window_reverse(windows, window_size, height, width, device, put_on_device=Tr
 
 
 def get_shape(shape):
-    """Insert 1's in the begining of shape list until the len(shape) = 4"""
+    """Insert 1's in the beginning of shape list until the len(shape) = 4"""
     if len(shape) <= 4:
         new_shape = [1 for i in range(4 - len(shape))]
         new_shape.extend(shape)

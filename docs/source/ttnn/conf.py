@@ -88,7 +88,7 @@ templates_path = ["_templates", "../common/_templates"]
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
+exclude_patterns = ["**/CMakeLists.txt", "**/tutorials-dev.txt", "**/tutorials_venv.sh", "**/tutorials_env/**"]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -99,12 +99,13 @@ exclude_patterns = []
 html_theme = "sphinx_rtd_theme"
 html_logo = "images/tt_logo.svg"
 html_favicon = "images/favicon.png"
-html_baseurl = f"/{metal_sphinx_config.shortname}/" + os.environ["DOCS_VERSION"]
+html_baseurl = f"/tt-metal/" + os.environ["DOCS_VERSION"] + f"/{metal_sphinx_config.shortname}"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
+html_js_files = ["posthog.js"]
 
 html_context = {"logo_link_url": "https://docs.tenstorrent.com/"}
 
@@ -116,3 +117,5 @@ def setup(app):
 # Breathe configs
 breathe_projects = {"ttmetaldoxygen": "../../doxygen_build/xml/"}
 breathe_default_project = "ttmetaldoxygen"
+
+nbsphinx_execute = "never"

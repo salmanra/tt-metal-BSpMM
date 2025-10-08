@@ -2,14 +2,39 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <algorithm>
-#include <functional>
-#include <random>
-
+#include <chrono>
+#include <errno.h>
+#include <fmt/base.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <tt-metalium/allocator.hpp>
+#include <tt-metalium/bfloat16.hpp>
 #include <tt-metalium/host_api.hpp>
 #include <tt-metalium/tt_metal.hpp>
-#include <tt-metalium/bfloat16.hpp>
-// #include "tt_metal/tools/tt_gdb/tt_gdb.hpp"
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <exception>
+#include <map>
+#include <memory>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include <tt_stl/assert.hpp>
+#include <tt-metalium/buffer.hpp>
+#include <tt-metalium/buffer_types.hpp>
+#include <tt-metalium/circular_buffer_config.hpp>
+#include <tt-metalium/core_coord.hpp>
+#include <tt-metalium/data_types.hpp>
+#include <tt-metalium/device.hpp>
+#include "hostdevcommon/kernel_structs.h"
+#include <tt-metalium/kernel_types.hpp>
+#include <tt-logger/tt-logger.hpp>
+#include <tt-metalium/program.hpp>
+#include <tt_stl/span.hpp>
+#include <tt-metalium/tt_backend_api_types.hpp>
+#include <umd/device/types/core_coordinates.hpp>
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // TODO: explain what test does
@@ -60,8 +85,8 @@ int main(int argc, char** argv) {
 
         auto dst_l1_buffer = CreateBuffer(l1_config);
 
-        auto l1_dst_noc_xy =
-            device->virtual_core_from_logical_core(dst_l1_buffer->logical_core_from_bank_id(0), CoreType::WORKER);
+        auto l1_dst_noc_xy = device->virtual_core_from_logical_core(
+            dst_l1_buffer->allocator()->get_logical_core_from_bank_id(0), CoreType::WORKER);
 
         // input CB is larger than the output CB, to test the backpressure from the output CB all the way into the input
         // CB CB_out size = 1 forces the serialization of packer and writer kernel, generating backpressure to math
@@ -72,7 +97,7 @@ int main(int argc, char** argv) {
             tt_metal::CircularBufferConfig(
                 num_input_tiles * single_tile_size, {{src0_cb_index, tt::DataFormat::Float16_b}})
                 .set_page_size(src0_cb_index, single_tile_size);
-        auto cb_src0 = tt_metal::CreateCircularBuffer(program, core, cb_src0_config);
+        tt_metal::CreateCircularBuffer(program, core, cb_src0_config);
 
         uint32_t ouput_cb_index = tt::CBIndex::c_16;
         uint32_t num_output_tiles = 1;
@@ -80,7 +105,7 @@ int main(int argc, char** argv) {
             tt_metal::CircularBufferConfig(
                 num_output_tiles * single_tile_size, {{ouput_cb_index, tt::DataFormat::Float16_b}})
                 .set_page_size(ouput_cb_index, single_tile_size);
-        auto cb_output = tt_metal::CreateCircularBuffer(program, core, cb_output_config);
+        tt_metal::CreateCircularBuffer(program, core, cb_output_config);
 
         auto unary_reader_kernel = tt_metal::CreateKernel(
             program,
@@ -100,7 +125,7 @@ int main(int argc, char** argv) {
             uint(num_tiles)  // per_core_tile_cnt
         };
 
-        auto eltwise_unary_kernel = tt_metal::CreateKernel(
+        tt_metal::CreateKernel(
             program,
             "tests/tt_metal/tt_metal/test_kernels/compute/eltwise_copy_3m.cpp",
             core,

@@ -10,14 +10,10 @@ from transformers import BertForQuestionAnswering, BertTokenizer, pipeline
 
 import ttnn
 from models.experimental.bert.tt.embeddings import PytorchEmbeddings
-from models.experimental.bert.tt.mha import TtMultiHeadAttentionModel
-from models.experimental.bert.tt.ffn import TtFeedForwardModel
 from models.experimental.bert.tt.bert_encoder import TtBertEncoder
 from models.experimental.bert.fused_ops.linear import Linear
-from tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
-from models.utility_functions import (
-    enable_persistent_kernel_cache,
-    comp_allclose_and_pcc,
+from tt_lib.utils import pad_activation, pad_weight
+from models.common.utility_functions import (
     comp_pcc,
     comp_allclose,
 )

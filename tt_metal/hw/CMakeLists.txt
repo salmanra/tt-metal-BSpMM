@@ -1,104 +1,177 @@
 # Temporary workaround for Issue #8767
 set(ARCHS
-    grayskull
     wormhole
     blackhole
+    quasar
 )
 set(PROCS
     brisc
     ncrisc
-    trisc0
-    trisc1
-    trisc2
     ierisc
-    slave_ierisc
+    subordinate_ierisc
+    trisc=0
+    trisc=1
+    trisc=2
     aerisc
+    main_aerisc
+    subordinate_aerisc
+    dm=0
 )
 set(TYPES
     firmware
     kernel
 )
 
-include(FetchContent)
-set(SFPI_x86_64_Linux_RELEASE
-    "v6.0.0/sfpi-release.tgz"
-    "d837d26a2312d27815179995fdea83bd"
+# for wormhole, we need to generate two different linker scripts
+set(WH_LD_SCRIPTS
+    kernel # base name
+    app # base name
 )
-if(DEFINED SFPI_${CMAKE_HOST_SYSTEM_PROCESSOR}_${CMAKE_HOST_SYSTEM_NAME}_RELEASE)
-    set(SFPI_RELEASE "${SFPI_${CMAKE_HOST_SYSTEM_PROCESSOR}_${CMAKE_HOST_SYSTEM_NAME}_RELEASE}")
-    list(GET SFPI_RELEASE 0 SFPI_FILE)
-    list(GET SFPI_RELEASE 1 SFPI_MD5)
-    FetchContent_Declare(
-        sfpi
-        URL
-            "https://github.com/tenstorrent/sfpi/releases/download/${SFPI_FILE}"
-        URL_HASH "MD5=${SFPI_MD5}"
-        SOURCE_DIR
-        "${PROJECT_SOURCE_DIR}/runtime/sfpi"
-    )
-    FetchContent_MakeAvailable(sfpi)
-else()
-    message(FATAL_ERROR "SFPI binaries for ${CMAKE_HOST_SYSTEM_PROCESSOR}-${CMAKE_HOST_SYSTEM_NAME} not available")
+set(IRAM_OPTIONS
+    "" # No IRAM
+    ENABLE_IRAM # With IRAM
+)
+
+# Get the appropriate SFPI tarball
+file(STRINGS "../sfpi-version.sh" SFPI)
+set(SFPI_arch "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+foreach(tuple ${SFPI})
+    string(STRIP ${tuple} pair)
+    string(REPLACE "=" ";" pair ${pair})
+    list(LENGTH pair count)
+    if(count EQUAL 2)
+        list(GET pair 0 key)
+        list(GET pair 1 value)
+        if(key STREQUAL "sfpi_version")
+            set(SFPI_VERSION "${value}")
+        elseif(key STREQUAL "sfpi_url")
+            set(SFPI_URL "${value}")
+        elseif(key STREQUAL "sfpi_${SFPI_arch}_txz_md5")
+            set(SFPI_TXZ_MD5 "${value}")
+        endif()
+    endif()
+endforeach()
+
+if(NOT DEFINED SFPI_TXZ_MD5)
+    message(FATAL_ERROR "SFPI tarball for ${SFPI_arch} is not available")
 endif()
 
+include(FetchContent)
+FetchContent_Declare(
+    sfpi
+    URL
+        "${SFPI_URL}/v${SFPI_VERSION}/sfpi_${SFPI_VERSION}_${SFPI_arch}.txz"
+    URL_HASH "MD5=${SFPI_TXZ_MD5}"
+    SOURCE_DIR
+    "${PROJECT_SOURCE_DIR}/runtime/sfpi"
+)
+FetchContent_MakeAvailable(sfpi)
+
 foreach(ARCH IN LISTS ARCHS)
-    set(DEV_MEM_MAP "${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/dev_mem_map.h")
-    set(HW_INCLUDES "${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}")
+    if(ARCH STREQUAL "quasar")
+        set(HW_VERSION_PATH "tt-2xx")
+    else()
+        set(HW_VERSION_PATH "tt-1xx")
+    endif()
+
+    set(DEV_MEM_MAPS
+        "${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${HW_VERSION_PATH}/${ARCH}/dev_mem_map.h"
+        "${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${HW_VERSION_PATH}/${ARCH}/tensix_dev_map.h"
+    )
+    set(HW_INCLUDES "${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${HW_VERSION_PATH}/${ARCH}")
     set(HW_OUTPUT_DIR "${PROJECT_SOURCE_DIR}/runtime/hw/toolchain/${ARCH}")
+    string(TOUPPER ${ARCH} ARCH_DEFINE)
+
+    if(ARCH STREQUAL "wormhole")
+        foreach(SCRIPT_TYPE IN LISTS WH_LD_SCRIPTS)
+            foreach(IRAM_OPT IN LISTS IRAM_OPTIONS)
+                if(IRAM_OPT)
+                    set(OUTPUT_FILE "${HW_OUTPUT_DIR}/erisc-b0-${SCRIPT_TYPE}_iram.ld")
+                    set(IRAM_FLAG "-D${IRAM_OPT}")
+                    set(IRAM_COMMENT " with IRAM")
+                else()
+                    set(OUTPUT_FILE "${HW_OUTPUT_DIR}/erisc-b0-${SCRIPT_TYPE}.ld")
+                    set(IRAM_FLAG "")
+                    set(IRAM_COMMENT "")
+                endif()
+
+                add_custom_command(
+                    OUTPUT
+                        ${OUTPUT_FILE}
+                    COMMAND
+                        ${CMAKE_CXX_COMPILER} ${IRAM_FLAG} -I${HW_INCLUDES} -E -P -x c -o ${OUTPUT_FILE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/erisc-b0-${SCRIPT_TYPE}.ld
+                    DEPENDS
+                        ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/erisc-b0-${SCRIPT_TYPE}.ld
+                    COMMENT "Preprocessing toolchain/erisc-b0-${SCRIPT_TYPE}.ld${IRAM_COMMENT}"
+                    VERBATIM
+                )
+
+                list(APPEND LD_FILES ${OUTPUT_FILE})
+            endforeach()
+        endforeach()
+    endif()
+
     foreach(PROC IN LISTS PROCS)
+        string(REPLACE "=" "" PROC_FILE "${PROC}")
         foreach(TYPE IN LISTS TYPES)
-            set(HW_OUTPUT_FILE "${HW_OUTPUT_DIR}/${TYPE}_${PROC}.ld")
+            set(HW_OUTPUT_FILE "${TYPE}_${PROC_FILE}.ld")
             string(TOUPPER ${PROC} PROC_DEFINE)
             string(TOUPPER ${TYPE} TYPE_DEFINE)
 
             # custom command to preprocess/generate the output file
             add_custom_command(
                 OUTPUT
-                    ${HW_OUTPUT_FILE}
+                    ${HW_OUTPUT_DIR}/${HW_OUTPUT_FILE}
                 COMMAND
                     ${CMAKE_COMMAND} -E make_directory ${HW_OUTPUT_DIR}
                 COMMAND
-                    ${CMAKE_CXX_COMPILER} -DLD_TARGET=${PROC_DEFINE} -DLD_TYPE=${TYPE_DEFINE} -DTARGET_${PROC_DEFINE}
-                    -DTYPE_${TYPE_DEFINE} -DCOMPILE_FOR_${PROC_DEFINE} -I${HW_INCLUDES} -E -P -x c -o ${HW_OUTPUT_FILE}
+                    ${CMAKE_CXX_COMPILER} -DTYPE_${TYPE_DEFINE} -DCOMPILE_FOR_${PROC_DEFINE} -DARCH_${ARCH_DEFINE}
+                    -I${HW_INCLUDES} -E -P -x c -o ${HW_OUTPUT_DIR}/${HW_OUTPUT_FILE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/main.ld
                 DEPENDS
                     ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/main.ld
-                    ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/memory.ld
-                    ${CMAKE_CURRENT_SOURCE_DIR}/toolchain/sections.ld
-                    ${DEV_MEM_MAP}
-                COMMENT "Preprocessing toolchain/${PROC}.ld"
+                    ${DEV_MEM_MAPS}
+                COMMENT "Preprocessing toolchain/${HW_OUTPUT_FILE}"
                 VERBATIM
             )
 
             # add output file to the custom target
-            list(APPEND PREPROCESSED_LD_FILES ${HW_OUTPUT_FILE})
+            list(APPEND LD_FILES ${HW_OUTPUT_DIR}/${HW_OUTPUT_FILE})
         endforeach()
     endforeach()
 endforeach()
 
-# Function appends b0 if its wormhole
-function(get_alias INPUT_STRING OUTPUT_VAR)
-    if("${INPUT_STRING}" STREQUAL "wormhole")
-        set(${OUTPUT_VAR} "wormhole_b0" PARENT_SCOPE)
-    else()
-        set(${OUTPUT_VAR} "${INPUT_STRING}" PARENT_SCOPE)
-    endif()
-endfunction()
+if(TT_USE_SYSTEM_SFPI)
+    set(GPP_CMD "/opt/tenstorrent/sfpi/compiler/bin/riscv-tt-elf-g++")
+else()
+    set(GPP_CMD "${PROJECT_SOURCE_DIR}/runtime/sfpi/compiler/bin/riscv-tt-elf-g++")
+endif()
 
-# Define the compiler command
-set(GPP_CMD ${PROJECT_SOURCE_DIR}/runtime/sfpi/compiler/bin/riscv32-unknown-elf-g++)
+if(NOT EXISTS "${GPP_CMD}")
+    message(FATAL_ERROR "GPP_CMD path '${GPP_CMD}' does not exist. Please check your configuration.")
+endif()
+
+execute_process(
+    COMMAND
+        ${GPP_CMD} --version
+    COMMAND
+        head -1
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    OUTPUT_VARIABLE GPP_VERSION
+)
+message(STATUS "Using SFPI compiler: ${GPP_CMD}, ${GPP_VERSION}")
 
 set(GPP_DEFINES -DTENSIX_FIRMWARE)
 
 # Define flags for each architecture
-set(GPP_FLAGS_grayskull -mcpu=tt-gs)
 set(GPP_FLAGS_wormhole -mcpu=tt-wh)
 set(GPP_FLAGS_blackhole -mcpu=tt-bh)
 
 # Define common flags for all architectures
 set(GPP_FLAGS_common
     -std=c++17
-    -flto
+    -flto=auto
     -ffast-math
     -fno-use-cxa-atexit
     -fno-exceptions
@@ -117,25 +190,36 @@ set(GPP_FLAGS_common
 
 # We are going to build 5 or 6 object files foreach ARCH
 foreach(ARCH IN LISTS ARCHS)
-    get_alias(${ARCH} ARCH_B0)
-
+    if(ARCH STREQUAL "quasar")
+        set(HW_VERSION_PATH "tt-2xx")
+    else()
+        set(HW_VERSION_PATH "tt-1xx")
+    endif()
     # These are the set of object files we are to build foreach ARCH
-    set(HWLIBS
-        tmu-crt0
-        tmu-crt0k
-        substitutes
-        tdma_xmov
-        noc
-        ncrisc-halt
+    set(HW_OBJ_SRC_PAIRS
+        "substitutes.o:tt_metal/hw/toolchain/substitutes.cpp"
+        "tdma_xmov.o:tt_metal/hw/firmware/src/tt-1xx/tdma_xmov.c"
+        "noc.o:tt_metal/hw/firmware/src/${HW_VERSION_PATH}/${ARCH}/noc.c"
+        "tmu-crt0.o:tt_metal/hw/toolchain/tmu-crt0.S"
     )
+    set(ARCH_ALIAS ${ARCH})
 
-    # Map each .o to its source file
-    set(tmu-crt0_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/toolchain/tmu-crt0.S")
-    set(tmu-crt0k_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/toolchain/tmu-crt0k.S")
-    set(substitutes_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/toolchain/substitutes.cpp")
-    set(tdma_xmov_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src/tdma_xmov.c")
-    set(noc_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src/${ARCH}/noc.c")
-    set(ncrisc-halt_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/toolchain/ncrisc-halt.S")
+    if(ARCH STREQUAL "wormhole")
+        set(ARCH_ALIAS wormhole_b0)
+        list(
+            APPEND
+            HW_OBJ_SRC_PAIRS
+            "wh-iram-start.o:tt_metal/hw/toolchain/wh-iram-start.S"
+            "wh-iram-trampoline.o:tt_metal/hw/toolchain/wh-iram-trampoline.S"
+        )
+    endif()
+
+    # TODO quasar should use crt0.S, missing some header file
+    # if(ARCH STREQUAL "quasar")
+    #     list(APPEND HW_OBJ_SRC_PAIRS "tmu-crt0.o:tt_metal/hw/firmware/src/${HW_VERSION_PATH}/${ARCH}/crt0.S")
+    # else()
+    #     list(APPEND HW_OBJ_SRC_PAIRS "tmu-crt0.o:tt_metal/hw/toolchain/tmu-crt0.S")
+    # endif()
 
     # Set GPP_FLAGS based on ARCH
     set(GPP_FLAGS
@@ -144,7 +228,7 @@ foreach(ARCH IN LISTS ARCHS)
     )
 
     # Dump object files to this directory
-    set(HW_LIB_DIR ${PROJECT_SOURCE_DIR}/runtime/hw/lib/${ARCH})
+    set(HW_OBJ_DIR ${PROJECT_SOURCE_DIR}/runtime/hw/lib/${ARCH})
 
     # Includes independent from ARCH
     set(GPP_INCLUDES
@@ -157,38 +241,46 @@ foreach(ARCH IN LISTS ARCHS)
         -I${PROJECT_SOURCE_DIR}/tt_metal/include
         -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc
         -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/debug
-        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src/tt-1xx
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src/tt-2xx
     )
 
     # Architecture specific include paths
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH})
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/${ARCH_B0}_defines)
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/noc)
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/${ARCH})
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/common)
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/llk_io)
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk_${ARCH_B0}/common/inc)
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk_${ARCH_B0}/llk_lib)
+    list(
+        APPEND
+        GPP_INCLUDES
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${HW_VERSION_PATH}/${ARCH}
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${HW_VERSION_PATH}/${ARCH}/${ARCH_ALIAS}_defines
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${HW_VERSION_PATH}/${ARCH}/noc
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${HW_VERSION_PATH}/${ARCH}/overlay
+        -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/${ARCH}
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_ALIAS}/metal/common
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_ALIAS}/metal/llk_io
+        -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk/tt_llk_${ARCH_ALIAS}/common/inc
+        -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk/tt_llk_${ARCH_ALIAS}/llk_lib
+    )
 
-    foreach(HWLIB IN LISTS HWLIBS)
-        if("${ARCH}" STREQUAL "blackhole" AND "${HWLIB}" STREQUAL "ncrisc-halt")
-            continue() # Skip the iteration, blackhole doesn't have IRAM
-        endif()
-
-        set(HW_OUTPUT_FILE "${HW_LIB_DIR}/${HWLIB}.o")
+    foreach(HW_PAIR IN LISTS HW_OBJ_SRC_PAIRS)
+        string(REPLACE ":" ";" HW_PAIR_LIST ${HW_PAIR})
+        list(GET HW_PAIR_LIST 0 HWOBJ)
+        list(GET HW_PAIR_LIST 1 HWSRC)
+        set(HW_OUTPUT_FILE "${HW_OBJ_DIR}/${HWOBJ}")
         add_custom_command(
             OUTPUT
                 ${HW_OUTPUT_FILE}
             COMMAND
-                ${CMAKE_COMMAND} -E make_directory ${HW_LIB_DIR}
+                ${CMAKE_COMMAND} -E make_directory ${HW_OBJ_DIR}
             COMMAND
-                ${GPP_CMD} ${GPP_FLAGS} ${GPP_DEFINES} ${GPP_INCLUDES} -c -o ${HW_LIB_DIR}/${HWLIB}.o ${${HWLIB}_SOURCE}
+                ${GPP_CMD} ${GPP_FLAGS} ${GPP_DEFINES} ${GPP_INCLUDES} -c -o ${HW_OBJ_DIR}/${HWOBJ}
+                ${PROJECT_SOURCE_DIR}/${HWSRC}
             DEPENDS
-                ${${HWLIB}_SOURCE}
-            COMMENT "Building hw lib ${HWLIB}.o"
+                ${PROJECT_SOURCE_DIR}/${HWSRC}
+                # If the compiler changes, rebuild
+                ../sfpi-version.sh
+            COMMENT "Building ${ARCH} hw lib ${HWOBJ}"
             VERBATIM
         )
-        list(APPEND PREPROCESSED_O_FILES ${HW_OUTPUT_FILE})
+        list(APPEND OBJ_FILES ${HW_OUTPUT_FILE})
     endforeach()
 endforeach()
 
@@ -197,8 +289,8 @@ add_custom_target(
     hw_toolchain
     ALL
     DEPENDS
-        ${PREPROCESSED_LD_FILES}
-        ${PREPROCESSED_O_FILES}
+        ${LD_FILES}
+        ${OBJ_FILES}
 )
 
 add_library(hw INTERFACE)
@@ -206,4 +298,155 @@ add_library(Metalium::Metal::Hardware ALIAS hw)
 
 target_include_directories(hw INTERFACE inc)
 
+# These headers are for the device, not host; will require cross compiling to verify.
+set_target_properties(
+    hw
+    PROPERTIES
+        VERIFY_INTERFACE_HEADER_SETS
+            FALSE
+)
+
+# It's acceptable to use GLOB here because these files are not part of the build and developers aren't generating packages (for now).
+# We may need to revisit later.
+file(GLOB_RECURSE blackhole_kernels ckernels/blackhole/*)
+file(GLOB_RECURSE wormhole_kernels ckernels/wormhole_b0/*)
+target_sources(
+    hw
+    PUBLIC
+        FILE_SET jit_api
+        TYPE HEADERS
+        BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
+        FILES
+            ${blackhole_kernels}
+            ${wormhole_kernels}
+            inc/accessor/array_wrapper.h
+            inc/accessor/const.h
+            inc/accessor/dspec.h
+            inc/accessor/helpers.h
+            inc/accessor/tensor_accessor.h
+            inc/accessor/tensor_accessor_args.h
+            inc/accessor/shard_pages_address_iterator.h
+            inc/accessor/pages_address_iterator.h
+            inc/accessor/page.h
+            inc/atomic_rwptr.h
+            inc/bit_utils.h
+            inc/tt-1xx/blackhole/c_tensix_core.h
+            inc/tt-1xx/blackhole/cfg_defines.h
+            inc/tt-1xx/blackhole/core_config.h
+            inc/tt-1xx/blackhole/dev_mem_map.h
+            inc/tt-1xx/blackhole/eth_chan_noc_mapping.h
+            inc/tt-1xx/blackhole/eth_fw_api.h
+            inc/tt-1xx/blackhole/eth_l1_address_map.h
+            inc/tt-1xx/blackhole/noc/noc.h
+            inc/tt-1xx/blackhole/noc/noc_overlay_parameters.h
+            inc/tt-1xx/blackhole/noc/noc_parameters.h
+            inc/tt-1xx/blackhole/noc_nonblocking_api.h
+            inc/tt-1xx/blackhole/stream_interface.h
+            inc/tt-1xx/blackhole/stream_io_map.h
+            inc/tt-1xx/blackhole/tdma_xmov.h
+            inc/tt-1xx/blackhole/tensix.h
+            inc/tt-1xx/blackhole/tensix_dev_map.h
+            inc/tt-1xx/blackhole/tensix_types.h
+            inc/circular_buffer.h
+            inc/circular_buffer_init.h
+            inc/cmd_defs.h
+            inc/compile_time_args.h
+            inc/dataflow_api.h
+            inc/dataflow_cmd_bufs.h
+            inc/dataflow_internal.h
+            inc/debug/assert.h
+            inc/debug/dprint.h
+            inc/debug/dprint_buffer.h
+            inc/debug/dprint_pages.h
+            inc/debug/dprint_tile.h
+            inc/debug/eth_link_status.h
+            inc/debug/fw_debug.h
+            inc/debug/noc_logging.h
+            inc/debug/ring_buffer.h
+            inc/debug/sanitize_noc.h
+            inc/debug/stack_usage.h
+            inc/debug/watcher_common.h
+            inc/debug/waypoint.h
+            inc/dev_msgs.h
+            inc/ethernet/dataflow_api.h
+            inc/ethernet/erisc.h
+            inc/ethernet/tt_eth_api.h
+            inc/ethernet/tt_eth_ss_regs.h
+            inc/ethernet/tunneling.h
+            inc/firmware_common.h
+            inc/mod_div_lib.h
+            inc/tt-2xx/quasar/c_tensix_core.h
+            inc/tt-2xx/quasar/cfg_defines.h
+            inc/tt-2xx/quasar/core_config.h
+            inc/tt-2xx/quasar/dev_mem_map.h
+            inc/tt-2xx/quasar/eth_chan_noc_mapping.h
+            inc/tt-2xx/quasar/eth_fw_api.h
+            inc/tt-2xx/quasar/eth_l1_address_map.h
+            inc/tt-2xx/quasar/noc/noc.h
+            inc/tt-2xx/quasar/noc/noc_overlay_parameters.h
+            inc/tt-2xx/quasar/noc/noc_parameters.h
+            inc/tt-2xx/quasar/noc_nonblocking_api.h
+            inc/tt-2xx/quasar/stream_interface.h
+            inc/tt-2xx/quasar/stream_io_map.h
+            inc/tt-2xx/quasar/tdma_xmov.h
+            inc/tt-2xx/quasar/tensix.h
+            inc/tt-2xx/quasar/tensix_dev_map.h
+            inc/tt-2xx/quasar/tensix_types.h
+            inc/remote_circular_buffer_api.h
+            inc/risc_attribs.h
+            inc/tt-1xx/risc_common.h
+            inc/tensix_functions.h
+            inc/utils/bfloat16.h
+            inc/utils/float32.h
+            inc/utils/int32.h
+            inc/utils/utils.h
+            inc/vptr_uint.h
+            inc/tt-1xx/wormhole/c_tensix_core.h
+            inc/tt-1xx/wormhole/core_config.h
+            inc/tt-1xx/wormhole/dev_mem_map.h
+            inc/tt-1xx/wormhole/eth_chan_noc_mapping.h
+            inc/tt-1xx/wormhole/eth_fw_api.h
+            inc/tt-1xx/wormhole/eth_l1_address_map.h
+            inc/tt-1xx/wormhole/noc/noc.h
+            inc/tt-1xx/wormhole/noc/noc_overlay_parameters.h
+            inc/tt-1xx/wormhole/noc/noc_parameters.h
+            inc/tt-1xx/wormhole/noc_nonblocking_api.h
+            inc/tt-1xx/wormhole/stream_interface.h
+            inc/tt-1xx/wormhole/stream_io_map.h
+            inc/tt-1xx/wormhole/tdma_xmov.h
+            inc/tt-1xx/wormhole/tensix.h
+            inc/tt-1xx/wormhole/tensix_dev_map.h
+            inc/tt-1xx/wormhole/wormhole_b0_defines/cfg_defines.h
+            inc/tt-1xx/wormhole/wormhole_b0_defines/tensix_types.h
+            inc/dataflow_api_addrgen.h
+            inc/dataflow_api_common.h
+            inc/socket_api.h
+            inc/socket.h
+            # Toolchain
+            toolchain/erisc-b0-app.ld
+            toolchain/erisc-b0-app-sections.ld
+            toolchain/erisc-b0-memory.ld
+            toolchain/erisc-b0-kernel.ld
+        FILE_SET toolchain
+        TYPE HEADERS
+        BASE_DIRS ${PROJECT_SOURCE_DIR}
+        FILES ${LD_FILES} ${OBJ_FILES}
+)
+
 target_link_libraries(hw INTERFACE TT::Metalium::HostDevCommon)
+
+add_subdirectory(firmware)
+
+install(
+    TARGETS
+        hw
+    FILE_SET
+    jit_api
+        DESTINATION
+            ${CMAKE_INSTALL_LIBEXECDIR}/tt-metalium/tt_metal/hw # FIXME: fix the include paths for jit_build
+        COMPONENT metalium-runtime
+    FILE_SET
+    toolchain
+        DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/tt-metalium
+        COMPONENT metalium-runtime
+)

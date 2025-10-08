@@ -3,12 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
-from typing import List, Optional, Tuple, Union
-from loguru import logger
+from typing import List, Optional, Tuple
 import ttnn
 from models.experimental.llama.llama_utils import _make_causal_mask, _expand_mask, linear
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
@@ -143,8 +142,8 @@ class TtLlamaModelSecondHFModel(torch.nn.Module):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
             # batch_size, seq_length = input_ids.shape
-            batch_size = input_ids.shape.with_tile_padding()[0]
-            seq_length = input_ids.shape.with_tile_padding()[2]
+            batch_size = input_ids.padded_shape[0]
+            seq_length = input_ids.padded_shape[2]
         elif inputs_embeds is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
         else:

@@ -9,7 +9,6 @@
 namespace ttnn::operations::experimental::transformer {
 
 std::tuple<ttnn::Tensor, ttnn::Tensor, ttnn::Tensor> NLPCreateHeadsVitOperation::invoke(
-    uint8_t queue_id,
     const Tensor& input_tensor_q,
     const std::optional<MemoryConfig>& memory_config,
     std::optional<std::vector<std::optional<Tensor>>> optional_output_tensors) {
@@ -20,16 +19,9 @@ std::tuple<ttnn::Tensor, ttnn::Tensor, ttnn::Tensor> NLPCreateHeadsVitOperation:
     } else {
         optional_outputs = {};
     }
-    auto outputs =
-        operation::run(NlpCreateHeadsVitDeviceOperation{output_mem_config}, {input_tensor_q}, {}, optional_outputs);
+    auto outputs = tt::tt_metal::operation::run(
+        NlpCreateHeadsVitDeviceOperation{output_mem_config}, {input_tensor_q}, {}, optional_outputs);
     return {outputs[0], outputs[1], outputs[2]};
-};
-
-std::tuple<ttnn::Tensor, ttnn::Tensor, ttnn::Tensor> NLPCreateHeadsVitOperation::invoke(
-    const Tensor& input_tensor_q,
-    const std::optional<MemoryConfig>& memory_config,
-    std::optional<std::vector<std::optional<Tensor>>> optional_output_tensors) {
-    return invoke(ttnn::DefaultQueueId, input_tensor_q, memory_config, std::move(optional_output_tensors));
-};
+}
 
 }  // namespace ttnn::operations::experimental::transformer

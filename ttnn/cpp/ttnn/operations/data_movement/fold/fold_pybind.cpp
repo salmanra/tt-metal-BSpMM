@@ -8,7 +8,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 #include "ttnn/types.hpp"
 
 namespace ttnn::operations::data_movement {
@@ -33,15 +33,13 @@ void bind_fold_operation(py::module& module) {
                uint32_t stride_h,
                uint32_t stride_w,
                bool use_transpose_as_fold,
-               std::optional<ttnn::SimpleShape> output_shape,
+               std::optional<ttnn::Shape> output_shape,
                uint32_t pad_c,
                uint32_t pad_h,
                uint32_t pad_w,
-               std::optional<CoreCoord> grid_size,
-               std::optional<MemoryConfig> override_memory_config,
-               const uint8_t& queue_id) -> ttnn::Tensor {
+               std::optional<CoreRangeSet> grid_size,
+               std::optional<MemoryConfig> override_memory_config) -> ttnn::Tensor {
                 return op(
-                    queue_id,
                     input,
                     stride_h,
                     stride_w,
@@ -62,9 +60,7 @@ void bind_fold_operation(py::module& module) {
             py::arg("pad_h") = 0,
             py::arg("pad_w") = 0,
             py::arg("grid_size") = std::nullopt,
-            py::arg("override_memory_config") = std::nullopt,
-            py::kw_only(),
-            py::arg("queue_id") = 0});
+            py::arg("override_memory_config") = std::nullopt});
 }
 
 }  // namespace ttnn::operations::data_movement

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,37 +6,38 @@
 
 #include "autograd/auto_context.hpp"
 #include "autograd/autocast_tensor.hpp"
-#include "autograd/module_base.hpp"
 #include "autograd/tensor.hpp"
 #include "modules/dropout_module.hpp"
+#include "modules/module_base.hpp"
 
 namespace ttml::modules {
 
-class PositionalEmbeddingBase : public autograd::ModuleBase {
-public:
-    virtual autograd::TensorPtr operator()(const autograd::TensorPtr& input) = 0;
+struct PositionalEmbeddingConfig {
+    uint32_t embedding_dim{};
+    uint32_t sequence_length{1024U};
+    float dropout_prob{0.F};
+    bool use_dropout_seed_per_device{true};
 };
 
-class PositionalEmbedding : public PositionalEmbeddingBase {
+class PositionalEmbedding : public ModuleBase {
 private:
     uint32_t m_sequence_length{};
     std::shared_ptr<DropoutLayer> m_dropout;
     autograd::AutocastTensor m_positional_embedding;
 
 public:
-    explicit PositionalEmbedding(uint32_t embedding_dim, float dropout_prob = 0.F, uint32_t sequence_length = 1024);
+    explicit PositionalEmbedding(const PositionalEmbeddingConfig& config);
     [[nodiscard]] autograd::TensorPtr operator()(const autograd::TensorPtr& input) override;
 };
 
-class TrainablePositionalEmbedding : public PositionalEmbeddingBase {
+class TrainablePositionalEmbedding : public ModuleBase {
     uint32_t m_sequence_length{};
     autograd::TensorPtr m_weight;
     std::shared_ptr<DropoutLayer> m_dropout;
     void initialize_tensors(uint32_t sequence_length, uint32_t embedding_dim);
 
 public:
-    explicit TrainablePositionalEmbedding(
-        uint32_t embedding_dim, float dropout_prob = 0.F, uint32_t sequence_length = 1024);
+    explicit TrainablePositionalEmbedding(const PositionalEmbeddingConfig& config);
     [[nodiscard]] autograd::TensorPtr operator()(const autograd::TensorPtr& input) override;
 };
 

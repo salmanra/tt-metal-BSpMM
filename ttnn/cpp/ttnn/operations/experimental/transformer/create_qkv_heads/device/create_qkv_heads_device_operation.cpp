@@ -5,8 +5,6 @@
 #include "create_qkv_heads_device_operation.hpp"
 #include <tt-metalium/work_split.hpp>
 
-#include <tt-metalium/host_api.hpp>
-
 namespace ttnn::operations::experimental::transformer {
 
 void CreateQKVHeadsDeviceOperation::validate(const std::vector<Tensor>& input_tensors) const {
@@ -14,13 +12,13 @@ void CreateQKVHeadsDeviceOperation::validate(const std::vector<Tensor>& input_te
     TT_FATAL(input_tensor.storage_type() == StorageType::DEVICE, "Operands to TM need to be on device!");
     TT_FATAL(input_tensor.buffer() != nullptr, "Operands to TM need to be allocated in buffers on device!");
     TT_FATAL(
-        input_tensor.get_dtype() == tt::tt_metal::DataType::FLOAT32 ||
-            input_tensor.get_dtype() == tt::tt_metal::DataType::BFLOAT16 ||
-            input_tensor.get_dtype() == tt::tt_metal::DataType::BFLOAT8_B,
+        input_tensor.dtype() == tt::tt_metal::DataType::FLOAT32 ||
+            input_tensor.dtype() == tt::tt_metal::DataType::BFLOAT16 ||
+            input_tensor.dtype() == tt::tt_metal::DataType::BFLOAT8_B,
         "Unsupported data format");
-    TT_FATAL(input_tensor.get_layout() == Layout::TILE, "Error");
+    TT_FATAL(input_tensor.layout() == Layout::TILE, "Error");
     TT_FATAL(input_tensor.is_sharded(), "Operands to TM must be sharded");
-    const auto input_shape = input_tensor.get_padded_shape();
+    const auto& input_shape = input_tensor.padded_shape();
     TT_FATAL(input_shape[1] == 1, "Unsupported input shape");
 
     auto bbox = input_tensor.shard_spec().value().grid.bounding_box();
@@ -28,7 +26,7 @@ void CreateQKVHeadsDeviceOperation::validate(const std::vector<Tensor>& input_te
         (bbox.end_coord.x < input_tensor.device()->compute_with_storage_grid_size().x &&
          bbox.end_coord.y < input_tensor.device()->compute_with_storage_grid_size().y),
         "Error");
-    TT_FATAL(input_tensor.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED, "Error");
+    TT_FATAL(input_tensor.memory_config().memory_layout() == TensorMemoryLayout::BLOCK_SHARDED, "Error");
     ShardOrientation shard_orientation = input_tensor.shard_spec().value().orientation;
     bool rm = shard_orientation == ShardOrientation::ROW_MAJOR;
     uint32_t num_h_cores = rm ? bbox.end_coord.y + 1 : bbox.end_coord.x + 1;
@@ -47,26 +45,22 @@ void CreateQKVHeadsDeviceOperation::validate(const std::vector<Tensor>& input_te
         num_w_cores,
         tt::constants::TILE_WIDTH);
 
-    TT_FATAL(this->output_mem_config.memory_layout == TensorMemoryLayout::HEIGHT_SHARDED, "Error");
+    TT_FATAL(this->output_mem_config.memory_layout() == TensorMemoryLayout::HEIGHT_SHARDED, "Error");
     TT_FATAL(input_shape[0] == num_h_cores, "Batch size {} must be equal to num cores {}", input_shape[0], num_h_cores);
 }
 
 std::vector<ttnn::TensorSpec> CreateQKVHeadsDeviceOperation::compute_output_specs(
     const std::vector<Tensor>& input_tensors, const std::vector<std::optional<Tensor>>& output_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
-    const auto input_shape = input_tensor.get_padded_shape();
+    const auto& input_shape = input_tensor.padded_shape();
 
-    const auto q_shape = ttnn::SimpleShape{input_shape[0], this->num_q_heads, input_shape[2], this->head_dim};
-    const auto v_shape = ttnn::SimpleShape{input_shape[0], this->num_kv_heads, input_shape[2], this->head_dim};
-    const auto k_shape = this->transpose_k_heads
-                             ? ttnn::SimpleShape{input_shape[0], this->num_kv_heads, head_dim, input_shape[2]}
-                             : v_shape;
+    const auto q_shape = ttnn::Shape{input_shape[0], this->num_q_heads, input_shape[2], this->head_dim};
+    const auto v_shape = ttnn::Shape{input_shape[0], this->num_kv_heads, input_shape[2], this->head_dim};
+    const auto k_shape =
+        this->transpose_k_heads ? ttnn::Shape{input_shape[0], this->num_kv_heads, head_dim, input_shape[2]} : v_shape;
 
     if (output_tensors.size() == 3) {
-        return {
-            output_tensors[0]->get_tensor_spec(),
-            output_tensors[1]->get_tensor_spec(),
-            output_tensors[2]->get_tensor_spec()};
+        return {output_tensors[0]->tensor_spec(), output_tensors[1]->tensor_spec(), output_tensors[2]->tensor_spec()};
     }
     // no create_output_tensors variant that takes in optional input tensors?
 
@@ -90,22 +84,23 @@ std::vector<ttnn::TensorSpec> CreateQKVHeadsDeviceOperation::compute_output_spec
     uint32_t v_shard_h =
         v_shape[0] * v_shape[1] * v_shape[2] / num_cores;  // want the API to work for different sequence lengths
 
-    auto q_spec = ShardSpec(all_cores, {q_shard_h, q_shape[-1]}, shard_orientation);
-    auto k_spec = ShardSpec(all_cores, {k_shard_h, k_shape[-1]}, shard_orientation);
-    auto v_spec = ShardSpec(all_cores, {v_shard_h, v_shape[-1]}, shard_orientation);
+    auto q_spec = tt::tt_metal::ShardSpec(all_cores, {q_shard_h, q_shape[-1]}, shard_orientation);
+    auto k_spec = tt::tt_metal::ShardSpec(all_cores, {k_shard_h, k_shape[-1]}, shard_orientation);
+    auto v_spec = tt::tt_metal::ShardSpec(all_cores, {v_shard_h, v_shape[-1]}, shard_orientation);
     // create sharded tensors
-    auto mem_config_q = this->output_mem_config;
-    mem_config_q.shard_spec = q_spec;
+    auto mem_config_q = this->output_mem_config.with_shard_spec(q_spec);
+    auto mem_config_k = this->output_mem_config.with_shard_spec(k_spec);
+    auto mem_config_v = this->output_mem_config.with_shard_spec(v_spec);
 
-    auto mem_config_k = this->output_mem_config;
-    mem_config_k.shard_spec = k_spec;
-
-    auto mem_config_v = this->output_mem_config;
-    mem_config_v.shard_spec = v_spec;
-
-    TensorSpec out_tensor_q(q_shape, TensorLayout(input_tensor.get_dtype(), PageConfig(Layout::TILE), mem_config_q));
-    TensorSpec out_tensor_k(k_shape, TensorLayout(input_tensor.get_dtype(), PageConfig(Layout::TILE), mem_config_k));
-    TensorSpec out_tensor_v(v_shape, TensorLayout(input_tensor.get_dtype(), PageConfig(Layout::TILE), mem_config_v));
+    TensorSpec out_tensor_q(
+        q_shape,
+        tt::tt_metal::TensorLayout(input_tensor.dtype(), tt::tt_metal::PageConfig(Layout::TILE), mem_config_q));
+    TensorSpec out_tensor_k(
+        k_shape,
+        tt::tt_metal::TensorLayout(input_tensor.dtype(), tt::tt_metal::PageConfig(Layout::TILE), mem_config_k));
+    TensorSpec out_tensor_v(
+        v_shape,
+        tt::tt_metal::TensorLayout(input_tensor.dtype(), tt::tt_metal::PageConfig(Layout::TILE), mem_config_v));
     return {out_tensor_q, out_tensor_k, out_tensor_v};
 }
 
@@ -119,7 +114,7 @@ std::vector<Tensor> CreateQKVHeadsDeviceOperation::create_output_tensors(
     };
 }
 
-operation::ProgramWithCallbacks CreateQKVHeadsDeviceOperation::create_program(
+tt::tt_metal::operation::ProgramWithCallbacks CreateQKVHeadsDeviceOperation::create_program(
     const std::vector<Tensor>& input_tensors, std::vector<Tensor>& output_tensors) const {
     const auto& input_tensor = input_tensors.at(0);
 

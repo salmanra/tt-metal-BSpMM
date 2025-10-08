@@ -5,14 +5,12 @@
 #include "hc_sum_reduce.hpp"
 
 #include "device/hc_sum_reduce_op.hpp"
-#include "ttnn/common/constants.hpp"
 
 using namespace tt::tt_metal;
 
 namespace ttnn::operations::experimental::ssm {
 
 ttnn::Tensor ExecuteHCSumReduce::invoke(
-    uint8_t queue_id,
     const Tensor& input,
     const std::optional<MemoryConfig>& memory_config,
     const std::optional<DataType> dtype,
@@ -21,15 +19,7 @@ ttnn::Tensor ExecuteHCSumReduce::invoke(
         memory_config.value_or(input.memory_config()),
         dtype.value_or(input.dtype()),
         math_fidelity.value_or(MathFidelity::HiFi4)};
-    return operation::run(program, {input}, {}, {}, queue_id).at(0);
-}
-
-ttnn::Tensor ExecuteHCSumReduce::invoke(
-    const Tensor& input,
-    const std::optional<MemoryConfig>& memory_config,
-    const std::optional<DataType> dtype,
-    const std::optional<MathFidelity> math_fidelity) {
-    return invoke(DefaultQueueId, input, memory_config, dtype, math_fidelity);
+    return operation::run(program, {input}, {}, {}).at(0);
 }
 
 }  // namespace ttnn::operations::experimental::ssm

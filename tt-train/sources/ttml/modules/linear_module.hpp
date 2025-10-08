@@ -1,33 +1,26 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-
-#include <memory>
-
-#include "autograd/auto_context.hpp"
-#include "autograd/graph.hpp"
-#include "autograd/module_base.hpp"
 #include "autograd/tensor.hpp"
-#include "ops/linear_op.hpp"
+#include "modules/module_base.hpp"
 
 namespace ttml::modules {
 
-class LinearLayer : public autograd::ModuleBase {
+class LinearLayer : public ModuleBase {
 private:
     autograd::TensorPtr m_weight;
     autograd::TensorPtr m_bias;
-
-    void initialize_tensors(uint32_t in_features, uint32_t out_features, bool has_bias = true);
+    void register_tensors();
 
 public:
     LinearLayer(uint32_t in_features, uint32_t out_features, bool has_bias = true);
-
+    LinearLayer(const autograd::TensorPtr& weight, const autograd::TensorPtr& bias);
+    LinearLayer(const autograd::TensorPtr& weight, bool has_bias = true);
     autograd::TensorPtr get_weight() const;
-    void set_weight(const autograd::TensorPtr& weight);
 
-    [[nodiscard]] autograd::TensorPtr operator()(const autograd::TensorPtr& tensor);
+    [[nodiscard]] autograd::TensorPtr operator()(const autograd::TensorPtr& tensor) override;
 };
 
 }  // namespace ttml::modules

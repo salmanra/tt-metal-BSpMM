@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -6,9 +6,10 @@
 
 #include <core/ttnn_all_includes.hpp>
 #include <core/xtensor_utils.hpp>
+#include <ttnn/distributed/distributed_tensor.hpp>
 #include <vector>
 
-#include "core/distributed_mapping.hpp"
+#include "fmt/color.h"
 
 namespace ttml::core {
 
@@ -18,27 +19,24 @@ tt::tt_metal::Tensor zeros_like(const tt::tt_metal::Tensor& tensor);
 tt::tt_metal::Tensor ones_like(const tt::tt_metal::Tensor& tensor);
 
 tt::tt_metal::Tensor empty(
-    const ttnn::SimpleShape& shape, ttnn::distributed::MeshDevice* device, const MemoryConfig& memory_config);
+    const ttnn::Shape& shape, ttnn::distributed::MeshDevice* device, const ttnn::MemoryConfig& memory_config);
 tt::tt_metal::Tensor full(
-    const ttnn::SimpleShape& shape,
+    const ttnn::Shape& shape,
     float value,
     ttnn::distributed::MeshDevice* device,
-    DataType dtype = DataType::BFLOAT16);
+    ttnn::DataType dtype = ttnn::DataType::BFLOAT16);
 tt::tt_metal::Tensor zeros(
-    const ttnn::SimpleShape& shape, ttnn::distributed::MeshDevice* device, DataType dtype = DataType::BFLOAT16);
+    const ttnn::Shape& shape, ttnn::distributed::MeshDevice* device, ttnn::DataType dtype = ttnn::DataType::BFLOAT16);
 tt::tt_metal::Tensor ones(
-    const ttnn::SimpleShape& shape, ttnn::distributed::MeshDevice* device, DataType dtype = DataType::BFLOAT16);
+    const ttnn::Shape& shape, ttnn::distributed::MeshDevice* device, ttnn::DataType dtype = ttnn::DataType::BFLOAT16);
 
-template <class VectorType = float, DataType TensorType = DataType::BFLOAT16>
+template <class VectorType = float, ttnn::DataType TensorType = ttnn::DataType::BFLOAT16>
 [[nodiscard]] tt::tt_metal::Tensor from_vector(
     const std::vector<VectorType>& buffer,
-    const ttnn::SimpleShape& shape,
+    const ttnn::Shape& shape,
     ttnn::distributed::MeshDevice* device,
-    Layout layout = Layout::TILE);
-
-template <class VectorType = float, DataType TensorType = DataType::BFLOAT16>
-[[nodiscard]] tt::tt_metal::Tensor from_xtensors_to_host(
-    const std::vector<xt::xarray<VectorType>>& buffers, const std::unordered_map<std::string, std::string>& config);
+    ttnn::Layout layout = ttnn::Layout::TILE,
+    const ttnn::distributed::TensorToMesh* mesh_mapper = nullptr);
 
 template <class T = float>
 [[nodiscard]] std::vector<T> to_vector(const tt::tt_metal::Tensor& tensor) {
@@ -47,43 +45,52 @@ template <class T = float>
 
 [[nodiscard]] bool is_tensor_initialized(const tt::tt_metal::Tensor& tensor);
 
-[[nodiscard]] ttnn::SimpleShape create_shape(const std::array<uint32_t, 4>& args);
-
-template <class T = float, DataType TensorType = DataType::BFLOAT16>
+template <class T = float, ttnn::DataType TensorType = ttnn::DataType::BFLOAT16>
 [[nodiscard]] tt::tt_metal::Tensor from_xtensor(
-    const xt::xarray<T>& buffer, ttnn::distributed::MeshDevice* device, Layout layout = Layout::TILE) {
+    const xt::xarray<T>& buffer,
+    ttnn::distributed::MeshDevice* device,
+    ttnn::Layout layout = ttnn::Layout::TILE,
+    const ttnn::distributed::TensorToMesh* mesh_mapper = nullptr) {
     auto shape = ttnn::experimental::xtensor::get_shape_from_xarray(buffer);
     auto buffer_view = xtensor_to_span(buffer);
-    return from_vector<T, TensorType>(std::vector<T>(buffer_view.begin(), buffer_view.end()), shape, device, layout);
+    return from_vector<T, TensorType>(
+        std::vector<T>(buffer_view.begin(), buffer_view.end()), shape, device, layout, mesh_mapper);
 }
 
 template <class T = float>
 [[nodiscard]] xt::xarray<T> to_xtensor(const tt::tt_metal::Tensor& tensor) {
     auto vec = tensor.to_vector<T>();
-    const auto& shape = tensor.get_logical_shape();
+    const auto& shape = tensor.logical_shape();
     std::vector<size_t> shape_vec(shape.cbegin(), shape.cend());
     // adapt creates view of the vector, but return will copy this data anyway (by creation of xt::array)
-    return xt::adapt(std::move(vec), shape_vec);
+    return xt::adapt(vec, shape_vec);
 }
 
+std::vector<std::span<std::byte>> get_bytes_from_cpu_tensor(ttnn::Tensor& cpu_tensor);
+
+// Converts a tensor distributed across mesh device into a single xtensor
 template <class T = float>
-auto to_xtensor(const tt::tt_metal::Tensor& tensor, const MeshToXTensorVariant<T>& composer) {
+[[nodiscard]] xt::xarray<T> to_xtensor(
+    const tt::tt_metal::Tensor& tensor, const ttnn::distributed::MeshToTensor& composer) {
+    auto [vec, shape] = composer.compose<T>(tensor);
+    std::vector<size_t> shape_vec(shape.cbegin(), shape.cend());
+    return xt::adapt(vec, shape_vec);
+}
+
+// Tag type to disambiguate to_xtensor overload that returns a collection of individual device tensors
+struct IdentityComposer {};
+
+// Converts a tensor distributed across mesh device into a collection of individual xtensors
+template <class T = float>
+auto to_xtensor(const tt::tt_metal::Tensor& tensor, IdentityComposer) {
     auto cpu_tensor = tensor.cpu();
-    cpu_tensor = cpu_tensor.to(Layout::ROW_MAJOR);
+    cpu_tensor = cpu_tensor.to_layout(ttnn::Layout::ROW_MAJOR);
     auto cpu_tensors = ttnn::distributed::get_device_tensors(cpu_tensor);
     std::vector<xt::xarray<T>> res;
     res.reserve(cpu_tensors.size());
     for (const auto& shard : cpu_tensors) {
         res.push_back(to_xtensor<T>(shard));
     }
-    return std::visit([&res](auto&& arg) { return arg.compose(res); }, composer);
+    return res;
 }
-
-template <class T = float, DataType TensorType = DataType::BFLOAT16>
-tt::tt_metal::Tensor from_xtensor(
-    const xt::xarray<T>& tensor,
-    ttnn::distributed::MeshDevice* device,
-    const XTensorToMeshVariant<T>& composer,
-    Layout layout = Layout::TILE);
-
 }  // namespace ttml::core

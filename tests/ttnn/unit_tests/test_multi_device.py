@@ -1,5 +1,4 @@
-# SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
-
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
 
 import torch
@@ -9,9 +8,9 @@ import ttnn
 import tempfile
 from loguru import logger
 from tests.ttnn.utils_for_testing import assert_with_pcc
+from tests.tests_common.skip_reasons import LEGACY_CCL_SKIP
 
-
-from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor, ListMeshToTensor
+from ttnn import ShardTensorToMesh, ReplicateTensorToMesh, ConcatMeshToTensor
 
 
 #######
@@ -183,7 +182,7 @@ def test_multi_device_check_per_device_shard(mesh_device, layout, memory_config,
 @pytest.mark.parametrize("memory_config", [ttnn.DRAM_MEMORY_CONFIG, ttnn.L1_MEMORY_CONFIG])
 def test_multi_device_replicate(mesh_device, shape, layout, memory_config):
     """Test ReplicateTensorToMesh to broadcast a tensor across multiple devices"""
-    from ttnn import ReplicateTensorToMesh, ListMeshToTensor
+    from ttnn import ReplicateTensorToMesh
 
     full_tensor = torch.rand(shape, dtype=torch.bfloat16)
 
@@ -196,7 +195,9 @@ def test_multi_device_replicate(mesh_device, shape, layout, memory_config):
     )
     ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device)
     ttnn_loop_back_tensor = ttnn.from_device(ttnn_tensor)
-    loopback_replicated_tensors = ttnn.to_torch(ttnn_loop_back_tensor, mesh_composer=ListMeshToTensor(mesh_device))
+    loopback_replicated_tensors = [
+        ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(ttnn_loop_back_tensor.cpu())
+    ]
     for loopback_replicated_tensor in loopback_replicated_tensors:
         assert torch.all(full_tensor == loopback_replicated_tensor)
 
@@ -206,6 +207,7 @@ def test_multi_device_replicate(mesh_device, shape, layout, memory_config):
     [{"dispatch_core_axis": ttnn.DispatchCoreAxis.ROW}, {"dispatch_core_axis": ttnn.DispatchCoreAxis.COL}],
     indirect=True,
 )
+@pytest.mark.skip(reason=LEGACY_CCL_SKIP)
 def test_ttnn_multi_device_all_gather(pcie_mesh_device):
     """Multidevice API test for ttnn.all_gather CCL operation"""
     if pcie_mesh_device.get_num_devices() <= 1:
@@ -214,7 +216,9 @@ def test_ttnn_multi_device_all_gather(pcie_mesh_device):
 
     ttnn_tensor = ttnn.from_torch(full_tensor, mesh_mapper=ShardTensorToMesh(pcie_mesh_device, dim=3))
     ttnn_tensor = ttnn.to_device(ttnn_tensor, pcie_mesh_device)
-    ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=3, num_links=1)
+    # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+    assert False, "Legacy ccl call removed until new implementation is done"
+    # ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=3, num_links=1)
 
     device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(ttnn_tensor)
     for device_tensor in device_tensors:
@@ -242,6 +246,25 @@ def test_multi_device_single_op_unary(mesh_device):
 
     ttnn_torch_output_tensor = ttnn.to_torch(ttnn_output_tensor, mesh_composer=ConcatMeshToTensor(mesh_device, dim=3))
     assert_with_pcc(ttnn_torch_output_tensor, torch_output_golden, pcc=0.999)
+
+
+def test_multi_device_single_op_unary_with_cache(mesh_device):
+    """Multidevice API test: Running tensor-parallel multi-device single-op unary with cache"""
+    torch_input_tensor = torch.rand((1, 1, 32, 32 * mesh_device.get_num_devices()), dtype=torch.bfloat16)
+    torch_output_golden = torch.nn.functional.gelu(torch_input_tensor)
+    torch_golden = torch.nn.functional.gelu(torch_output_golden)
+
+    ttnn_input_tensor = ttnn.from_torch(
+        torch_input_tensor,
+        layout=ttnn.TILE_LAYOUT,
+        mesh_mapper=ShardTensorToMesh(mesh_device, dim=3),
+        device=mesh_device,
+    )
+    ttnn_output_tensor = ttnn.gelu(ttnn_input_tensor)
+    final_output_tensor = ttnn.gelu(ttnn_output_tensor)
+
+    ttnn_torch_output_tensor = ttnn.to_torch(final_output_tensor, mesh_composer=ConcatMeshToTensor(mesh_device, dim=3))
+    assert_with_pcc(ttnn_torch_output_tensor, torch_golden, pcc=0.999)
 
 
 @pytest.mark.parametrize(
@@ -418,6 +441,14 @@ def test_multi_device_as_tensor_api_sharded_tensor(mesh_device, layout, memory_c
         assert_with_pcc(input_tensor, torch_loaded_tensor, pcc=expected_pcc)
 
 
+def test_tensor_file_extension_validation(tmp_path):
+    with pytest.raises(RuntimeError, match="must have .tensorbin extension"):
+        ttnn.load_tensor(str(tmp_path / "test.bin"))
+
+    with pytest.raises(RuntimeError, match="must have .tensorbin extension"):
+        ttnn.dump_tensor(str(tmp_path / "test.bin"), torch.rand((1, 1, 32, 32)))
+
+
 @pytest.mark.parametrize(
     "device_params",
     [{"dispatch_core_axis": ttnn.DispatchCoreAxis.ROW}, {"dispatch_core_axis": ttnn.DispatchCoreAxis.COL}],
@@ -467,10 +498,9 @@ def test_max(mesh_device):
     [{"dispatch_core_axis": ttnn.DispatchCoreAxis.ROW}, {"dispatch_core_axis": ttnn.DispatchCoreAxis.COL}],
     indirect=True,
 )
+@pytest.mark.skip(reason=LEGACY_CCL_SKIP)
 def test_ttnn_multi_device_all_gather_all_devices(t3k_mesh_device):
     """Multidevice API test for ttnn.all_gather CCL operation for full 8-device T3K"""
-    if t3k_mesh_device.get_num_devices() < 8:
-        pytest.skip()
 
     full_tensor = torch.ones((1, 1, 32, 32 * t3k_mesh_device.get_num_devices()), dtype=torch.bfloat16)
     for i in range(t3k_mesh_device.get_num_devices()):
@@ -478,7 +508,9 @@ def test_ttnn_multi_device_all_gather_all_devices(t3k_mesh_device):
 
     ttnn_tensor = ttnn.from_torch(full_tensor, mesh_mapper=ShardTensorToMesh(t3k_mesh_device, dim=3))
     ttnn_tensor = ttnn.to_device(ttnn_tensor, t3k_mesh_device)
-    ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=3, num_links=1)
+    # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+    assert False, "Legacy ccl call removed until new implementation is done"
+    # ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=3, num_links=1)
 
     device_tensors: typing.List[ttnn.Tensor] = ttnn.get_device_tensors(ttnn_tensor)
     for device_tensor in device_tensors:
@@ -606,29 +638,6 @@ def test_clone(mesh_device):
     print(results_11BH)
 
 
-def test_device_shard_to_torch(mesh_device):
-    """Test `ttnn.get_device_tensor(..) API"""
-    torch_input_tensor = torch.rand((1, 1, 32, 32 * mesh_device.get_num_devices()), dtype=torch.bfloat16)
-    torch_output_golden = torch.nn.functional.gelu(torch_input_tensor)
-    torch_output_golden = torch.exp(torch_output_golden)
-
-    ttnn_input_tensor = ttnn.from_torch(
-        torch_input_tensor,
-        layout=ttnn.TILE_LAYOUT,
-        mesh_mapper=ShardTensorToMesh(mesh_device, dim=3),
-        device=mesh_device,
-    )
-
-    ttnn_gelu_output = ttnn.gelu(ttnn_input_tensor)
-    ttnn_output_tensor = ttnn.exp(ttnn_gelu_output)
-
-    # Skip the compose/torch.cat call entirely
-    for i, device in enumerate(mesh_device.get_devices()):
-        device_tensor = ttnn.get_device_tensor(ttnn_output_tensor, device)
-        torch_device_tensor = ttnn.to_torch(device_tensor)
-        assert_with_pcc(torch_device_tensor, torch_output_golden[..., i * 32 : (i + 1) * 32], pcc=0.999)
-
-
 @pytest.mark.parametrize("height", [7])
 @pytest.mark.parametrize("width", [3])
 def test_validate_as_tensor(tmp_path, mesh_device, height, width):
@@ -645,7 +654,6 @@ def test_validate_as_tensor(tmp_path, mesh_device, height, width):
         cache_file_name=tmp_path / "cache_file",
     )
     assert tensor.dtype == ttnn.float32
-    assert tensor.devices() == mesh_device.get_devices()
     assert tensor.layout == ttnn.TILE_LAYOUT
     assert ttnn.get_memory_config(tensor) == memory_config
 
@@ -659,35 +667,131 @@ def test_validate_as_tensor(tmp_path, mesh_device, height, width):
         cache_file_name=tmp_path / "cache_file",
     )
     assert tensor.dtype == ttnn.float32
-    assert tensor.devices() == mesh_device.get_devices()
     assert tensor.layout == ttnn.TILE_LAYOUT
     assert ttnn.get_memory_config(tensor) == memory_config
-
-    for device in mesh_device.get_devices():
-        device_tensor = ttnn.get_device_tensor(tensor, device)
-        assert torch.allclose(ttnn.to_torch(device_tensor), torch_input_tensor)
 
 
 def test_visualize_mesh_device(t3k_mesh_device):
     ttnn.visualize_mesh_device(t3k_mesh_device)
 
 
-def test_all_gather_multiple_submeshes(t3k_mesh_device):
+@pytest.mark.parametrize("mesh_device", [pytest.param((2, 4), id="2x2_grid")], indirect=True)
+@pytest.mark.skip(reason=LEGACY_CCL_SKIP)
+def test_all_gather_multiple_submeshes(mesh_device):
     """Test all_gather with multiple submeshes"""
+    if mesh_device.get_num_devices() < 8:
+        pytest.skip()
 
     def model(submesh):
+        # Reshape to a 1x4 mesh to enforce ring connected topological order.
+        submesh.reshape(ttnn.MeshShape(1, 4))
         full_tensor = torch.ones((1, 1, 32, 32 * submesh.get_num_devices()), dtype=torch.bfloat16)
         for i in range(submesh.get_num_devices()):
             full_tensor[..., i * 32 : (i + 1) * 32] = i
 
         ttnn_tensor = ttnn.from_torch(full_tensor, mesh_mapper=ShardTensorToMesh(submesh, dim=3))
         ttnn_tensor = ttnn.to_device(ttnn_tensor, submesh)
-        ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=3, num_links=1)
+        # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+        assert False, "Legacy ccl call removed until new implementation is done"
+        # ttnn_tensor = ttnn.all_gather(ttnn_tensor, dim=3, num_links=1)
 
         for device_tensor in ttnn.get_device_tensors(ttnn_tensor):
             device_tensor_torch = ttnn.to_torch(device_tensor)
             assert torch.all(device_tensor_torch == full_tensor)
 
-    submesh_devices = t3k_mesh_device.create_submeshes(ttnn.MeshShape(2, 2), ttnn.MeshType.Ring)
+    submesh_devices = mesh_device.create_submeshes(ttnn.MeshShape(2, 2))
     for submesh in submesh_devices:
         model(submesh)
+
+
+@pytest.mark.parametrize("mesh_device", [pytest.param((1, 8), id="1x8_line")], indirect=True)
+@pytest.mark.skip(reason=LEGACY_CCL_SKIP)
+def test_line_all_gather_after_reshape(mesh_device):
+    if mesh_device.get_num_devices() < 8:
+        pytest.skip()
+    mesh_device.reshape(ttnn.MeshShape(2, 4))
+
+    torch_input_tensor = torch.rand((1, 1, 64, 128), dtype=torch.bfloat16)
+
+    mesh_tensor = ttnn.from_torch(
+        torch_input_tensor,
+        layout=ttnn.TILE_LAYOUT,
+        device=mesh_device,
+        mesh_mapper=ttnn.ShardTensor2dMesh(mesh_device, mesh_shape=list(mesh_device.shape), dims=(2, 3)),
+    )
+    # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+    assert False, "Legacy ccl call removed until new implementation is done"
+    # output_tensor = ttnn.all_gather(
+    #     mesh_tensor,
+    #     dim=2,
+    #     cluster_axis=0,
+    #     mesh_device=mesh_device,
+    #     topology=ttnn.Topology.Linear,
+    # )
+
+
+def test_distribute_api(mesh_device):
+    torch_hidden_states = torch.rand((1, 1, 32, 32), dtype=torch.bfloat16)
+    with ttnn.distribute(ttnn.ReplicateTensorToMesh(mesh_device)):
+        hidden_states = ttnn.from_torch(
+            torch_hidden_states,
+            dtype=ttnn.bfloat8_b,
+            layout=ttnn.TILE_LAYOUT,
+            device=mesh_device,
+        )
+
+
+def test_heterogenous_operation_dispatch():
+    if ttnn.get_num_devices() < 8:
+        pytest.skip()
+
+    a = torch.rand((1, 1, 32, 128), dtype=torch.bfloat16)
+    torch_gelu = torch.nn.functional.gelu(a)
+    torch_silu = torch.nn.functional.silu(a)
+
+    mesh_device = ttnn.open_mesh_device(ttnn.MeshShape(2, 4))
+    submesh_0 = mesh_device.create_submesh(ttnn.MeshShape(1, 4))
+    submesh_1 = mesh_device.create_submesh(ttnn.MeshShape(1, 1), offset=ttnn.MeshCoordinate(1, 1))
+
+    ttnn_input_0 = ttnn.from_torch(
+        a, device=submesh_0, mesh_mapper=ttnn.ShardTensorToMesh(submesh_0, dim=-1), layout=ttnn.TILE_LAYOUT
+    )
+    ttnn_input_1 = ttnn.from_torch(
+        a, device=submesh_1, mesh_mapper=ttnn.ShardTensorToMesh(submesh_1, dim=-1), layout=ttnn.TILE_LAYOUT
+    )
+
+    ttnn_gelu = ttnn.gelu(ttnn_input_0)
+    ttnn_silu = ttnn.silu(ttnn_input_1)
+
+    assert_with_pcc(
+        ttnn.to_torch(ttnn_gelu, mesh_composer=ttnn.ConcatMeshToTensor(submesh_0, dim=-1)), torch_gelu, pcc=0.9999
+    )
+    assert_with_pcc(
+        ttnn.to_torch(ttnn_silu, mesh_composer=ttnn.ConcatMeshToTensor(submesh_1, dim=-1)), torch_silu, pcc=0.9999
+    )
+
+
+# Verify that submeshes can be created on a mesh device with fabric enabled
+@pytest.mark.parametrize("device_params", [{"fabric_config": ttnn.FabricConfig.FABRIC_1D}], indirect=True)
+def test_fabric_with_submeshes(t3k_mesh_device):
+    logger.info("Spawning 2 1x4 submeshes on a 2x4 mesh device with fabric enabled")
+    submeshes = t3k_mesh_device.create_submeshes(ttnn.MeshShape(1, 4))
+
+
+@pytest.mark.parametrize("mesh_device", [pytest.param((2, 4), id="2x4_grid")], indirect=True)
+def test_multihost_sanity(mesh_device):
+    torch.manual_seed(0)
+
+    shard_size = 32
+    torch_tensor = torch.rand((1, 1, 32, shard_size * mesh_device.get_num_devices()), dtype=torch.bfloat16)
+    torch_gelu = torch.nn.functional.gelu(torch_tensor)
+
+    ttnn_tensor = ttnn.from_torch(
+        torch_tensor, dtype=ttnn.bfloat16, layout=ttnn.TILE_LAYOUT, mesh_mapper=ShardTensorToMesh(mesh_device, dim=3)
+    )
+    ttnn_tensor = ttnn.to_device(ttnn_tensor, mesh_device, memory_config=ttnn.DRAM_MEMORY_CONFIG)
+    ttnn_tensor = ttnn.gelu(ttnn_tensor)
+    ttnn_loop_back_tensor = ttnn.from_device(ttnn_tensor)
+    torch_loop_back_tensor = ttnn.to_torch(ttnn_loop_back_tensor, mesh_composer=ConcatMeshToTensor(mesh_device, dim=3))
+
+    assert_with_pcc(torch_gelu, torch_loop_back_tensor, pcc=0.9999)

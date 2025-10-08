@@ -2,14 +2,36 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <algorithm>
-#include <functional>
-#include <random>
-
+#include <chrono>
+#include <errno.h>
+#include <fmt/base.h>
+#include <stdint.h>
 #include <tt-metalium/bfloat16.hpp>
-#include <tt-metalium/host_api.hpp>
 #include <tt-metalium/device.hpp>
-#include <tt-metalium/command_queue.hpp>
+#include <tt-metalium/host_api.hpp>
+#include <algorithm>
+#include <cstring>
+#include <exception>
+#include <memory>
+#include <optional>
+#include <ratio>
+#include <string>
+#include <tuple>
+#include <variant>
+#include <vector>
+
+#include <tt_stl/assert.hpp>
+#include <tt-metalium/distributed.hpp>
+#include <tt-metalium/buffer.hpp>
+#include <tt-metalium/buffer_types.hpp>
+#include <tt-logger/tt-logger.hpp>
+#include "test_common.hpp"
+
+namespace tt {
+namespace tt_metal {
+class CommandQueue;
+}  // namespace tt_metal
+}  // namespace tt
 
 using namespace tt;
 using namespace tt::tt_metal;
@@ -54,8 +76,9 @@ int main(int argc, char** argv) {
 
         // Device Setup
         log_info(LogTest, "Running test using device ID {}", device_id);
-        tt_metal::IDevice* device = tt_metal::CreateDevice(device_id);
-        CommandQueue& cq = device->command_queue();
+
+        std::shared_ptr<distributed::MeshDevice> mesh_device = distributed::MeshDevice::create_unit_mesh(device_id);
+        distributed::MeshCommandQueue& cq = mesh_device->mesh_command_queue();
 
         log_info(
             LogTest,
@@ -65,9 +88,9 @@ int main(int argc, char** argv) {
             page_size);
 
         const BufferType buff_type = buffer_type == 0 ? tt_metal::BufferType::DRAM : tt_metal::BufferType::L1;
-        tt_metal::InterleavedBufferConfig buff_config{
-            .device = device, .size = buffer_size, .page_size = page_size, .buffer_type = buff_type};
-        auto buffer = CreateBuffer(buff_config);
+        distributed::DeviceLocalBufferConfig local_config{.page_size = page_size, .buffer_type = buff_type};
+        distributed::ReplicatedBufferConfig buffer_config{.size = buffer_size};
+        auto buffer = distributed::MeshBuffer::create(buffer_config, local_config, mesh_device.get());
 
         // Execute Application
         std::vector<uint32_t> src_vec = create_random_vector_of_bfloat16(
@@ -79,8 +102,8 @@ int main(int argc, char** argv) {
 
             for (int i = 0; i < iter; i++) {
                 begin = std::chrono::steady_clock::now();
-                EnqueueWriteBuffer(cq, buffer, src_vec, false);
-                Finish(cq);
+                distributed::WriteShard(cq, buffer, src_vec, distributed::MeshCoordinate(0, 0));
+                distributed::Finish(cq);
                 end = std::chrono::steady_clock::now();
                 elapsed_sum += end - begin;
             }
@@ -89,7 +112,7 @@ int main(int argc, char** argv) {
             auto bw = (buffer_size / 1024.0 / 1024.0 / 1024.0) / (elapsed_us / 1000.0 / 1000.0);
             log_info(
                 LogTest,
-                "EnqueueWriteBuffer to {}: {:.3f}ms, {:.3f}GB/s",
+                "WriteShard to {}: {:.3f}ms, {:.3f}GB/s",
                 buffer_type == 0 ? "DRAM" : "L1",
                 elapsed_us / 1000.0,
                 bw);
@@ -103,7 +126,7 @@ int main(int argc, char** argv) {
 
             for (int i = 0; i < iter; i++) {
                 begin = std::chrono::steady_clock::now();
-                EnqueueReadBuffer(cq, buffer, result_vec, true);
+                distributed::ReadShard(cq, result_vec, buffer, distributed::MeshCoordinate(0, 0));
                 end = std::chrono::steady_clock::now();
                 elapsed_sum += end - begin;
             }
@@ -112,14 +135,14 @@ int main(int argc, char** argv) {
             auto bw = (buffer_size / 1024.0 / 1024.0 / 1024.0) / (elapsed_us / 1000.0 / 1000.0);
             log_info(
                 LogTest,
-                "EnqueueReadBuffer from {}: {:.3f}ms, {:.3f}GB/s",
+                "ReadShard from {}: {:.3f}ms, {:.3f}GB/s",
                 buffer_type == 0 ? "DRAM" : "L1",
                 elapsed_us / 1000.0,
                 bw);
         }
         // Validation & Teardown
         pass &= (src_vec == result_vec);
-        pass &= tt_metal::CloseDevice(device);
+        pass &= mesh_device->close();
     } catch (const std::exception& e) {
         pass = false;
         log_error(LogTest, "{}", e.what());

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 
 #include "ttnn/operations/experimental/matmul/attn_matmul/attn_matmul_pybind.hpp"
 #include "ttnn/operations/experimental/matmul/attn_matmul/attn_matmul.hpp"
@@ -25,10 +25,8 @@ void bind_attn_matmul(pybind11::module& module) {
                std::optional<const DataType> output_dtype,
                std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config,
                const std::optional<MemoryConfig>& memory_config,
-               std::optional<Tensor> optional_output_tensor,
-               uint8_t queue_id) {
+               std::optional<Tensor> optional_output_tensor) {
                 return self(
-                    queue_id,
                     input_tensor_a,
                     input_tensor_b,
                     compute_with_storage_grid_size,
@@ -44,8 +42,7 @@ void bind_attn_matmul(pybind11::module& module) {
             pybind11::arg("dtype").noconvert() = std::nullopt,
             pybind11::arg("compute_kernel_config").noconvert() = std::nullopt,
             pybind11::arg("memory_config") = std::nullopt,
-            pybind11::arg("output_tensor") = std::nullopt,
-            pybind11::arg("queue_id") = 0});
+            pybind11::arg("output_tensor") = std::nullopt});
 }
 
 void bind_attn_matmul_from_cache(pybind11::module& module) {
@@ -54,7 +51,7 @@ void bind_attn_matmul_from_cache(pybind11::module& module) {
         module,
         ttnn::experimental::attn_matmul_from_cache,
         R"doc(
-            Performs the same matmul as attn_matmul, but fuses additional functionality for reading in in1. For in1, read num_tokens (rounded up to 32) from full cache along in1.get_padded_shape()[2] (num_tokens must be > 0 and <= max_cache_len). For example, 64 tokens will be read for 32 < token_idx <= 64. Additional option to apply transpose_hw to in1 for pre-attention matmul with transpose_hw=true. For post-attention matmul, transpose_hw should be false.
+            Performs the same matmul as attn_matmul, but fuses additional functionality for reading in in1. For in1, read num_tokens (rounded up to 32) from full cache along in1.padded_shape()[2] (num_tokens must be > 0 and <= max_cache_len). For example, 64 tokens will be read for 32 < token_idx <= 64. Additional option to apply transpose_hw to in1 for pre-attention matmul with transpose_hw=true. For post-attention matmul, transpose_hw should be false.
         )doc",
         ttnn::pybind_overload_t{
             [](const OperationType& self,
@@ -65,10 +62,8 @@ void bind_attn_matmul_from_cache(pybind11::module& module) {
                const CoreCoord& compute_with_storage_grid_size,
                const std::optional<MemoryConfig>& memory_config,
                std::optional<const DataType> dtype,
-               std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config,
-               uint8_t queue_id) {
+               std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config) {
                 return self(
-                    queue_id,
                     input_tensor_a,
                     input_tensor_b,
                     num_tokens,
@@ -86,8 +81,7 @@ void bind_attn_matmul_from_cache(pybind11::module& module) {
             pybind11::arg("compute_with_storage_grid_size").noconvert(),
             pybind11::arg("memory_config") = std::nullopt,
             pybind11::arg("dtype") = std::nullopt,
-            pybind11::arg("compute_kernel_config") = std::nullopt,
-            pybind11::arg("queue_id") = 0});
+            pybind11::arg("compute_kernel_config") = std::nullopt});
 }
 
 }  // namespace ttnn::operations::experimental::matmul::detail

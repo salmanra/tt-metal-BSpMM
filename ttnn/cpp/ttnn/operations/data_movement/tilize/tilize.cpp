@@ -5,7 +5,6 @@
 #include "tilize.hpp"
 
 #include "device/tilize_op.hpp"
-#include "ttnn/common/constants.hpp"
 #include "ttnn/run_operation.hpp"
 #include "ttnn/operations/data_movement/common/common.hpp"
 #include "ttnn/operations/data_movement/reshape_view/reshape.hpp"
@@ -20,13 +19,11 @@ using MassagedTilize = MassagedOperation<ttnn::Tensor, const ttnn::Tensor&>;
 using MassagedTilizeParams = MassagedOperationParams<ttnn::Tensor, const ttnn::Tensor&>;
 
 MassagedTilize build_ndiml_tilize(BaseTilizeType base_tilize) {
-    auto original_shape = std::make_shared<SimpleShape>();
+    auto original_shape = std::make_shared<Shape>();
     return MassagedTilize(MassagedTilizeParams{
-        .predicate = [](const ttnn::Tensor& input_tensor) -> bool {
-            return input_tensor.get_logical_shape().rank() > 4;
-        },
+        .predicate = [](const ttnn::Tensor& input_tensor) -> bool { return input_tensor.logical_shape().rank() > 4; },
         .pre_transform = [=](const ttnn::Tensor& input_tensor) -> OwnedTilizeArgs {
-            *original_shape = input_tensor.get_logical_shape();
+            *original_shape = input_tensor.logical_shape();
             ttnn::Tensor squeezed_tensor = squeeze_from_ND_to_4D(input_tensor);
             return std::make_tuple(squeezed_tensor);
         },
@@ -38,32 +35,42 @@ MassagedTilize build_ndiml_tilize(BaseTilizeType base_tilize) {
 }
 
 ttnn::Tensor ExecuteTilize::invoke(
-    uint8_t queue_id,
     const ttnn::Tensor& input_tensor,
     const std::optional<MemoryConfig>& memory_config,
     std::optional<DataType> output_dtype,
     bool use_multicore) {
+    tt::DataFormat input_cb_data_format = tt::tt_metal::datatype_to_dataformat_converter(input_tensor.dtype());
+    uint32_t input_single_tile_size = tt::tile_size(input_cb_data_format);
+    uint32_t output_single_tile_size =
+        output_dtype.has_value()
+            ? tt::tile_size(tt::tt_metal::datatype_to_dataformat_converter(output_dtype.value()))
+            : input_single_tile_size;
+
+    uint32_t input_tile_width = input_tensor.tensor_spec().tile().get_width();
+    uint32_t input_tile_height = input_tensor.tensor_spec().tile().get_height();
+
+    uint32_t num_tiles_per_row = input_tensor.padded_shape()[-1] / input_tile_width;
+    uint32_t num_tiles_per_col = input_tensor.padded_shape()[-1] / input_tile_height;
+
+    bool enough_space_width =
+        is_enough_space(input_tensor, input_single_tile_size, output_single_tile_size, num_tiles_per_col);
+    bool enough_space_height =
+        is_enough_space(input_tensor, input_single_tile_size, output_single_tile_size, num_tiles_per_row);
+
     auto base_tilize = [=](const ttnn::Tensor& input_tensor) {
         return operation::run(
             Tilize{
                 memory_config.value_or(input_tensor.memory_config()),
-                output_dtype.value_or(input_tensor.get_dtype()),
-                use_multicore},
+                output_dtype.value_or(input_tensor.dtype()),
+                use_multicore,
+                enough_space_width,
+                enough_space_height},
             {input_tensor},
             {},
-            {},
-            queue_id)[0];
+            {})[0];
     };
 
     return build_ndiml_tilize(base_tilize)(input_tensor);
-}
-
-ttnn::Tensor ExecuteTilize::invoke(
-    const ttnn::Tensor& input_tensor,
-    const std::optional<MemoryConfig>& memory_config,
-    std::optional<DataType> output_dtype,
-    bool use_multicore) {
-    return invoke(DefaultQueueId, input_tensor, memory_config, output_dtype, use_multicore);
 }
 
 }  // namespace ttnn::operations::data_movement

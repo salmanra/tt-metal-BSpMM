@@ -68,8 +68,6 @@ All contributions require:
 Furthermore, all PRs must follow the [contribution
 standards](#contribution-standards).
 
-## Machine setup
-
 ## Developing tt-metal
 
 Currently, the most convenient way to develop is to do so on our cloud
@@ -83,13 +81,29 @@ page](docs/source/tt-metalium/get_started/get_started.rst).
 ### Setting logger level
 
 In order to get debug level log messages, set the environment variable
-`TT_METAL_LOGGER_LEVEL=Debug`.
+`TT_LOGGER_LEVEL=Debug`.
 
 For example,
 
 ```
-TT_METAL_LOGGER_LEVEL=Debug ./build/test/tt_metal/test_add_two_ints
+TT_LOGGER_LEVEL=Debug ./build/test/tt_metal/test_add_two_ints
 ```
+
+### Adding new TTNN examples
+
+TTNN tutorials in this documentation are written as Jupyter notebooks (`.ipynb`) and located in the `ttnn/tutorials/2025_dx_rework` directory. For each notebook, a corresponding Python script is automatically generated and maintained in the `ttnn/tutorials/basic_python` directory. To ensure consistency between notebooks and their exported Python versions, a Git pre-commit hook is provided.
+
+This hook performs the following actions:
+
+- Detects all staged Jupyter notebook files under the notebooks/ directory.
+- Converts each notebook to a Python script using jupyter nbconvert with a custom template.
+- Writes the output to the python/ directory only if there are changes.
+- Automatically stages new or updated Python scripts for commit.
+- Exits with a non-zero status code if any files were modified, alerting Git to re-check the commit.
+
+This process ensures that all TTNN examples remain synchronized and up-to-date in both formats. **Important:** Always make changes directly to the `.ipynb` notebook files—not the generated Python scripts. Any manual changes made to the Python files will be overwritten the next time the notebook is updated. Python files are considered read-only exports for users or CI pipelines that prefer `.py` formats.
+
+Both the Jupyter notebooks and the exported Python files are tested as part of the CI workflows to ensure correctness and stability.
 
 ### Building and viewing the documentation locally
 
@@ -128,6 +142,10 @@ is the IP address of the machine on which you launched the web server. For
 example: `http://10.250.37.37:4242`, for port ``4242``.
 
 If you forwarded your port, navigate to `http://localhost:8888`.
+
+`http://<ip address>:<port>` will redirect you to the tt-metalium docs at `http://<ip address>:<port>/tt-metalium/`.
+
+To view the ttnn docs, navigate to `http://<ip address>:<port>/ttnn`.
 
 4. If you make changes, you may need to check spelling errors.
 
@@ -172,8 +190,8 @@ You must run post-commit regressions before you commit something.
 These regressions will also run after every pushed commit to the GitHub repo.
 
 ```
-cmake --build build --target install
-cmake --build build --target tests
+# Build directly with CMake for full control or run the provided script for building all tests.
+./build_metal.sh --build-tests
 ./tests/scripts/run_tests.sh --tt-arch $ARCH_NAME --pipeline-type post_commit
 ```
 
@@ -221,9 +239,10 @@ We have a legacy suite of C++ integration tests that are built like standalone
 executables. This section goes over how to generally run such tests if there's
 a specific one you'd like to run.
 
-1. Build the API integration tests using the make command,
+1. Build the API integration tests:
 ```
-cmake --build build --target tests
+# Build directly with CMake for full control or run the provided script for building all tests.
+./build_metal.sh --build-tests
 ```
 2. Run the test binaries from the path **${TT_METAL_HOME}/build/test/tt_metal**
 
@@ -234,16 +253,17 @@ structure our tests with this framework is to bundle it into a single
 executable.
 
 You can use `--gtest_filter` to filter out the specific test you'd like.
-For example, to build and run the `DispatchFixture.TensixDRAMLoopbackSingleCore` on
+For example, to build and run the `MeshDispatchFixture.TensixDRAMLoopbackSingleCore` on
 fast dispatch, you can
 
-1. Build the unit tests:
+1. Build the tests:
    ```
-   cmake --build build --target tests
+   # Build directly with CMake for full control or run the provided script for building all tests.
+   ./build_metal.sh --build-tests
    ```
 2. Run the test:
    ```
-   ./build/test/tt_metal/unit_tests_api --gtest_filter="DispatchFixture.TensixDRAMLoopbackSingleCore"
+   ./build/test/tt_metal/unit_tests_api --gtest_filter="MeshDispatchFixture.TensixDRAMLoopbackSingleCore"
    ```
 
 On slow dispatch, to run another specific test, the equivalent would be:
@@ -252,7 +272,7 @@ On slow dispatch, to run another specific test, the equivalent would be:
 2. Run with the slow dispatch mode:
    ```
    export TT_METAL_SLOW_DISPATCH_MODE=1
-   ./build/test/tt_metal/unit_tests/unit_tests_api --gtest_filter="DeviceSingleCardBufferFixture.TestL1BuffersAllocatedTopDown"
+   ./build/test/tt_metal/unit_tests/unit_tests_api --gtest_filter="MeshDeviceSingleCardBufferFixture.TestL1BuffersAllocatedTopDown"
    ```
 
 We have split our tests into the two dispatch modes for less pollution of state
@@ -475,6 +495,12 @@ To set up pre-commit on your local machine, follow these steps:
 ### CI/CD Principles
 
 - Revert commits on main which fail post-commit tests immediately.
+  - The names listed in the commit, and technical leads if their names are
+    convenient and clear to find, will be pinged in #tt-metal-pipelines.
+  - We will usually give a grace period during working hours depending on the
+    load of the teams to see if the author(s) can merge a fix quickly.
+    Otherwise, the revert will be immediate to prevent the issue from spreading
+    to other peoples' pipelines.
 - There shall be a periodic discussion among the technical leads of this
   project concerning:
   - Certain codeowners and project-specific members review current tests in
@@ -508,7 +534,7 @@ To set up pre-commit on your local machine, follow these steps:
   Next, you can navigate to any pipeline on the left side of the view. For
   example, you can run the entire post-commit CI suite by clicking on
   on the link to [all post-commit workflows](https://github.com/tenstorrent/tt-metal/actions/workflows/all-post-commit-workflows.yaml), clicking "Run workflow",
-  selecting your branch, and pressing "Run workflow".
+  selecting your branch, then selecting `build-type` as "Release" and pressing "Run workflow".
 
   ![Dropdown menu of all post-commit workflows and Run Workflow button](docs/source/common/_static/all-post-commit-workflows-button.png)
 
@@ -524,7 +550,7 @@ To set up pre-commit on your local machine, follow these steps:
   and without CI failure.
 
 ### Skipping CI/CD for documentation updates
-- CI/CD can be skipped for *documentation only* updates that incur no functional change.
+- CI/CD can be skipped for *documentation only* updates that incur no functional change. However, note that modifying `.rst` files in `docs/` is *not a documentation only* update, as the CI step for building documentation needs to run.
 - Upon submitting a PR and getting the necessary approvals:
   - Click Squash and Merge
   - Before confirming, edit the top level commit message by prepending the token `[skip ci]`
@@ -647,9 +673,6 @@ your local branch, and then once everything looks good, push the change. You
 should not rebase your origin branch. That way, if anything goes wrong, you can
 use origin to restore your branch to a good state.
 
-Note: Before rebasing, remember to change your default comment character, which
-is mentioned earlier in [Setting up Git](#setting-up-git).
-
 Note: for very small changes where you don't expect to create a second commit
 it might be okay to use the UI to rebase origin. However, in general, it's
 better to avoid that.
@@ -659,7 +682,9 @@ You should first make sure main is up to date:
 ```
 git checkout main
 git fetch origin
+git submodule sync
 git pull --rebase --prune
+git submodule update --init --recursive
 ```
 
 Then you can
@@ -787,6 +812,11 @@ After that, the UI will usually delete your branch.
   review and start running pipelines. This is because we don't want to clog
   our pipelines with unnecessary runs that developers may know will fail
   anyways.
+
+### A recommended development flow for model writers
+
+Please refer to documentation for [adding a model](./models/docs/MODEL_ADD.md) and
+for [graduating](./models/docs/MODEL_GRADUATION.md) it.
 
 ### New feature and design specifications
 

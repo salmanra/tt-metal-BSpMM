@@ -2,34 +2,52 @@ name: "[post-commit] Python wheels build and test"
 
 on:
   workflow_dispatch:
-    inputs:
-      from-precompiled:
-        description: "Use precompiled assets for wheel build"
-        default: True
-        type: boolean
   schedule:
-    - cron: "0 0 * * *"
+    - cron: '0 2 * * *'
 
 jobs:
   build-artifact:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.from-precompiled }}
     uses: ./.github/workflows/build-artifact.yaml
+    permissions:
+      packages: write
     secrets: inherit
-  build-wheels:
-    needs: build-artifact
-    if: ${{ always() }}
-    strategy:
-      matrix:
-        # Since pre-compiled builds only run on 20.04, we can only test on 20.04 for now
-        # The full 22.04 flow can be tested without precompiled
-        os: ${{ fromJson((github.event_name == 'schedule' || inputs.from-precompiled) && '["ubuntu-20.04"]' || '["ubuntu-20.04", "ubuntu-22.04"]') }}
-    uses: ./.github/workflows/_build-wheels-impl.yaml
     with:
-      os: ${{ matrix.os }}
-      from-precompiled: ${{ inputs.from-precompiled }}
+      build-wheel: true
   test-wheels:
-    needs: build-wheels
-    if: ${{ always() }}
+    needs: build-artifact
     uses: ./.github/workflows/_test-wheels-impl.yaml
-    with:
-      from-precompiled: ${{ github.event_name == 'workflow_dispatch' && inputs.from-precompiled }}
+  publish-wheels:
+    name: "Publish wheels to internal PyPI"
+    needs: [build-artifact, test-wheels]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for AWS OIDC
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.PYPI_ROLE }}
+          aws-region: ${{ secrets.PYPI_REGION }}
+
+      - name: Install s3pypi
+        run: |
+          pip install s3pypi
+
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0
+        with:
+          name: ${{ needs.build-artifact.outputs.wheel-artifact-name }}
+          path: ./wheels
+
+      - name: Publish wheels to internal PyPI
+        run: |
+          found_wheel_files=$(find ./wheels -type f -name "*.whl" -exec realpath {} \;)
+          for wheel in $found_wheel_files; do
+            echo "Publishing wheel: $wheel"
+            s3pypi upload "$wheel" --put-root-index --bucket ${{ secrets.PYPI_BUCKET }}
+          done

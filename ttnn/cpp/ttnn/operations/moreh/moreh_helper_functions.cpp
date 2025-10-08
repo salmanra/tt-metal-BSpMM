@@ -4,12 +4,13 @@
 
 #include "moreh_helper_functions.hpp"
 
-#include <magic_enum/magic_enum.hpp>
+#include <enchantum/enchantum.hpp>
 #include <utility>
 
 #include <tt-metalium/constants.hpp>
 #include <tt-metalium/work_split.hpp>
-#include <tt-metalium/util.hpp>
+
+#include "tt-metalium/hal.hpp"
 
 namespace ttnn {
 namespace operations {
@@ -95,14 +96,14 @@ std::tuple<uint32_t, CoreRangeSet, CoreRangeSet, CoreRangeSet, uint32_t, uint32_
     const std::string& file_name,
     const std::variant<CoreCoord, CoreRange, CoreRangeSet>& core_spec,
     const std::vector<uint32_t>& compile_args,
-    std::map<string, string> defines) {
+    std::map<std::string, std::string> defines) {
     return tt_metal::CreateKernel(
         program,
         file_name,
         core_spec,
         tt_metal::DataMovementConfig{
             .processor = tt_metal::DataMovementProcessor::RISCV_1,
-            .noc = tt::tt_metal::detail::GetPreferredNOCForDRAMRead(tt::Cluster::instance().arch()),
+            .noc = tt::tt_metal::detail::preferred_noc_for_dram_read(hal::get_arch()),
             .compile_args = compile_args,
             .defines = std::move(defines)});
 }
@@ -112,14 +113,14 @@ std::tuple<uint32_t, CoreRangeSet, CoreRangeSet, CoreRangeSet, uint32_t, uint32_
     const std::string& file_name,
     const std::variant<CoreCoord, CoreRange, CoreRangeSet>& core_spec,
     const std::vector<uint32_t>& compile_args,
-    std::map<string, string> defines) {
+    std::map<std::string, std::string> defines) {
     return tt_metal::CreateKernel(
         program,
         file_name,
         core_spec,
         tt_metal::DataMovementConfig{
             .processor = tt_metal::DataMovementProcessor::RISCV_0,
-            .noc = tt::tt_metal::detail::GetPreferredNOCForDRAMWrite(tt::Cluster::instance().arch()),
+            .noc = tt::tt_metal::detail::preferred_noc_for_dram_write(hal::get_arch()),
             .compile_args = compile_args,
             .defines = std::move(defines)});
 }
@@ -229,9 +230,8 @@ std::tuple<uint32_t, CoreRangeSet, CoreRangeSet, CoreRangeSet, uint32_t, uint32_
         auto _core_range = (arg.core_range != std::nullopt) ? arg.core_range : core_range;
 
         tt_metal::CircularBufferConfig cb_config =
-            tt_metal::CircularBufferConfig(
-                _num_tiles * tt_metal::detail::TileSize(_data_format), {{_buffer_index, _data_format}})
-                .set_page_size(_buffer_index, tt_metal::detail::TileSize(_data_format));
+            tt_metal::CircularBufferConfig(_num_tiles * tt::tile_size(_data_format), {{_buffer_index, _data_format}})
+                .set_page_size(_buffer_index, tt::tile_size(_data_format));
 
         cb_id = tt_metal::CreateCircularBuffer(program, _core_range.value(), cb_config);
     }
@@ -248,11 +248,11 @@ void check_tensor(
     bool check_layout) {
     if (check_layout) {
         TT_FATAL(
-            tensor.get_layout() == layout,
+            tensor.layout() == layout,
             "{} {} only supports {} layout.",
             op_name,
             tensor_name,
-            magic_enum::enum_name(layout));
+            enchantum::to_string(layout));
     }
     TT_FATAL(tensor.storage_type() == StorageType::DEVICE, "{} {} need to be on device!", op_name, tensor_name);
     TT_FATAL(tensor.buffer() != nullptr, "{} {} need to be allocated in buffers on device!", op_name, tensor_name);
@@ -260,7 +260,7 @@ void check_tensor(
     if (check_dtype) {
         bool dtype_supported = false;
         for (const auto& data_type : data_types) {
-            if (tensor.get_dtype() == data_type) {
+            if (tensor.dtype() == data_type) {
                 dtype_supported = true;
                 break;
             }
@@ -272,7 +272,7 @@ void check_tensor(
                 if (!is_first) {
                     dtype_string += ", ";
                 }
-                dtype_string += fmt::format("{}", magic_enum::enum_name(data_type));
+                dtype_string += fmt::format("{}", enchantum::to_string(data_type));
                 is_first = false;
             }
             dtype_string += "]";
@@ -299,7 +299,7 @@ void check_tensor(
 
 bool is_hw_dim(uint32_t dim, uint32_t rank) { return (dim >= rank - 2); }
 
-uint32_t compute_inner(tt::tt_metal::LegacyShape shape, uint32_t dim) {
+uint32_t compute_inner(const ttnn::Shape& shape, uint32_t dim) {
     uint32_t num_inner = 1;
     auto rank = shape.rank();
 
@@ -314,7 +314,7 @@ uint32_t compute_inner(tt::tt_metal::LegacyShape shape, uint32_t dim) {
     return num_inner;
 }
 
-uint32_t compute_outer(tt::tt_metal::LegacyShape shape, uint32_t dim) {
+uint32_t compute_outer(const ttnn::Shape& shape, uint32_t dim) {
     uint32_t num_outer = 1;
     auto rank = shape.rank();
 
@@ -328,7 +328,7 @@ uint32_t compute_outer(tt::tt_metal::LegacyShape shape, uint32_t dim) {
     return num_outer;
 }
 
-void expand_to_max_dim(ttnn::SmallVector<uint32_t>& dim, const ttnn::SimpleShape& shape) {
+void expand_to_max_dim(ttnn::SmallVector<uint32_t>& dim, const ttnn::Shape& shape) {
     const auto rank = shape.rank();
     for (auto i = 0; i < rank; ++i) {
         auto idx = rank - 1 - i;
@@ -337,8 +337,7 @@ void expand_to_max_dim(ttnn::SmallVector<uint32_t>& dim, const ttnn::SimpleShape
 }
 
 void validate_input_with_dim(const Tensor& input, const int64_t& dim) {
-    auto input_shape = input.get_padded_shape();
-    auto input_shape_wo_padding = input.get_logical_shape();
+    const auto& input_shape = input.padded_shape();
     const auto input_rank = input_shape.rank();
     log_debug(LogOp, "{}:{} input_rank {}", __func__, __LINE__, input_rank);
     TT_FATAL(
@@ -349,13 +348,13 @@ void validate_input_with_dim(const Tensor& input, const int64_t& dim) {
 }
 
 void validate_output_with_keepdim(const Tensor& input, const Tensor& output, const int64_t& dim, const bool& keepdim) {
-    auto input_shape = input.get_padded_shape();
-    auto input_shape_wo_padding = input.get_logical_shape();
+    auto input_shape = input.padded_shape();
+    auto input_shape_wo_padding = input.logical_shape();
     const auto input_rank = input_shape_wo_padding.rank();
     auto padded_dim = dim + input_shape.rank() - input_shape_wo_padding.rank();
 
-    const auto output_shape = output.get_padded_shape();
-    const auto output_shape_wo_padding = output.get_logical_shape();
+    const auto& output_shape = output.padded_shape();
+    const auto& output_shape_wo_padding = output.logical_shape();
     const auto output_rank = output_shape_wo_padding.rank();
 
     const bool is_tile_dim = (dim == input_rank - 1 || dim == input_rank - 2);
@@ -444,7 +443,7 @@ ttnn::SmallVector<int64_t> get_dim(
     return dims;
 }
 
-std::tuple<uint32_t, uint32_t, uint32_t> extract_spatial_dims(const ttnn::SimpleShape& shape) {
+std::tuple<uint32_t, uint32_t, uint32_t> extract_spatial_dims(const ttnn::Shape& shape) {
     const auto rank = shape.rank();
 
     TT_FATAL(rank >= 2, "Shape must have at least two dims.");
@@ -460,7 +459,7 @@ std::tuple<uint32_t, uint32_t, uint32_t> extract_spatial_dims(const ttnn::Simple
 }
 
 std::tuple<uint32_t, uint32_t, uint32_t, uint32_t> extract_and_scale_spatial_dims(
-    const ttnn::SimpleShape& shape, uint32_t dim) {
+    const ttnn::Shape& shape, uint32_t dim) {
     const auto rank = shape.rank();
 
     TT_FATAL(rank >= 2, "Shape must have at least two dims.");

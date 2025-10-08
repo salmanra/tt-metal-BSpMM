@@ -14,7 +14,7 @@ import ttnn
 
 from tests.ttnn.utils_for_testing import check_with_pcc_without_tensor_printout
 from tests.ttnn.ttnn_utility_fuction import get_shard_grid_from_num_cores
-from models.utility_functions import is_wormhole_b0, skip_for_grayskull, is_blackhole
+from models.common.utility_functions import is_wormhole_b0, is_blackhole
 from tt_lib.utils import (
     _nearest_y,
 )
@@ -49,8 +49,8 @@ def run_elt_silu_relu(
     interleaved_mem_config = ttnn.L1_MEMORY_CONFIG
     input_tensor = ttnn.to_memory_config(input_tensor, interleaved_mem_config)
     # input_shape = [1, 1, _nearest_y(batch_size * input_height * input_width, 32), input_channels]
-    input_2d_height = input_tensor.shape.with_tile_padding()[2]
-    input_2d_width = input_tensor.shape.with_tile_padding()[3]
+    input_2d_height = input_tensor.padded_shape[2]
+    input_2d_width = input_tensor.padded_shape[3]
     logger.debug(f"input_2d_height={input_2d_height} and input_2d_width={input_2d_width}")
 
     ## input shard
@@ -161,7 +161,6 @@ def test_gs_silu_relu(
     )
 
 
-@skip_for_grayskull()
 @pytest.mark.parametrize(
     "batch_size, input_channels, input_height, input_width, ncores, grid_size, shard_strategy, shard_orientation",
     (

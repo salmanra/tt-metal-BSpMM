@@ -7,7 +7,7 @@ import torch
 from loguru import logger
 
 import ttnn
-from models.utility_functions import comp_allclose_and_pcc
+from models.common.utility_functions import comp_allclose_and_pcc
 from tests.ttnn.unit_tests.operations.test_utils import get_lib_dtype
 
 
@@ -115,7 +115,7 @@ def test_arange(start_end_step, optional_output, dtype, tilized, device):
     "dtype",
     [None, "bfloat8_b", "bfloat16", "int32", "float32"],
 )
-def test_arange_callback(start_end_step, optional_output, dtype, device, use_program_cache):
+def test_arange_callback(start_end_step, optional_output, dtype, device):
     """Test arange functionality with callback and program cache validation."""
     torch.manual_seed(2024)
     num_program_cache_entries_list = []

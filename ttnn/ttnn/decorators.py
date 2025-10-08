@@ -4,6 +4,7 @@
 
 import dataclasses
 import pathlib
+import shutil
 import sys
 import time
 import traceback
@@ -26,7 +27,7 @@ def compare_tensors_using_pcc(
 ):
     import torch
 
-    from models.utility_functions import comp_pcc
+    from models.common.utility_functions import comp_pcc
 
     if isinstance(outputs, ttnn.Tensor):
         if not isinstance(golden_outputs, torch.Tensor):
@@ -51,14 +52,14 @@ def compare_tensors_using_pcc(
         else:
             torch_output = output
         matches, actual_pcc = comp_pcc(golden_output, torch_output, desired_pcc)
-        commparison_record = ttnn.database.TensorComparisonRecord(
+        comparison_record = ttnn.database.TensorComparisonRecord(
             tensor_id=output.tensor_id,
             golden_tensor_id=golden_output.tensor_id,
             matches=matches,
             desired_pcc=desired_pcc,
             actual_pcc=actual_pcc,
         )
-        comparison_records.append(commparison_record)
+        comparison_records.append(comparison_record)
 
         if not matches:
             error_message = f"{python_fully_qualified_name}: Comparing output tensor {index} against CPU {level} failed: pcc is {actual_pcc} but should be >={desired_pcc}"
@@ -71,6 +72,11 @@ def compare_tensors_using_pcc(
 
 
 PRE_OPERATION_HOOKS = []
+POST_OPERATION_HOOKS = []
+
+push_current_command_queue_id_for_thread = ttnn._ttnn.core.push_current_command_queue_id_for_thread
+pop_current_command_queue_id_for_thread = ttnn._ttnn.core.pop_current_command_queue_id_for_thread
+get_current_command_queue_id_for_thread = ttnn._ttnn.core.get_current_command_queue_id_for_thread
 
 
 @contextmanager
@@ -95,7 +101,37 @@ def register_pre_operation_hook(hook):
     PRE_OPERATION_HOOKS.pop()
 
 
-POST_OPERATION_HOOKS = []
+@contextmanager
+def command_queue(cq_id: int):
+    """Context manager to set a default command queue for all TTNN operations within this context.
+
+    Operations within this context will use the specified cq_id unless they explicitly
+    provide their own cq_id parameter, which takes precedence.
+
+    Args:
+        cq_id: The command queue ID to use for operations in this context
+
+    Example:
+        with ttnn.command_queue(1):
+            result = ttnn.some_operation(tensor)  # Will use cq_id 1
+            result2 = ttnn.other_operation(tensor, queue_id=0)  # Will use cq_id 0 (overrides context)
+    """
+    if cq_id is None:
+        raise ValueError("cq_id cannot be None in command_queue context")
+
+    push_current_command_queue_id_for_thread(cq_id)
+    try:
+        yield
+    finally:
+        # Check if command queue is in expected state when exiting context
+        current_cq_id = get_current_command_queue_id_for_thread()
+        if current_cq_id != cq_id:
+            logger.warning(
+                f"command_queue({cq_id}) context exiting with unexpected command queue ID: {current_cq_id}. "
+                f"This might indicate an operation didn't properly restore the command queue state. "
+                f"Restoring to original value {cq_id}."
+            )
+        pop_current_command_queue_id_for_thread()
 
 
 @contextmanager
@@ -262,7 +298,7 @@ def preprocess_global_golden_function_inputs(function_args, function_kwargs):
             input_index += 1
             return golden_tensor
         elif isinstance(object_value, ttnn.Shape):
-            return tuple(object_value.with_tile_padding())
+            return tuple(object_value)
         elif isinstance(object_value, (list, tuple)):
             new_object_value = [recursive_preprocess_golden_function_inputs(element) for element in object_value]
             return type(object_value)(new_object_value)
@@ -284,7 +320,7 @@ def preprocess_global_golden_function_inputs(function_args, function_kwargs):
         return None
 
 
-def posprocess_global_golden_function_outputs(outputs, golden_outputs):
+def postprocess_global_golden_function_outputs(outputs, golden_outputs):
     import torch
 
     if isinstance(outputs, ttnn.Tensor):
@@ -330,7 +366,19 @@ class FastOperation:
         return hash(self.python_fully_qualified_name)
 
     def __call__(self, *function_args, **function_kwargs):
-        return self.function(*function_args, **function_kwargs)
+        cq_id = None
+        if "queue_id" in function_kwargs:
+            cq_id = function_kwargs.pop("queue_id")
+        elif "cq_id" in function_kwargs:
+            cq_id = function_kwargs.pop("cq_id")
+
+        if cq_id is None:
+            result = self.function(*function_args, **function_kwargs)
+        else:
+            with command_queue(cq_id):
+                result = self.function(*function_args, **function_kwargs)
+
+        return result
 
     def __post_init__(self):
         if self.function.__doc__ is None:
@@ -462,7 +510,7 @@ class Operation:
 
                 if global_golden_function_output is not None:
                     set_tensor_id(global_golden_function_output)
-                    posprocess_global_golden_function_outputs(output, global_golden_function_output)
+                    postprocess_global_golden_function_outputs(output, global_golden_function_output)
                     global_tensor_comparison_records = compare_tensors_using_pcc(
                         self.python_fully_qualified_name,
                         global_golden_function_output,
@@ -509,6 +557,12 @@ class Operation:
                 if not is_top_level_operation:
                     return decorated_function(*function_args, **function_kwargs)
 
+                cq_id = None
+                if "queue_id" in function_kwargs:
+                    cq_id = function_kwargs.pop("queue_id")
+                elif "cq_id" in function_kwargs:
+                    cq_id = function_kwargs.pop("cq_id")
+
                 for hook in PRE_OPERATION_HOOKS:
                     hook_return_value = hook(self, function_args, function_kwargs)
                     if hook_return_value is not None:
@@ -538,6 +592,9 @@ class Operation:
                     logger.debug(f"Started {self.python_fully_qualified_name:50}")
 
                     if ttnn.CONFIG.report_path is not None:
+                        cluster_descriptor_path = pathlib.Path(ttnn.CONFIG.report_path) / "cluster_descriptor.yaml"
+                        if not cluster_descriptor_path.exists():
+                            save_cluster_descriptor(str(cluster_descriptor_path))
                         ttnn.database.insert_operation(ttnn.CONFIG.report_path, operation_id, self, None)
                         ttnn.database.insert_stack_trace(
                             ttnn.CONFIG.report_path, operation_id, traceback.format_stack()
@@ -553,7 +610,13 @@ class Operation:
                     decorated_function = comparison_decorator(decorated_function)
 
                 ttnn.graph.begin_graph_capture(ttnn.graph.RunMode.NORMAL)
-                output = decorated_function(*function_args, **function_kwargs)
+
+                if cq_id is None:
+                    output = decorated_function(*function_args, **function_kwargs)
+                else:
+                    with command_queue(cq_id):
+                        output = decorated_function(*function_args, **function_kwargs)
+
                 captured_graph = ttnn.graph.end_graph_capture()
 
                 local_tensor_comparison_records = []
@@ -598,9 +661,9 @@ class Operation:
                         )
                         if global_golden_function_output is not None:
                             ttnn.database.store_tensors(ttnn.CONFIG.report_path, global_golden_function_output)
-                        ttnn.database.insert_buffers(ttnn.CONFIG.report_path, operation_id)
+                        ttnn.database.insert_buffers(ttnn.CONFIG.report_path, operation_id, devices)
                         if ttnn.CONFIG.enable_detailed_buffer_report:
-                            ttnn.database.insert_buffer_pages(ttnn.CONFIG.report_path, operation_id)
+                            ttnn.database.insert_buffer_pages(ttnn.CONFIG.report_path, operation_id, devices)
 
                         if ttnn.CONFIG.enable_graph_report:
                             ttnn.tracer.visualize(
@@ -803,8 +866,9 @@ def register_python_operation(
 
         if is_cpp_operation:
             raise RuntimeError(f"{function} is a C++ operation, but it is being registered as a Python operation")
-        elif not is_experimental and not is_method:
-            logger.debug(f"Should {python_fully_qualified_name} be migrated to C++?")
+        # Disabling for now (See GH issue #18386)
+        # elif not is_experimental and not is_method:
+        #     logger.debug(f"Should {python_fully_qualified_name} be migrated to C++?")
 
         operation_class = FastOperation if ttnn.CONFIG.enable_fast_runtime_mode else Operation
 
@@ -871,3 +935,12 @@ def register_ttl_operation_as_ttnn_operation(python_fully_qualified_name, functi
         is_experimental=True,
     )(function)
     return function
+
+
+def save_cluster_descriptor(dest_path):
+    temp_path = ttnn._ttnn.cluster.serialize_cluster_descriptor()
+
+    if not temp_path:
+        return None
+
+    shutil.copy(temp_path, dest_path)

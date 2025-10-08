@@ -5,7 +5,7 @@
 from typing import Optional, Tuple, Union
 import torch.nn as nn
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
@@ -101,7 +101,7 @@ class TtDistilBertModel(nn.Module):
         elif input_ids is not None:
             input_shape = list(input_ids.shape)
         elif inputs_embeds is not None:
-            input_shape = inputs_embeds.shape.with_tile_padding()[:-1]
+            input_shape = inputs_embeds.padded_shape[:-1]
 
         if attention_mask is not None:
             input_shape[0:0] = [1, 1]

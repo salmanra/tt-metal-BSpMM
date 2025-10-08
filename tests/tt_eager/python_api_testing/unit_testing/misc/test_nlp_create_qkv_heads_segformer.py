@@ -5,8 +5,8 @@
 import pytest
 from loguru import logger
 
-from models.utility_functions import tt2torch_tensor, comp_pcc
-from models.utility_functions import is_grayskull
+from models.common.utility_functions import tt2torch_tensor, comp_pcc
+from models.common.utility_functions import is_grayskull
 import torch
 import ttnn
 
@@ -34,7 +34,7 @@ def run_nlp_create_qkv_heads_segformer_test(batch, seq_len, hidden_dim, dtype, i
 
     head_dim = 32
     heads_num = hidden_dim // head_dim
-    assert list(q.shape.with_tile_padding()) == [batch, heads_num, seq_len, head_dim]
+    assert list(q.padded_shape) == [batch, heads_num, seq_len, head_dim]
 
     pyt_got_back_rm_q = tt2torch_tensor(q)
 
@@ -91,7 +91,7 @@ def test_nlp_create_qkv_heads_segformer_test(
     run_nlp_create_qkv_heads_segformer_test(batch, seq_len, hidden_dim, dtype, in0_mem_config, out_mem_config, device)
 
 
-def test_nlp_create_qkv_heads_segformer_with_program_cache(device, use_program_cache):
+def test_nlp_create_qkv_heads_segformer_with_program_cache(device):
     dtype = ttnn.bfloat8_b
     mem_config = ttnn.DRAM_MEMORY_CONFIG
     for _ in range(2):

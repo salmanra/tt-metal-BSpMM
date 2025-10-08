@@ -5,7 +5,6 @@
 import torch
 import models.experimental.bloom_old.bloom_utils as bloom_utils
 import models.experimental.bloom_old.tt.bloom_model as bloom_model
-from fused_ops.linear import Linear as TtLinear
 from typing import Optional
 
 
@@ -17,7 +16,7 @@ class TtBloomForQuestionAnswering:
         # self.qa_outputs_weight = bloom_utils.tt_load_layer_weights("qa_outputs.weight", state_dict)
         # self.qa_outputs_bias = bloom_utils.tt_load_layer_weights("qa_outputs.bias", state_dict)
 
-        # out_features = self.qa_outputs_bias.shape.with_tile_padding()[-1]
+        # out_features = self.qa_outputs_bias.padded_shape[-1]
         # self.qa_outputs = TtLinear(config.hidden_size, out_features, self.qa_outputs_weight, self.qa_outputs_bias, device)
 
         self.qa_outputs = torch.nn.Linear(config.hidden_size, 2)

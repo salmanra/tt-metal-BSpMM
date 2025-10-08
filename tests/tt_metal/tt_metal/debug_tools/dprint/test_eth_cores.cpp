@@ -2,11 +2,26 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "debug_tools_fixture.hpp"
-#include "gtest/gtest.h"
-#include "debug_tools_test_utils.hpp"
-#include <tt-metalium/tt_metal.hpp>
+#include <fmt/base.h>
 #include <tt-metalium/host_api.hpp>
+#include <functional>
+#include <string>
+#include <unordered_set>
+#include <variant>
+#include <vector>
+
+#include <tt-metalium/distributed.hpp>
+#include <tt-metalium/core_coord.hpp>
+#include <tt-metalium/data_types.hpp>
+#include "debug_tools_fixture.hpp"
+#include "debug_tools_test_utils.hpp"
+#include <tt-metalium/device.hpp>
+#include "gtest/gtest.h"
+#include <tt-metalium/kernel_types.hpp>
+#include <tt-logger/tt-logger.hpp>
+#include <tt-metalium/program.hpp>
+#include <umd/device/types/arch.hpp>
+#include <umd/device/types/xy_pair.hpp>
 
 ////////////////////////////////////////////////////////////////////////////////
 // A test for printing from ethernet cores.
@@ -17,11 +32,15 @@ using namespace tt::tt_metal;
 namespace {
 namespace CMAKE_UNIQUE_NAMESPACE {
 const std::string golden_output =
-R"(Test Debug Print: ERISC
+    R"(Test Debug Print: ERISC
 Basic Types:
 101-1.618@0.122559
 e5551234569123456789
 -17-343-44444-5123456789
+Pointer:
+123
+456
+789
 SETPRECISION/FIXED/DEFAULTFLOAT:
 3.1416
 3.14159012
@@ -32,11 +51,15 @@ SETW:
 HEX/OCT/DEC:
 1e240361100123456)";
 
-static void RunTest(DPrintFixture* fixture, IDevice* device, bool active) {
+void RunTest(
+    DPrintMeshFixture* fixture,
+    const std::shared_ptr<distributed::MeshDevice>& mesh_device,
+    bool active,
+    DataMovementProcessor processor = DataMovementProcessor::RISCV_0) {
+    auto device = mesh_device->get_devices()[0];
     // Try printing on all ethernet cores on this device
-    int count = 0;
     std::unordered_set<CoreCoord> test_cores;
-    tt_metal::EthernetConfig config = {.noc = tt_metal::NOC::NOC_0};
+    tt_metal::EthernetConfig config = {.noc = static_cast<tt_metal::NOC>(processor), .processor = processor};
     if (active) {
         test_cores = device->get_active_ethernet_cores(true);
         config.eth_mode = Eth::SENDER;
@@ -46,72 +69,82 @@ static void RunTest(DPrintFixture* fixture, IDevice* device, bool active) {
     }
     for (const auto& core : test_cores) {
         // Set up program and command queue
+        distributed::MeshWorkload workload;
+        auto zero_coord = distributed::MeshCoordinate(0, 0);
+        auto device_range = distributed::MeshCoordinateRange(zero_coord, zero_coord);
         Program program = Program();
+        workload.add_program(device_range, std::move(program));
+        auto& program_ = workload.get_programs().at(device_range);
 
         // Create the kernel
-        // TODO: When #6424 is fixed combine these kernels again.
-        KernelHandle erisc_kernel_id = CreateKernel(
-            program,
-            "tests/tt_metal/tt_metal/test_kernels/misc/erisc_print.cpp",
-            core,
-            config);
+        CreateKernel(program_, "tests/tt_metal/tt_metal/test_kernels/misc/erisc_print.cpp", core, config);
 
         // Run the program
         log_info(
             tt::LogTest,
-            "Running print test on eth core {}:({},{})",
+            "Running print test on eth core {}:({},{}), {}",
             device->id(),
             core.x,
-            core.y
+            core.y,
+            processor
         );
-        fixture->RunProgram(device, program);
+        fixture->RunProgram(mesh_device, workload);
 
         // Check the print log against golden output.
-        EXPECT_TRUE(
-            FilesMatchesString(
-                DPrintFixture::dprint_file_name,
-                golden_output
-            )
-        );
+        EXPECT_TRUE(FilesMatchesString(DPrintMeshFixture::dprint_file_name, golden_output));
 
         // Clear the log file for the next core's test
-        tt::DPrintServerClearLogFile();
+        MetalContext::instance().dprint_server()->clear_log_file();
     }
 }
-}
-}
+}  // namespace CMAKE_UNIQUE_NAMESPACE
+}  // namespace
 
-TEST_F(DPrintFixture, ActiveEthTestPrint) {
-    for (IDevice* device : this->devices_) {
+TEST_F(DPrintMeshFixture, ActiveEthTestPrint) {
+    for (auto& mesh_device : this->devices_) {
+        auto device = mesh_device->get_devices()[0];
         // Skip if no ethernet cores on this device
-        if (device->get_active_ethernet_cores(true).size() == 0) {
+        if (device->get_active_ethernet_cores(true).empty()) {
             log_info(tt::LogTest, "Skipping device {} due to no ethernet cores...", device->id());
             continue;
         }
-        this->RunTestOnDevice(
-            [](DPrintFixture *fixture, IDevice* device){
-                CMAKE_UNIQUE_NAMESPACE::RunTest(fixture, device, true);
-            },
-            device
-        );
+
+        const auto erisc_count = tt::tt_metal::MetalContext::instance().hal().get_num_risc_processors(
+            tt::tt_metal::HalProgrammableCoreType::ACTIVE_ETH);
+        for (uint32_t erisc_idx = 0; erisc_idx < erisc_count; erisc_idx++) {
+            log_info(tt::LogTest, "Test active ethernet DM{}", erisc_idx);
+            DataMovementProcessor dm_processor = static_cast<DataMovementProcessor>(erisc_idx);
+            this->RunTestOnDevice(
+                [=](DPrintMeshFixture* fixture, const std::shared_ptr<distributed::MeshDevice>& mesh_device) {
+                    CMAKE_UNIQUE_NAMESPACE::RunTest(fixture, mesh_device, true, dm_processor);
+                },
+                mesh_device);
+        }
     }
 }
-TEST_F(DPrintFixture, IdleEthTestPrint) {
+TEST_F(DPrintMeshFixture, IdleEthTestPrint) {
     if (!this->IsSlowDispatch()) {
         log_info(tt::LogTest, "FD-on-idle-eth not supported.");
         GTEST_SKIP();
     }
-    for (IDevice* device : this->devices_) {
+    for (auto& mesh_device : this->devices_) {
+        auto device = mesh_device->get_devices()[0];
         // Skip if no ethernet cores on this device
-        if (device->get_inactive_ethernet_cores().size() == 0) {
+        if (device->get_inactive_ethernet_cores().empty()) {
             log_info(tt::LogTest, "Skipping device {} due to no ethernet cores...", device->id());
             continue;
         }
-        this->RunTestOnDevice(
-            [](DPrintFixture *fixture, IDevice* device){
-                CMAKE_UNIQUE_NAMESPACE::RunTest(fixture, device, false);
-            },
-            device
-        );
+        const auto erisc_count = tt::tt_metal::MetalContext::instance().hal().get_num_risc_processors(
+            tt::tt_metal::HalProgrammableCoreType::IDLE_ETH);
+        for (uint32_t erisc_idx = 0; erisc_idx < erisc_count; erisc_idx++) {
+            log_info(tt::LogTest, "Test idle ethernet DM{}", erisc_idx);
+            DataMovementProcessor dm_processor = static_cast<DataMovementProcessor>(erisc_idx);
+
+            this->RunTestOnDevice(
+                [=](DPrintMeshFixture* fixture, const std::shared_ptr<distributed::MeshDevice>& mesh_device) {
+                    CMAKE_UNIQUE_NAMESPACE::RunTest(fixture, mesh_device, false, dm_processor);
+                },
+                mesh_device);
+        }
     }
 }

@@ -5,18 +5,18 @@
 #pragma once
 
 #include "dev_mem_map.h"
-#include <dev_msgs.h>
+#include "dev_msgs.h"
 #include "noc/noc_parameters.h"
 
 // Validate assumptions on mailbox layout on host compile
 // Constexpr definitions allow for printing of breaking values at compile time
 #ifdef NCRISC_HAS_IRAM
 // These are only used in ncrisc-halt.S
-static_assert(MEM_MAILBOX_BASE + offsetof(mailboxes_t, slave_sync.dm1) == MEM_SLAVE_RUN_MAILBOX_ADDRESS);
+static_assert(MEM_MAILBOX_BASE + offsetof(mailboxes_t, subordinate_sync.dm1) == MEM_SUBORDINATE_RUN_MAILBOX_ADDRESS);
 static_assert(
     MEM_MAILBOX_BASE + offsetof(mailboxes_t, ncrisc_halt.stack_save) == MEM_NCRISC_HALT_STACK_MAILBOX_ADDRESS);
 #endif
-#if defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_IDLE_ERISC)
+#if defined(COMPILE_FOR_ERISC) || defined(COMPILE_FOR_IDLE_ERISC) || defined(COMPILE_FOR_AERISC)
 #include "eth_l1_address_map.h"
 static_assert(
     eth_l1_mem::address_map::ERISC_MEM_MAILBOX_BASE + sizeof(mailboxes_t) <=

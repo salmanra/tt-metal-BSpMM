@@ -5,54 +5,45 @@
 import os
 import shutil
 import subprocess
+from time import sleep
 from tests.sweep_framework.framework.sweeps_logger import sweeps_logger as logger
 
-GRAYSKULL_ARGS = ["-tr", "all"]
-WORMHOLE_ARGS = ["-wr", "all"]
-
-RESET_OVERRIDE = os.getenv("TT_SMI_RESET_COMMAND")
+LEGACY_WORMHOLE_ARGS = ["-wr", "all"]
 
 
-def run_tt_smi(arch: str):
-    if RESET_OVERRIDE is not None:
-        smi_process = subprocess.run(RESET_OVERRIDE, shell=True)
-        if smi_process.returncode == 0:
-            logger.info("TT-SMI Reset Complete Successfully")
-            return
-        else:
-            raise Exception(f"SWEEPS: TT-SMI Reset Failed with Exit Code: {smi_process.returncode}")
-        return
+class ResetUtil:
+    SUPPORTED_ARCHS = {"wormhole_b0", "blackhole"}
 
-    if arch not in ["grayskull", "wormhole_b0"]:
-        raise Exception(f"SWEEPS: Unsupported Architecture for TT-SMI Reset: {arch}")
+    def __init__(self, arch: str):
+        if arch not in self.SUPPORTED_ARCHS:
+            raise ValueError(f"SWEEPS: Unsupported Architecture for TT-SMI Reset: {arch}")
 
-    smi_options = [
-        "tt-smi",
-        "tt-smi-metal",
-        "/home/software/syseng/gs/tt-smi" if arch == "grayskull" else "/home/software/syseng/wh/tt-smi",
-    ]
-    args = GRAYSKULL_ARGS if arch == "grayskull" else WORMHOLE_ARGS
+        self.arch = arch
+        self.command, self.args = self._find_command()
+        self.reset()
 
-    # Potential implementation to use the pre-defined reset script on each CI runner. Not in use because of the time and extra functions it has. (hugepages check, etc.)
-    # if os.getenv("CI") == "true":
-    #     smi_process = subprocess.run(f"/opt/tt_metal_infra/scripts/ci/{arch}/reset.sh", shell=True, capture_output=True)
-    #     if smi_process.returncode == 0:
-    #         print("SWEEPS: TT-SMI Reset Complete Successfully")
-    #         return
-    #     else:
-    #         raise Exception(f"SWEEPS: TT-SMI Reset Failed with Exit Code: {smi_process.returncode}")
+    def _find_command(self):
+        custom_command = os.getenv("TT_SMI_RESET_COMMAND")
+        if custom_command:
+            parts = custom_command.split()
+            command, args = parts[0], parts[1:]
+            if not shutil.which(command):
+                raise FileNotFoundError(f"SWEEPS: Custom command not found: {command}")
+            return command, args
 
-    for smi_option in smi_options:
-        executable = shutil.which(smi_option)
-        if executable is not None:
-            # Corner case for newer version of tt-smi, -tr and -wr are removed on this version (tt-smi-metal). Default device 0, if needed use TT_SMI_RESET_COMMAND override.
-            if smi_option == "tt-smi-metal":
-                args = ["-r", "0"]
-            smi_process = subprocess.run([executable, *args])
-            if smi_process.returncode == 0:
-                logger.info("TT-SMI Reset Complete Successfully")
-                return
-            else:
-                raise Exception(f"SWEEPS: TT-SMI Reset Failed with Exit Code: {smi_process.returncode}")
+        executable = shutil.which("tt-smi")
+        if not executable:
+            raise FileNotFoundError("SWEEPS: Unable to locate tt-smi executable")
 
-    raise Exception("SWEEPS: Unable to Locate TT-SMI Executable")
+        logger.info(f"tt-smi executable: {executable}")
+        return executable, ["-r"]
+
+    def reset(self):
+        """Execute the reset command."""
+        result = subprocess.run([self.command, *self.args], stdout=subprocess.DEVNULL)
+        if result.returncode != 0:
+            # give it one more try
+            result = subprocess.run([self.command, *self.args])
+            if result.returncode != 0:
+                raise RuntimeError(f"SWEEPS: TT-SMI Reset Failed with Exit Code: {result.returncode}")
+        logger.info("TT-SMI Reset Complete Successfully")

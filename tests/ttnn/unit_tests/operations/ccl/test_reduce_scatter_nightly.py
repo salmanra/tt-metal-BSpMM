@@ -7,15 +7,14 @@ import ttnn
 from tests.ttnn.unit_tests.operations.ccl.test_reduce_scatter_post_commit import (
     run_reduce_scatter_test,
 )
-from models.utility_functions import skip_for_grayskull
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
+@pytest.mark.parametrize("mesh_device", [(1, 8)], indirect=True)
 @pytest.mark.parametrize(
-    "num_devices, num_links",
+    "num_links",
     [
-        (8, 1),
+        1,
     ],
 )
 @pytest.mark.parametrize(
@@ -53,10 +52,8 @@ from models.utility_functions import skip_for_grayskull
     ],
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_reduce_scatter_t3k_8chip_nightly(
-    t3k_mesh_device,
-    num_devices,
+    mesh_device,
     per_chip_output_shape,
     dim,
     num_links,
@@ -64,14 +61,12 @@ def test_reduce_scatter_t3k_8chip_nightly(
     input_dtype,
     layout,
     mem_config,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=1,
 ):
     run_reduce_scatter_test(
-        t3k_mesh_device,
-        num_devices,
+        mesh_device,
+        mesh_device.get_num_devices(),
         per_chip_output_shape,
         dim,
         num_links,
@@ -79,14 +74,11 @@ def test_reduce_scatter_t3k_8chip_nightly(
         input_dtype,
         layout,
         mem_config,
-        use_program_cache,
         function_level_defaults,
         num_iters=num_iters,
-        enable_async=enable_async,
     )
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
@@ -131,7 +123,6 @@ def test_reduce_scatter_t3k_8chip_nightly(
     ],
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_reduce_scatter_t3k_4chip_nightly(
     pcie_mesh_device,
     num_devices,
@@ -142,9 +133,7 @@ def test_reduce_scatter_t3k_4chip_nightly(
     input_dtype,
     layout,
     mem_config,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=1,
 ):
     run_reduce_scatter_test(
@@ -157,8 +146,6 @@ def test_reduce_scatter_t3k_4chip_nightly(
         input_dtype,
         layout,
         mem_config,
-        use_program_cache,
         function_level_defaults,
         num_iters=num_iters,
-        enable_async=enable_async,
     )

@@ -11,7 +11,6 @@ namespace operations::data_movement {
 
 struct ShardedToInterleavedOperation {
     static ttnn::Tensor invoke(
-        uint8_t queue_id,
         const ttnn::Tensor& input_tensor,
         const MemoryConfig& memory_config,
         const std::optional<DataType>& output_dtype,
@@ -20,7 +19,7 @@ struct ShardedToInterleavedOperation {
 
 }  // namespace operations::data_movement
 
-constexpr auto sharded_to_interleaved = ttnn::register_operation_with_auto_launch_op<
+constexpr auto sharded_to_interleaved = ttnn::register_operation<
     "ttnn::sharded_to_interleaved",
     ttnn::operations::data_movement::ShardedToInterleavedOperation>();
 

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -20,7 +20,7 @@ void kernel_main() {
     const uint32_t mcast_dest_noc_end_x = get_arg_val<uint32_t>(2);
     const uint32_t mcast_dest_noc_end_y = get_arg_val<uint32_t>(3);
 
-    constexpr uint32_t cb_stats_reduced = tt::CBIndex::c_28;  // [E[x], E[x^2]] local to sender
+    constexpr uint32_t cb_stats_reduced = tt::CBIndex::c_21;  // [E[x], E[x^2]] local to sender
     constexpr uint32_t cb_ex_global = tt::CBIndex::c_15;      // [E[x], E[X^2]] global to all cores
 
     const uint64_t multicast_data_noc = get_noc_multicast_addr(
@@ -39,7 +39,7 @@ void kernel_main() {
         *reduce_sender_semaphore_addr_ptr = VALID;
 
         noc_semaphore_set_multicast_loopback_src(
-            reduce_sender_semaphore_addr, reduce_sender_semaphore_noc_addr, num_blocks, false, false);
+            reduce_sender_semaphore_addr, reduce_sender_semaphore_noc_addr, num_blocks, false);
     };
 
     const auto& global_reduce_sender = [&](const uint32_t cb_ex, const uint32_t cb_ex_global)
@@ -51,7 +51,6 @@ void kernel_main() {
             multicast_data_noc | l1_read_addr_ex_global,
             stats_tiles * num_tiles_per_worker_bytes,
             num_blocks,
-            false,
             false);
         noc_async_write_barrier();
     };

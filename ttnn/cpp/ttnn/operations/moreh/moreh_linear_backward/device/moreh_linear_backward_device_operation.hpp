@@ -31,8 +31,8 @@ struct MorehBiasAddBackwardOperation {
 
     struct SingleCoreProgramFactory {
         struct shared_variables_t {
-            KernelHandle unary_reader_kernel_id;
-            KernelHandle unary_writer_kernel_id;
+            tt::tt_metal::KernelHandle unary_reader_kernel_id;
+            tt::tt_metal::KernelHandle unary_writer_kernel_id;
         };
 
         using cached_program_t = ttnn::device_operation::CachedProgram<shared_variables_t>;
@@ -51,8 +51,8 @@ struct MorehBiasAddBackwardOperation {
 
     struct MultiCoreProgramFactory {
         struct shared_variables_t {
-            KernelHandle unary_reader_kernel_id;
-            KernelHandle unary_writer_kernel_id;
+            tt::tt_metal::KernelHandle unary_reader_kernel_id;
+            tt::tt_metal::KernelHandle unary_writer_kernel_id;
             std::size_t num_cores_to_be_used;
             std::size_t num_cores_y;
         };
@@ -83,7 +83,7 @@ struct MorehBiasAddBackwardOperation {
         const std::optional<Tensor>& bias,
         const std::optional<Tensor>& bias_grad,
         const std::optional<MemoryConfig>& bias_grad_memory_config,
-        const DeviceComputeKernelConfig compute_kernel_config);
+        DeviceComputeKernelConfig compute_kernel_config);
 };
 }  // namespace ttnn::operations::moreh::moreh_linear_backward
 

@@ -8,9 +8,8 @@ import warnings
 from torch import nn
 import ttnn
 import json
-from typing import Optional, Tuple
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     torch2tt_tensor,
     tt2torch_tensor,
 )

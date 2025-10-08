@@ -3,35 +3,29 @@
 In this example, we will implement a simple TT-Metalium program to demonstrate how sharding works for untilized data. The code for this program can be found in
 [shard_data_rm.cpp](../../../tt_metal/programming_examples/sharding/shard_data_rm.cpp).
 
-The following commands will build and execute the code for this example.
-Environment variables may be modified based on the latest
-specifications.
-Run the appropriate command for the Tenstorrent card you have installed:
+## Building and Running the Example
 
-| Card             | Command                              |
-|------------------|--------------------------------------|
-| Grayskull        | ```export ARCH_NAME=grayskull```     |
-| Wormhole         | ```export ARCH_NAME=wormhole_b0```   |
-| Blackhole        | ```export ARCH_NAME=blackhole```     |
-
-Then run the following:
+To build and execute, you may use the following commands:
 ```bash
-    export TT_METAL_HOME=$(pwd)
-    ./build_metal.sh --build-programming-examples
-    ./build/programming_examples/shard_data_rm
+export TT_METAL_HOME=$(pwd)
+./build_metal.sh --build-programming-examples
+./build/programming_examples/metal_example_shard_data_rm
 ```
+
 # Device setup
 
 ``` cpp
 int device_id = 0;
-Device *device = CreateDevice(device_id);
-CommandQueue& cq = device->command_queue();
-Program program = CreateProgram();
+std::shared_ptr<distributed::MeshDevice> mesh_device = distributed::MeshDevice::create_unit_mesh(device_id);
+distributed::MeshCommandQueue& cq = mesh_device->mesh_command_queue();
+distributed::MeshWorkload workload;
+distributed::MeshCoordinateRange device_range = distributed::MeshCoordinateRange(mesh_device->shape());
+distributed::Program program = distributed::CreateProgram();
 ```
 
-We start the source code by creating an object that designates the hardware device that we will be using for the program. For this example, we select the device with an ID of 0.
-In order to dispatch commands to the device for execution we must also retrieve the `CommandQueue` object associated with `device`. Commands will be dispatched through this object to be executed on the device.
-The `Program` object is created to encapsulate our kernels and buffers.
+We start the source code by creating an object that designates the physical mesh of devices that we will be using for the program. For this example, we select the device with an ID of 0 to create a 1x1 mesh.
+In order to dispatch commands to the device for execution we must also retrieve the `MeshCommandQueue` object associated with `mesh_device`. Commands will be dispatched through this object to be executed on the mesh.
+The `Program` object is created to encapsulate our kernels and buffers. We also create a `MeshWorkload` object to encapsulate the program and the range of devices that we will be using for the program.
 
 # Initialize source data
 
@@ -71,12 +65,12 @@ uint32_t shard_size = shard_height * shard_width;
 uint32_t input_unit_size = sizeof(uint32_t);
 uint32_t shard_width_bytes = shard_width * data_size;
 uint32_t num_units_per_row = shard_width * input_unit_size;
-uint32_t padded_offset_bytes = align(input_unit_size, device->get_allocator_alignment());
+uint32_t padded_offset_bytes = align(input_unit_size, device->allocator()->get_alignment(BufferType::L1));
 ```
 
 In order to shard the correct data segments to the respective core, we indicate the shard height, width, size, and other data for the kernel function.
 For this situation, 16 units of data will be sharded across 4 cores; each core will have 4 units of data in their corresponding circular buffer.
-The `padded_offset_bytes` is set to ensure that the correct address is read from the kernel function when moving data to the circular buffer; in this case, the addresses are aligned to L1 memory.
+The `padded_offset_bytes` is set to ensure that the correct address is read from the kernel function when moving data to the circular buffer; in this case, the addresses are aligned to L1 memory with explicit referencing to BufferType::L1.
 This example demonstrates height sharding; the shard height is therefore set to evenly distribute the number of vector values across the cores.
 If the sharding strategy was different (i.e. width sharding or block sharding), the appropriate values for both the shard height and width would need to be set.
 
@@ -101,7 +95,6 @@ Data will be read to the circular buffers on each core through the DRAM buffer, 
 # Configure circular buffers
 
 ``` cpp
-bool src_is_dram = src_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
 uint32_t input_cb_index = CBIndex::c_0;
 CircularBufferConfig input_cb_config = CircularBufferConfig(shard_size * input_unit_size, {{input_cb_index, cb_data_format}})
     .set_page_size(input_cb_index, input_unit_size);
@@ -114,9 +107,8 @@ The corresponding `CircularBuffer` objects are then allocated with this configur
 # Create data movement kernels for sharding
 
 ``` cpp
-std::vector<uint32_t> reader_compile_time_args = {
-    (std::uint32_t)input_cb_index,
-    (std::uint32_t)src_is_dram};
+std::vector<uint32_t> reader_compile_time_args = {(std::uint32_t)input_cb_index};
+TensorAccessorArgs(*src_buffer).append_to(reader_compile_time_args);
 auto reader_id = tt_metal::CreateKernel(
     program,
     "tt_metal/programming_examples/sharding/kernels/reader_sharded_rm.cpp",
@@ -158,10 +150,8 @@ For each core, the kernel function runtime arguments are set as a prerequisite f
 # Sharding kernel function
 
 ``` cpp
-const InterleavedAddrGen<src_is_dram> s0 = {
-    .bank_base_address = src_addr,
-    .page_size = stick_size
-};
+constexpr auto s0_args = TensorAccessorArgs<1>();
+const auto s0 = TensorAccessor(s1_args, src_addr, stick_size);
 uint32_t stick_id = start_id;
 cb_reserve_back(cb_id_in0, shard_height);
 uint32_t l1_write_addr = get_write_ptr(cb_id_in0);
@@ -180,7 +170,7 @@ noc_async_read_barrier();
 cb_push_back(cb_id_in0, shard_height);
 ```
 
-The `InterleavedAddrGen` object allows us to retrieve the data stored in the DRAM by incrementing by stick size. The stick size determines the difference between addresses of each piece of source data in the DRAM buffer; its value in this case is the size of a `uint32_t` data type.
+The `TensorAccessor` object allows us to retrieve the data stored in the DRAM by incrementing by stick size. The stick size determines the difference between addresses of each piece of source data in the DRAM buffer; its value in this case is the size of a `uint32_t` data type.
 Each stick will then contain 2 of the BFloat16 tensor values. The generator is used to ensure that the correct address is read from the DRAM buffer into a given core\'s L1 memory.
 
 In the indicated kernel function file, we call `cb_reserve_back` for the indicated circular buffer in order to wait for space of the specified data segment size to be free, then load the data into the circular buffer by reading the value from the NoC address (indicated by `src_noc_addr`) to the L1 memory address (indicated by `l1_write_addr`).
@@ -192,14 +182,15 @@ Once the data is written to the circular buffer, `cb_push_back` is called to mak
 # Program execution
 
 ``` cpp
-EnqueueWriteBuffer(cq, src_buffer, src_vec.data(), false);
-EnqueueProgram(cq, program, false);
-Finish(cq);
-CloseDevice(device);
+distributed::EnqueueWriteMeshBuffer(cq, src_buffer, src_vec.data(), false);
+workload.add_program(device_range, std::move(program));
+distributed::EnqueueMeshWorkload(cq, workload, false);
+distributed::Finish(cq);
+mesh_device->close();
 ```
 
-`EnqueueWriteBuffer` is called in order to load the source vector into the interleaved DRAM buffer.
-`EnqueueProgram` is then called to dispatch the program to the device for execution. Upon conclusion of the program execution, the device is closed.
+`EnqueueWriteMeshBuffer` is called in order to load the source vector into the interleaved DRAM buffer on the unit mesh.
+`EnqueueMeshWorkload` is then called to dispatch the program to the device for execution. Upon conclusion of the program execution, the device is closed.
 
 # Conclusion
 

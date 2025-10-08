@@ -9,8 +9,8 @@
 #include "debug/dprint.h"
 #include "eth_l1_address_map.h"
 
-#include "cpp/ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
-#include "cpp/ttnn/operations/ccl/kernels/edm/erisc_async_datamover.hpp"
+#include "ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
+#include "ttnn/operations/ccl/kernels/edm/erisc_async_datamover.hpp"
 
 // Args Schema:
 // 1) handshake addr
@@ -145,9 +145,9 @@ void kernel_main() {
 
     bool is_done_as_rx_handshaker = is_handshake_sender;
     if constexpr (is_handshake_sender) {
-        erisc::datamover::handshake::sender_side_start(handshake_addr);
+        erisc::datamover::handshake::deprecated::sender_side_start(handshake_addr);
     } else {
-        erisc::datamover::handshake::receiver_side_start(handshake_addr);
+        erisc::datamover::handshake::deprecated::receiver_side_start(handshake_addr);
     }
 
     // Receiver args
@@ -176,7 +176,7 @@ void kernel_main() {
             (const WorkerXY*)workers_xy_list_addr,
             false);
 
-        if constexpr (terminate_on_worker_signal == EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED) {
+        if constexpr (terminate_on_worker_signal == ttnn::ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED) {
             if (receiver_num_messages_to_send == 0) {
                 num_receivers_with_no_work++;
             }
@@ -184,9 +184,9 @@ void kernel_main() {
     }
 
     if (!is_handshake_sender) {
-        if (!is_done_as_rx_handshaker && erisc::datamover::handshake::receiver_side_can_finish()) {
+        if (!is_done_as_rx_handshaker && erisc::datamover::handshake::deprecated::receiver_side_can_finish()) {
             is_done_as_rx_handshaker = true;
-            erisc::datamover::handshake::receiver_side_finish(handshake_addr);
+            erisc::datamover::handshake::deprecated::receiver_side_finish(handshake_addr);
         }
     }
 
@@ -216,7 +216,7 @@ void kernel_main() {
             (volatile tt_l1_ptr uint32_t* const)sender_semaphores_base_address,
             (const WorkerXY*)workers_xy_list_addr,
             true);
-        if constexpr (terminate_on_worker_signal == EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED) {
+        if constexpr (terminate_on_worker_signal == ttnn::ccl::EriscDataMoverTerminationMode::MESSAGE_COUNT_REACHED) {
             if (sender_num_messages_to_send == 0) {
                 num_senders_with_no_work++;
             }
@@ -224,10 +224,10 @@ void kernel_main() {
     }
 
     if constexpr (is_handshake_sender) {
-        erisc::datamover::handshake::sender_side_finish(handshake_addr);
+        erisc::datamover::handshake::deprecated::sender_side_finish(handshake_addr);
     } else {
         if (!is_done_as_rx_handshaker) {
-            erisc::datamover::handshake::receiver_side_finish(handshake_addr);
+            erisc::datamover::handshake::deprecated::receiver_side_finish(handshake_addr);
             is_done_as_rx_handshaker = true;
         }
     }
@@ -359,5 +359,8 @@ void kernel_main() {
         }
     }
 
+    for (uint32_t i = 0; i < eth_l1_mem::address_map::MAX_NUM_CONCURRENT_TRANSACTIONS; i++) {
+        ASSERT(erisc_info->channels[i].bytes_sent == 0);
+    }
     WAYPOINT("DONE");
 }

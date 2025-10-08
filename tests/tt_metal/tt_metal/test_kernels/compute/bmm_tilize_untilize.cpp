@@ -26,7 +26,7 @@
 
 inline void tilize_in(
     uint32_t in_cb_id, uint32_t in_subblock_h, uint32_t in_block_w, uint32_t in_num_subblocks, uint32_t out_cb_id) {
-    tilize_init_short(in_cb_id, in_block_w, out_cb_id);
+    tilize_init(in_cb_id, in_block_w, out_cb_id);
     for (uint32_t in_subblock = 0; in_subblock < in_num_subblocks; ++in_subblock) {
         for (uint32_t h = 0; h < in_subblock_h; ++h) {
             cb_wait_front(in_cb_id, in_block_w);
@@ -74,7 +74,7 @@ inline void reblock_and_untilize(
         cb_push_back(reblock_cb_id, out_block_w);
 
         // Untilize
-        untilize_init_short(reblock_cb_id);
+        untilize_init(reblock_cb_id);
         cb_wait_front(reblock_cb_id, out_block_w);
         cb_reserve_back(out_cb_id, out_block_w);
         untilize_block(reblock_cb_id, out_block_w, out_cb_id);
@@ -147,7 +147,7 @@ void MAIN {
                 bool last_out = (in0_block_w_i == in0_num_blocks_w - 1);
                 if (tilize_in0) {
                     tilize_in(in0_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks, tilized_in0_cb_id);
-                    mm_init_short();
+                    mm_init_short(tilized_in0_cb_id, in1_cb_id);
                     cb_wait_front(tilized_in0_cb_id, in0_block_num_tiles);
                 } else {
                     cb_wait_front(in0_cb_id, in0_block_num_tiles);
@@ -217,7 +217,7 @@ void MAIN {
                             // do not pop front bias as it may be used again for subsequent blocks
                             cb_pop_front(out_for_bias_cb_id, out_subblock_num_tiles);
                             // reconfig for matmul
-                            mm_init_short();
+                            mm_init_short(tilize_in0 ? tilized_in0_cb_id : in0_cb_id, in1_cb_id);
                             // reconfig unpacker df for srcB
                             // reconfig_data_format(in1_cb_id, in0_cb_id);
                         }
@@ -251,7 +251,7 @@ void MAIN {
                             untilize_mode_final_matmul_partials_cb,
                             untilize_mode_reblock_cb,
                             out_cb_id);
-                        mm_init_short();
+                        mm_init_short(tilize_in0 ? tilized_in0_cb_id : in0_cb_id, in1_cb_id);
                     }  // last_out
 #endif
                     in0_index_subblock_offset += in0_subblock_num_tiles;

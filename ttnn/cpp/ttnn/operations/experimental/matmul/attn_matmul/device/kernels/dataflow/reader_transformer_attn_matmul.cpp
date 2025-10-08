@@ -6,7 +6,7 @@
 #include "dataflow_api.h"
 
 void kernel_main() {
-    // same arg indices as in reader_binary_diff_lenghts for compat
+    // same arg indices as in reader_binary_diff_lengths for compat
     uint32_t src0_addr = get_arg_val<uint32_t>(0);
     uint32_t src1_addr = get_arg_val<uint32_t>(1);
     uint32_t Mt = get_arg_val<uint32_t>(2);
@@ -19,10 +19,8 @@ void kernel_main() {
     uint32_t itileA_start = get_arg_val<uint32_t>(9);
     uint32_t itileB_start = get_arg_val<uint32_t>(10);
 
-    constexpr bool src0_is_dram = get_compile_time_arg_val(0) == 1;
-    constexpr bool src1_is_dram = get_compile_time_arg_val(1) == 1;
-#define transpose_hw_bool get_compile_time_arg_val(2) == 1
-    constexpr bool fp32_acc_en = get_compile_time_arg_val(3) == 1;
+    constexpr bool transpose_hw_bool = get_compile_time_arg_val(0) == 1;
+    constexpr bool fp32_acc_en = get_compile_time_arg_val(1) == 1;
 
     constexpr uint32_t cb_id_in0 = tt::CBIndex::c_0;
     constexpr uint32_t cb_id_in1 = tt::CBIndex::c_1;
@@ -32,15 +30,12 @@ void kernel_main() {
 
     constexpr uint32_t onetile = 1;
     const uint32_t in0_tile_bytes = get_tile_size(cb_id_in0);
-    const DataFormat in0_data_format = get_dataformat(cb_id_in0);
     const uint32_t in1_tile_bytes = get_tile_size(cb_id_in1);
-    const DataFormat in1_data_format = get_dataformat(cb_id_in1);
 
-    const InterleavedAddrGenFast<src0_is_dram> s0 = {
-        .bank_base_address = src0_addr, .page_size = in0_tile_bytes, .data_format = in0_data_format};
-
-    const InterleavedAddrGenFast<src1_is_dram> s1 = {
-        .bank_base_address = src1_addr, .page_size = in1_tile_bytes, .data_format = in1_data_format};
+    constexpr auto in0_args = TensorAccessorArgs<2>();
+    constexpr auto in1_args = TensorAccessorArgs<in0_args.next_compile_time_args_offset()>();
+    const auto s0 = TensorAccessor(in0_args, src0_addr, in0_tile_bytes);
+    const auto s1 = TensorAccessor(in1_args, src1_addr, in1_tile_bytes);
 
     uint32_t itileA_batch = itileA_start;
     uint32_t itileB_batch;
@@ -90,11 +85,11 @@ void kernel_main() {
                         noc_async_read_barrier();
                         cb_push_back(cb_id_in1, onetile);
 
-#if (transpose_hw_bool)
-                        itileB++;  // Kt is in B[3], so it is contiguous in memory
-#else
-                        itileB += Nt;  // Kt is in B[2], so stride is Nt
-#endif
+                        if constexpr (transpose_hw_bool) {
+                            itileB++;  // Kt is in B[3], so it is contiguous in memory
+                        } else {
+                            itileB += Nt;  // Kt is in B[2], so stride is Nt
+                        }
                     }  // Kt loop
 
                     // Read 32 untilized tiles and select correct rows to reconstruct single correct tile
@@ -109,12 +104,12 @@ void kernel_main() {
                 }  // 32 tiles loop
                 cb_push_back(cb_id_intermed2, 1);
 
-// Next tile in Nt
-#if (transpose_hw_bool)
-                itileB_Nt += Kt;  // next tile in Nt is in B[2], so stride is Kt
-#else
-                itileB_Nt++;
-#endif
+                // Next tile in Nt
+                if constexpr (transpose_hw_bool) {
+                    itileB_Nt += Kt;  // next tile in Nt is in B[2], so stride is Kt
+                } else {
+                    itileB_Nt++;
+                }
             }  // Nt loop
 
             itileA_Mt += Kt;

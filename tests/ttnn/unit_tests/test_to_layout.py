@@ -10,7 +10,7 @@ import torch
 import ttnn
 
 from tests.ttnn.utils_for_testing import assert_with_pcc, check_with_pcc_without_tensor_printout
-from models.utility_functions import is_grayskull, is_blackhole, torch_random, skip_for_grayskull
+from models.common.utility_functions import is_grayskull, is_blackhole, torch_random
 
 
 @pytest.mark.parametrize("height", [32, 30])
@@ -25,11 +25,12 @@ def test_to_layout_2D(device, height, width, on_device, from_layout, to_layout, 
     pad_h = (ttnn.TILE_SIZE - height % ttnn.TILE_SIZE) % ttnn.TILE_SIZE
     pad_w = (ttnn.TILE_SIZE - width % ttnn.TILE_SIZE) % ttnn.TILE_SIZE
     if start_with_padding:
+        pytest.skip("Modifying logical shape with borrowed buffer is not supported!")
         torch_padded_input_tensor = torch.nn.functional.pad(
             torch_input_tensor, (0, pad_w, 0, pad_h), mode="constant", value=0.0
         )
         input_tensor = ttnn.from_torch(torch_padded_input_tensor)
-        input_tensor = ttnn.reshape(input_tensor, shape=ttnn.Shape([height, width], ((0, pad_h), (0, pad_w))))
+        input_tensor = ttnn.reshape(input_tensor, [height, width], [height + pad_h, width + pad_w])
     else:
         input_tensor = ttnn.from_torch(torch_input_tensor)
     assert input_tensor.layout == ttnn.ROW_MAJOR_LAYOUT
@@ -51,10 +52,10 @@ def test_to_layout_2D(device, height, width, on_device, from_layout, to_layout, 
 
     if (start_with_padding and from_layout == to_layout) or to_layout == ttnn.TILE_LAYOUT:
         assert output_tensor.shape == (height, width)
-        assert output_tensor.shape.with_tile_padding() == (height + pad_h, width + pad_w)
+        assert output_tensor.padded_shape == (height + pad_h, width + pad_w)
     else:
         assert output_tensor.shape == (height, width)
-        assert output_tensor.shape.with_tile_padding() == (height, width)
+        assert output_tensor.padded_shape == (height, width)
 
     output_tensor = ttnn.to_torch(output_tensor)
 
@@ -208,7 +209,7 @@ def test_to_from_01d(device, shape):
 
 
 @pytest.mark.parametrize("dtype", [ttnn.bfloat8_b, ttnn.bfloat16])
-def test_to_layout_sharded(dtype, device, use_program_cache):
+def test_to_layout_sharded(dtype, device):
     core_grid = ttnn.CoreRangeSet(
         {
             ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(7, 4)),
@@ -233,7 +234,6 @@ def test_to_layout_sharded(dtype, device, use_program_cache):
     assert_with_pcc(torch_input_tensor1, ttnn.to_torch(output), 0.9999)
 
 
-@skip_for_grayskull()
 @pytest.mark.parametrize("batch_size", [9, 32])
 @pytest.mark.parametrize("sentence_size", [32, 256])
 def test_int_untilize(device, batch_size, sentence_size):
@@ -244,3 +244,272 @@ def test_int_untilize(device, batch_size, sentence_size):
     output_torch = ttnn.to_torch(output_tt)
 
     assert_with_pcc(torch_input_tensor, output_torch)
+
+
+@pytest.mark.parametrize("shape", [[143], [64], [380]])
+@pytest.mark.parametrize("input_layout", [ttnn.ROW_MAJOR_LAYOUT])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_to_layout_for_1D(shape, dtype, input_layout, output_layout, device):
+    torch.manual_seed(2005)
+    input_a = torch.randn(shape, dtype=dtype)
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=input_layout)
+    output_tensor = ttnn.to_layout(input_tensor, output_layout)
+    output_tensor = ttnn.to_torch(output_tensor)
+    assert_with_pcc(input_a, output_tensor)
+
+
+@pytest.mark.parametrize("shape", [[30], [64], [2040]])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_tilize_with_padding_for_1D(shape, dtype, device):
+    torch.manual_seed(2005)
+    input_a = torch.randn(shape, dtype=dtype)
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.tilize_with_zero_padding(input_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
+    assert_with_pcc(input_a, output_tensor)
+
+
+@pytest.mark.parametrize("shape", [[32, 32], [32, 128], [512, 512]])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16, torch.int32])
+def test_tilize_for_2D(shape, dtype, device):
+    torch.manual_seed(2005)
+    if dtype == torch.int32:
+        input_a = torch.randint(0, 1000, shape, dtype=dtype)
+    else:
+        input_a = torch.randn(shape, dtype=dtype)
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.tilize(input_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
+    assert_with_pcc(input_a, output_tensor)
+
+
+@pytest.mark.parametrize("shape", [[10, 10], [100, 100], [1000, 1000]])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16, torch.int32])
+def test_tilize_with_zero_padding_for_2D(shape, dtype, device):
+    torch.manual_seed(2005)
+    if dtype == torch.int32:
+        input_a = torch.randint(0, 1000, shape, dtype=dtype)
+    else:
+        input_a = torch.randn(shape, dtype=dtype)
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.tilize_with_zero_padding(input_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
+    assert_with_pcc(input_a, output_tensor)
+
+
+@pytest.mark.parametrize("shape", [[10, 10], [50, 50], [300, 300]])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16, torch.int32])
+def test_tilize_with_val_padding_for_2D(shape, dtype, device):
+    torch.manual_seed(2005)
+    if dtype == torch.int32:
+        input_a = torch.randint(0, 1000, shape, dtype=dtype)
+    else:
+        input_a = torch.randn(shape, dtype=dtype)
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.tilize_with_val_padding(input_tensor, [512, 512], 70)
+    output_tensor = ttnn.to_torch(output_tensor)
+    assert_with_pcc(input_a, output_tensor)
+
+
+@pytest.mark.parametrize("shape", [[1, 9, 91, 7, 9]])
+def test_to_layout_page_error(shape, device):
+    torch.manual_seed(2005)
+
+    torch_tensor = torch.rand(shape, dtype=torch.bfloat16)
+
+    input_tensor = ttnn.from_torch(torch_tensor, layout=ttnn.TILE_LAYOUT, device=device)
+    output_tensor = ttnn.to_layout(input_tensor, layout=ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    torch_output = torch_tensor
+    assert torch_output.shape == output_tensor.shape
+    assert_with_pcc(torch_output, output_tensor, 0.9999)
+
+
+@pytest.mark.parametrize("shape", [[64, 7680]])
+@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT])
+@pytest.mark.parametrize("input_layout", [ttnn.TILE_LAYOUT])
+def test_untilize_w1(shape, input_layout, output_layout, device):
+    torch.manual_seed(0)
+    input_a = torch.randn(shape, dtype=torch.bfloat16)
+
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=input_layout, dtype=ttnn.bfloat16)
+    output_tensor = ttnn.untilize_with_unpadding(input_tensor, [36, 7667])
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(input_a[:37, :7668], output_tensor)
+
+
+@pytest.mark.parametrize("shape", [[2, 32, 6144]])
+@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT])
+@pytest.mark.parametrize("input_layout", [ttnn.TILE_LAYOUT])
+def test_untilize_w2(shape, input_layout, output_layout, device):
+    torch.manual_seed(0)
+    input_a = torch.randn(shape, dtype=torch.bfloat16)
+
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=input_layout, dtype=ttnn.bfloat16)
+    output_tensor = ttnn.untilize_with_unpadding(input_tensor, [1, 30, 6140])
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(input_a[:, :31, :6141], output_tensor)
+
+
+@pytest.mark.parametrize("shape", [[1, 1, 32, 1536]])
+@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT])
+@pytest.mark.parametrize("input_layout", [ttnn.TILE_LAYOUT])
+def test_untilize_w3(shape, input_layout, output_layout, device):
+    torch.manual_seed(0)
+    input_a = torch.randn(shape, dtype=torch.bfloat16)
+
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=input_layout, dtype=ttnn.bfloat16)
+    output_tensor = ttnn.untilize_with_unpadding(input_tensor, [0, 0, 31, 1535])
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(input_a[:, :, :32, :1536], output_tensor)
+
+
+@pytest.mark.parametrize("shape", [[1, 1, 32, 10912]])
+@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT])
+@pytest.mark.parametrize("input_layout", [ttnn.TILE_LAYOUT])
+def test_untilize_w4(shape, input_layout, output_layout, device):
+    torch.manual_seed(0)
+    input_a = torch.randn(shape, dtype=torch.bfloat16)
+
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=input_layout, dtype=ttnn.bfloat16)
+    output_tensor = ttnn.untilize_with_unpadding(input_tensor, [0, 0, 0, 10911])
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(input_a[:, :, :1, :10912], output_tensor)
+
+
+def test_interleaved_to_sharded_block_shareded_unaligned_width(device):
+    torch_input_shape = [1, 1, 196, 92]
+    torch_input = torch.randn(torch_input_shape, dtype=torch.bfloat16).bfloat16()
+
+    sharded_memory_config = ttnn.create_sharded_memory_config(
+        [32, 32],
+        core_grid=ttnn.CoreGrid(
+            x=7,
+            y=3,
+        ),
+        strategy=ttnn.ShardStrategy.BLOCK,
+        orientation=ttnn.ShardOrientation.COL_MAJOR,
+        use_height_and_width_as_shard_shape=True,
+    )
+    ttnn_input = ttnn.from_torch(torch_input, device=device, layout=ttnn.ROW_MAJOR_LAYOUT)
+    ttnn_output = ttnn.to_memory_config(ttnn_input, sharded_memory_config)
+
+    output_torch = ttnn.to_torch(ttnn_output)
+
+    passing, pcc_msg = check_with_pcc_without_tensor_printout(torch_input, output_torch)
+    assert passing, pcc_msg
+
+
+@pytest.mark.parametrize("shape", [[12800, 16200]])
+@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize("input_layout", [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT])
+def test_to_layout_wh1(shape, input_layout, output_layout, device):
+    torch.manual_seed(0)
+    input_a = torch.randn(shape, dtype=torch.bfloat16)
+
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=input_layout, dtype=ttnn.bfloat16)
+    output_tensor = ttnn.to_layout(input_tensor, output_layout)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(input_a, output_tensor)
+
+
+@pytest.mark.parametrize("shape", [[11432, 11021]])
+@pytest.mark.parametrize("output_layout", [ttnn.ROW_MAJOR_LAYOUT, ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize("input_layout", [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT])
+def test_to_layout_wh2(shape, input_layout, output_layout, device):
+    torch.manual_seed(0)
+    input_a = torch.randn(shape, dtype=torch.bfloat16)
+
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=input_layout, dtype=ttnn.bfloat16)
+    output_tensor = ttnn.to_layout(input_tensor, output_layout)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(input_a, output_tensor)
+
+
+@pytest.mark.parametrize("shape", [[32, 128], [2, 4, 96, 256], [1, 160, 64], [64, 512], [10, 1024, 2048]])
+@pytest.mark.parametrize("dtype", [ttnn.uint32, ttnn.int32])
+def test_untilize_with_unpad_int32(shape, dtype, device):
+    torch.manual_seed(2005)
+    end_shape = [x - 1 for x in shape]
+    input_a = torch.randint(1, 64, shape, dtype=torch.int32)
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=ttnn.TILE_LAYOUT, dtype=dtype)
+    output_tensor = ttnn.untilize_with_unpadding(input_tensor, end_shape)
+    output_tensor = ttnn.to_torch(output_tensor)
+    assert_with_pcc(input_a, output_tensor)
+
+
+@pytest.mark.parametrize("shape", [[3072, 1024], [2, 2048, 512]])
+@pytest.mark.parametrize("dtype", [ttnn.uint32, ttnn.int32])
+def test_untilize_int32_t(shape, dtype, device):
+    torch.manual_seed(2005)
+    input_a = torch.randint(1, 64, shape, dtype=torch.int32)
+    input_tensor = ttnn.from_torch(input_a, device=device, layout=ttnn.TILE_LAYOUT, dtype=dtype)
+    output_tensor = ttnn.untilize(input_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
+    assert_with_pcc(input_a, output_tensor)
+
+
+def run_unary_with_aprox_mode_fruit_test(
+    device, h, w, memory_type, shard_shape, ttnn_function, vector_mode, approx_mode, pcc=0.9999
+):
+    torch.manual_seed(0)
+
+    torch_input_tensor = torch.rand((1, 1, h, w), dtype=torch.bfloat16)
+    golden_function = ttnn.get_golden_function(ttnn_function)
+    torch_output_tensor = golden_function(torch_input_tensor, device=device)
+    if memory_type == "L1":
+        core_grid = device.compute_with_storage_grid_size()
+        num_cores = 64
+
+        shard_spec = ttnn.ShardSpec(
+            grid=ttnn.num_cores_to_corerangeset(num_cores, device.compute_with_storage_grid_size()),
+            shard_shape=shard_shape,
+            shard_orientation=ttnn.ShardOrientation.ROW_MAJOR,
+        )
+        memory_config = ttnn.MemoryConfig(
+            memory_layout=ttnn.TensorMemoryLayout.HEIGHT_SHARDED, buffer_type=ttnn.BufferType.L1, shard_spec=shard_spec
+        )
+    else:  # memory_type == "DRAM":
+        memory_config = ttnn.MemoryConfig(
+            memory_layout=ttnn.TensorMemoryLayout.INTERLEAVED, buffer_type=ttnn.BufferType.DRAM
+        )
+    input_tensor = ttnn.from_torch(
+        torch_input_tensor, layout=ttnn.TILE_LAYOUT, device=device, memory_config=memory_config
+    )
+    print(
+        f"shape: {input_tensor.shape}, dtype: {input_tensor.dtype}, layout: {input_tensor.layout}, memory_config: {input_tensor.memory_config()}"
+    )
+    output_tensor = ttnn_function(input_tensor, vector_mode=vector_mode, fast_and_approximate_mode=approx_mode)
+    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.from_device(output_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    assert_with_pcc(torch_output_tensor, output_tensor, pcc)
+
+
+@pytest.mark.parametrize("h", [1024 * 128])
+@pytest.mark.parametrize("w", [1])
+@pytest.mark.parametrize("memory_type", ["L1", "DRAM"])
+@pytest.mark.parametrize("shard_shape", [(2048, 32)])
+@pytest.mark.parametrize("approx_mode", [True, False])
+@pytest.mark.parametrize("vector_mode", [4])
+def test_sigmoid_fruit(device, h, w, memory_type, shard_shape, vector_mode, approx_mode):
+    run_unary_with_aprox_mode_fruit_test(
+        device,
+        h,
+        w,
+        memory_type,
+        shard_shape,
+        ttnn.sigmoid,
+        vector_mode=vector_mode,
+        approx_mode=approx_mode,
+        pcc=0.999,
+    )

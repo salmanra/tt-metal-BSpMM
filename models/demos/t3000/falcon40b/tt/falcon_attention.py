@@ -2,18 +2,15 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 import math
-from torch import nn
 from typing import Optional, Tuple
 
+import torch
+
 import ttnn
-from ttnn import ShardTensorToMesh, ReplicateTensorToMesh
-
-from models.utility_functions import nearest_32
-from models.demos.t3000.falcon40b.tt.model_utils import convert_to_layout
-
-from models.demos.t3000.falcon40b.tt.model_utils import falcon_prefill_matmul, determine_tensor_deallocation
+from models.common.utility_functions import nearest_32
+from models.demos.t3000.falcon40b.tt.model_utils import determine_tensor_deallocation, falcon_prefill_matmul
+from ttnn import ReplicateTensorToMesh, ShardTensorToMesh
 
 
 def generate_cos_sin_cache(
@@ -99,7 +96,7 @@ class TtFalconRotaryEmbedding:
             )
 
     def __call__(self, layer: ttnn.Tensor, token_idx: Optional[int] = None) -> ttnn.Tensor:
-        seq_len = layer.shape.with_tile_padding()[2]
+        seq_len = layer.padded_shape[2]
         assert seq_len <= self.max_seq_len_cached, "seq_len exceeds max_seq_len_cached in RotaryEmbedding!"
         # TODO: Make rotary embedding in place
         output = ttnn.experimental.rotary_embedding(
@@ -119,6 +116,7 @@ class TtFalconAttention:
     def __init__(
         self,
         mesh_device,
+        tt_ccl,
         state_dict,
         base_url,
         layer_num,
@@ -136,6 +134,7 @@ class TtFalconAttention:
         self.max_position_embeddings = max_position_embeddings
         self.num_devices = mesh_device.get_num_devices()
         self.mesh_device = mesh_device
+        self.tt_ccl = tt_ccl
         self.state_dict = state_dict
         self.model_config = model_config
         self.num_heads_per_device = self.num_heads // mesh_device.get_num_devices()
@@ -305,8 +304,8 @@ class TtFalconAttention:
         """
 
         assert not output_attentions
-        batch = hidden_states.shape.with_tile_padding()[0]
-        q_len = hidden_states.shape.with_tile_padding()[2]
+        batch = hidden_states.padded_shape[0]
+        q_len = hidden_states.padded_shape[2]
         assert layer_past is not None
 
         # Fused query, key and value projection
@@ -366,11 +365,17 @@ class TtFalconAttention:
             attn_output,
             memory_config=self.model_config["CONCAT_HEADS_OUTPUT_MEMCFG"],
         )
-        attn_output = ttnn.all_gather(
+        attn_output = ttnn.experimental.all_gather_async(
             attn_output,
+            persistent_output_buffer=None,
             dim=3,
+            multi_device_global_semaphore=self.tt_ccl.get_and_cycle_ag_semaphore_handles(),
             num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
             memory_config=self.model_config["DEFAULT_MEMCFG"],
+            barrier_semaphore=self.tt_ccl.get_and_cycle_barrier_semaphore_handle(),
+            chunks_per_sync=10,
+            num_workers_per_link=2,
+            num_buffers_per_channel=2,
         )
         attn_output = falcon_prefill_matmul(
             attn_output,
@@ -409,8 +414,8 @@ class TtFalconAttention:
         """
 
         assert not output_attentions
-        batch = hidden_states.shape.with_tile_padding()[2]
-        q_len = hidden_states.shape.with_tile_padding()[0]
+        batch = hidden_states.padded_shape[2]
+        q_len = hidden_states.padded_shape[0]
         padded_layer_past_len = nearest_32(layer_past_len + 1)
         # We always store max_position_embeddings for kv_cache,
         # so we need separate variable to store the actual len of the kv_cache
@@ -474,7 +479,7 @@ class TtFalconAttention:
         kv_cache_memcfg = self.model_config["KV_CACHE_SLICE_OUTPUT_MEMCFG"]
         if kv_cache_memcfg.is_sharded():
             kv_cache_shard_shape = kv_cache_memcfg.shard_spec.shape
-            kv_cache_shard_shape[0] = layer_past[0].shape.with_tile_padding()[1] * padded_layer_past_len
+            kv_cache_shard_shape[0] = layer_past[0].padded_shape[1] * padded_layer_past_len
             kv_cache_memcfg.shard_spec.shape = kv_cache_shard_shape
         # Update kv_cache in place
         ttnn.update_cache(
@@ -515,9 +520,7 @@ class TtFalconAttention:
         attn_weights = ttnn.experimental.group_attn_matmul(
             query_layer,
             key_layer_transposed,
-            compute_with_storage_grid_size=self.mesh_device.get_devices()[
-                0
-            ].compute_with_storage_grid_size(),  # Change this
+            compute_with_storage_grid_size=self.mesh_device.compute_with_storage_grid_size(),  # Change this
             memory_config=self.model_config["PRE_SOFTMAX_MM_OUTPUT_MEMCFG"],
             dtype=self.model_config["PRE_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
         )
@@ -572,7 +575,7 @@ class TtFalconAttention:
         attn_output = ttnn.experimental.group_attn_matmul(
             attn_weights,
             value_layer,
-            compute_with_storage_grid_size=self.mesh_device.get_devices()[0].compute_with_storage_grid_size(),
+            compute_with_storage_grid_size=self.mesh_device.compute_with_storage_grid_size(),
             memory_config=self.model_config["POST_SOFTMAX_MM_OUTPUT_MEMCFG"],
             dtype=self.model_config["POST_SOFTMAX_MM_OUTPUT_DTYPE"],  # Must be BFLOAT16
         )
@@ -589,11 +592,17 @@ class TtFalconAttention:
             attn_output,
             memory_config=self.model_config["DEFAULT_MEMCFG"],
         )
-        attn_output = ttnn.all_gather(
+        attn_output = ttnn.experimental.all_gather_async(
             attn_output,
+            persistent_output_buffer=None,
             dim=3,
+            multi_device_global_semaphore=self.tt_ccl.get_and_cycle_ag_semaphore_handles(),
             num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
             memory_config=self.model_config["DEFAULT_MEMCFG"],
+            barrier_semaphore=self.tt_ccl.get_and_cycle_barrier_semaphore_handle(),
+            chunks_per_sync=10,
+            num_workers_per_link=2,
+            num_buffers_per_channel=2,
         )
         attn_output = ttnn.interleaved_to_sharded(
             attn_output,

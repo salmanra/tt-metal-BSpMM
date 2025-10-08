@@ -8,8 +8,12 @@ import pytest
 import torch
 import ttnn
 
-from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from loguru import logger
+
+from tests.sweep_framework.sweep_utils.roofline_utils import get_run_return
+from tests.sweep_framework.sweep_utils.utils import gen_pytest_parametrize_args
+from tests.ttnn.utils_for_testing import start_measuring_time, stop_measuring_time
+from models.common.utility_functions import torch_random
 
 TIMEOUT = 70
 
@@ -2648,7 +2652,7 @@ def run_matmul(device, params, core_grid, dtype, test_bias):
     half = int(count / 2)
     shape0 = params[0:half]
     shape1 = params[half:count]
-    shape2 = [shape1[-1]]
+    shape2 = [1 if i < (half - 1) else shape1[-1] for i in range(half)]
     torch_input_tensor0 = torch.rand(shape0, dtype=torch.float32)
     torch_input_tensor1 = torch.rand(shape1, dtype=torch.float32)
     torch_input_tensor2 = torch.rand(shape2, dtype=torch.float32)
@@ -2662,7 +2666,7 @@ def run_matmul(device, params, core_grid, dtype, test_bias):
 
     start_time = start_measuring_time()
     if test_bias:
-        output_tensor = ttnn.linear(
+        op_output_tensor = ttnn.linear(
             input_tensor0,
             input_tensor1,
             core_grid=grid,
@@ -2670,37 +2674,24 @@ def run_matmul(device, params, core_grid, dtype, test_bias):
             bias=input_tensor2,
         )
     else:
-        output_tensor = ttnn.matmul(
+        op_output_tensor = ttnn.matmul(
             input_tensor0, input_tensor1, core_grid=grid, compute_kernel_config=compute_kernel_config
         )
-    output_tensor = ttnn.to_torch(output_tensor)
+    output_tensor = ttnn.to_torch(op_output_tensor)
     e2e_perf = stop_measuring_time(start_time)
     expected_pcc = 0.99
-    return [check_with_pcc(torch_output_tensor, output_tensor, expected_pcc), e2e_perf]
+    tensors = [input_tensor0, input_tensor1, op_output_tensor]
+    if test_bias:
+        tensors.append(input_tensor2)
+    flop_counts = list(shape0) + [2, shape1[-1]]  # shape0: all batch dimensions, m, k; shape1[-1]: n
+    return get_run_return(torch_output_tensor, output_tensor, expected_pcc, tensors, e2e_perf, flop_counts)
 
 
-@pytest.mark.parametrize("params", parameters["pytorch"]["params"])
-@pytest.mark.parametrize("core_grid", parameters["pytorch"]["core_grid"])
-@pytest.mark.parametrize("dtype", parameters["pytorch"]["dtype"])
-@pytest.mark.parametrize("test_bias", parameters["pytorch"]["test_bias"])
-def test_pytorch(device, params, core_grid, dtype, test_bias):
-    run_matmul(device, params, core_grid, dtype, test_bias)
-
-
-@pytest.mark.parametrize("params", parameters["gpt"]["params"])
-@pytest.mark.parametrize("core_grid", parameters["gpt"]["core_grid"])
-@pytest.mark.parametrize("dtype", parameters["gpt"]["dtype"])
-@pytest.mark.parametrize("test_bias", parameters["gpt"]["test_bias"])
-def test_gpt(device, params, core_grid, dtype, test_bias):
-    run_matmul(device, params, core_grid, dtype, test_bias)
-
-
-@pytest.mark.parametrize("params", parameters["forge"]["params"])
-@pytest.mark.parametrize("core_grid", parameters["forge"]["core_grid"])
-@pytest.mark.parametrize("dtype", parameters["forge"]["dtype"])
-@pytest.mark.parametrize("test_bias", parameters["forge"]["test_bias"])
-def test_forge(device, params, core_grid, dtype, test_bias):
-    run_matmul(device, params, core_grid, dtype, test_bias)
+@pytest.mark.parametrize(**gen_pytest_parametrize_args(parameters))
+def test_trace(device, params, core_grid, dtype, test_bias):
+    (result, msg), e2e_perf = run_matmul(device, params, core_grid, dtype, test_bias)
+    assert result, msg
+    logger.info(f"e2e_perf: {e2e_perf}")
 
 
 def run(

@@ -1,8 +1,10 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
 #include "modules/positional_embeddings.hpp"
+
+#include <cmath>
 
 #include "autograd/autocast_tensor.hpp"
 #include "core/tt_tensor_utils.hpp"
@@ -22,13 +24,13 @@ autograd::AutocastTensor create_positional_embedding_tensor(uint32_t sequence_le
     for (uint32_t pos = 0; pos < sequence_length; ++pos) {
         for (uint32_t emb_idx = 0; emb_idx < embedding_dim; ++emb_idx) {
             float value = (emb_idx & 1)
-                              ? std::cosf(pos / std::powf(div_const, static_cast<float>(emb_idx - 1) / embedding_dim))
-                              : std::sinf(pos / std::powf(div_const, static_cast<float>(emb_idx) / embedding_dim));
+                              ? std::cos(pos / std::pow(div_const, static_cast<float>(emb_idx - 1) / embedding_dim))
+                              : std::sin(pos / std::pow(div_const, static_cast<float>(emb_idx) / embedding_dim));
             positional_embedding_data.push_back(value);
         }
     }
 
-    auto shape = core::create_shape({1, 1, sequence_length, embedding_dim});
+    auto shape = ttnn::Shape({1, 1, sequence_length, embedding_dim});
     auto* device = &autograd::ctx().get_device();
     auto tensor = core::from_vector(positional_embedding_data, shape, device);
     return autograd::AutocastTensor(tensor);
@@ -36,10 +38,10 @@ autograd::AutocastTensor create_positional_embedding_tensor(uint32_t sequence_le
 
 }  // namespace
 
-PositionalEmbedding::PositionalEmbedding(uint32_t embedding_dim, float dropout_prob, uint32_t sequence_length) :
-    m_sequence_length(sequence_length) {
-    m_dropout = std::make_shared<DropoutLayer>(dropout_prob);
-    m_positional_embedding = create_positional_embedding_tensor(sequence_length, embedding_dim);
+PositionalEmbedding::PositionalEmbedding(const PositionalEmbeddingConfig& config) :
+    m_sequence_length(config.sequence_length) {
+    m_dropout = std::make_shared<DropoutLayer>(config.dropout_prob, config.use_dropout_seed_per_device);
+    m_positional_embedding = create_positional_embedding_tensor(config.sequence_length, config.embedding_dim);
 
     create_name("positional_embedding");
     register_module(m_dropout, "dropout");
@@ -47,7 +49,7 @@ PositionalEmbedding::PositionalEmbedding(uint32_t embedding_dim, float dropout_p
 
 autograd::TensorPtr PositionalEmbedding::operator()(const autograd::TensorPtr& input) {
     auto input_tensor = input->get_value();
-    auto input_shape = input_tensor.get_logical_shape();
+    auto input_shape = input_tensor.logical_shape();
     if (input_shape.rank() != 4) {
         throw std::runtime_error(
             "PositionalEmbedding: input tensor must have 4 dimensions. Got rank " + std::to_string(input_shape.rank()));
@@ -67,17 +69,14 @@ autograd::TensorPtr PositionalEmbedding::operator()(const autograd::TensorPtr& i
 }
 
 void TrainablePositionalEmbedding::initialize_tensors(uint32_t sequence_length, uint32_t embedding_dim) {
-    auto* device = &autograd::ctx().get_device();
     m_weight = autograd::create_tensor();
-    init::normal_init(
-        m_weight, core::create_shape({1, 1, sequence_length, embedding_dim}), /* normal params */ {0.F, 1.F});
+    init::normal_init(m_weight, ttnn::Shape({1, 1, sequence_length, embedding_dim}), /* normal params */ {0.F, 1.F});
 }
 
-TrainablePositionalEmbedding::TrainablePositionalEmbedding(
-    uint32_t embedding_dim, float dropout_prob, uint32_t sequence_length) :
-    m_sequence_length(sequence_length) {
-    m_dropout = std::make_shared<DropoutLayer>(dropout_prob);
-    initialize_tensors(sequence_length, embedding_dim);
+TrainablePositionalEmbedding::TrainablePositionalEmbedding(const PositionalEmbeddingConfig& config) :
+    m_sequence_length(config.sequence_length) {
+    m_dropout = std::make_shared<DropoutLayer>(config.dropout_prob, config.use_dropout_seed_per_device);
+    initialize_tensors(config.sequence_length, config.embedding_dim);
 
     create_name("trainable_positional_embedding");
     register_module(m_dropout, "dropout");
@@ -86,7 +85,7 @@ TrainablePositionalEmbedding::TrainablePositionalEmbedding(
 
 autograd::TensorPtr TrainablePositionalEmbedding::operator()(const autograd::TensorPtr& input) {
     auto input_tensor = input->get_value();
-    auto input_shape = input_tensor.get_logical_shape();
+    auto input_shape = input_tensor.logical_shape();
     if (input_shape.rank() != 4) {
         throw std::runtime_error(
             "TrainablePositionalEmbedding: input tensor must have 4 dimensions. Got rank " +

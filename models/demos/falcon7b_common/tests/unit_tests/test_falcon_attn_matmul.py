@@ -3,11 +3,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
+import torch
 from loguru import logger
 
 import ttnn
-from models.utility_functions import comp_pcc, tt2torch_tensor
-import torch
+from models.common.utility_functions import comp_pcc, tt2torch_tensor
 
 
 def run_falcon_attn_matmul_test(
@@ -102,7 +102,7 @@ def run_falcon_attn_matmul_test(
     logger.debug(f"in1 ({b_shape}): {b_t.memory_config().buffer_type} and {b_t.get_dtype()}")
     logger.debug(f"out ({expected_output_shape}): {out.memory_config().buffer_type} and {out.get_dtype()}")
 
-    assert out.shape.with_tile_padding() == expected_output_shape
+    assert out.padded_shape == expected_output_shape
     pyt_got_back_rm = tt2torch_tensor(out)
 
     ref_bmm = torch.matmul(A.transpose(0, 2), B).transpose(0, 2)

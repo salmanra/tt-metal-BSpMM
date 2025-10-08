@@ -3,12 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
-
+import math
 import torch
 import torch.nn as nn
 import ttnn
 
-from tests.ttnn.utils_for_testing import assert_with_pcc, divup
+from tests.ttnn.utils_for_testing import assert_with_pcc, divup, assert_equal
 
 
 @pytest.mark.parametrize(
@@ -28,7 +28,7 @@ def test_zeros_like(device, input_shape):
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
-    assert_with_pcc(torch_output_tensor, output_tensor, 0.9999)
+    assert_equal(torch_output_tensor, output_tensor)
     assert torch.allclose(torch_output_tensor, output_tensor)
 
 
@@ -50,7 +50,7 @@ def test_ones_like(device, input_shape):
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
-    assert_with_pcc(torch_output_tensor, output_tensor, 0.9999)
+    assert_equal(torch_output_tensor, output_tensor)
     assert torch.allclose(torch_output_tensor, output_tensor)
 
 
@@ -73,7 +73,7 @@ def test_full_like(device, input_shape, fill_value):
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
 
-    assert_with_pcc(torch_output_tensor, output_tensor, 0.9999)
+    assert_equal(torch_output_tensor, output_tensor)
     assert torch.allclose(torch_output_tensor, output_tensor)
 
 
@@ -96,7 +96,7 @@ def test_full_like_bf8b(device, input_shape, fill_value):
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor).to(torch.bfloat16)
 
-    assert_with_pcc(torch_output_tensor, output_tensor, 0.9999)
+    assert_equal(torch_output_tensor, output_tensor)
     assert torch.allclose(torch_output_tensor, output_tensor)
 
 
@@ -128,15 +128,15 @@ def test_full_like_opt_tensor(device, input_shape, fill_value, layout):
     input_tensor = ttnn.to_device(input_tensor, device)
 
     cq_id = 0
-    pages_before = ttnn._ttnn.reports.get_buffer_pages()
+    pages_before = ttnn._ttnn.reports.get_buffer_pages(device)
     ttnn.full_like(input_tensor, fill_value=fill_value, optional_tensor=opt_tensor, queue_id=cq_id)
-    assert len(pages_before) == len(ttnn._ttnn.reports.get_buffer_pages())
+    assert len(pages_before) == len(ttnn._ttnn.reports.get_buffer_pages(device))
 
     assert ttnn.is_tensor_storage_on_device(opt_tensor)
     opt_tensor = ttnn.from_device(opt_tensor)
     opt_tensor = ttnn.to_torch(opt_tensor)
 
-    assert_with_pcc(torch_output_tensor, opt_tensor, 0.9999)
+    assert_equal(torch_output_tensor, opt_tensor)
     assert torch.allclose(torch_output_tensor, opt_tensor)
 
 
@@ -154,7 +154,7 @@ def test_ones(device, input_shape):
     assert ttnn.is_tensor_storage_on_device(tensor)
     tensor = ttnn.to_torch(tensor)
 
-    assert_with_pcc(torch_tensor, tensor, 0.9999)
+    assert_equal(torch_tensor, tensor)
     assert torch.allclose(torch_tensor, tensor)
 
 
@@ -172,7 +172,7 @@ def test_zeros(device, input_shape):
     assert ttnn.is_tensor_storage_on_device(tensor)
     tensor = ttnn.to_torch(tensor)
 
-    assert_with_pcc(torch_tensor, tensor, 0.9999)
+    assert_equal(torch_tensor, tensor)
     assert torch.allclose(torch_tensor, tensor)
 
 
@@ -199,7 +199,7 @@ def test_full(device, input_shape, fill_value, layout):
     assert ttnn.is_tensor_storage_on_device(tensor)
     tensor = ttnn.to_torch(tensor)
 
-    assert_with_pcc(torch_tensor, tensor, 0.9999)
+    assert_equal(torch_tensor, tensor)
     assert torch.allclose(torch_tensor, tensor)
 
 
@@ -227,13 +227,13 @@ def test_full_with_opt_tensor(device, input_shape, layout, fill_value):
     )
 
     cq_id = 0
-    pages_before = ttnn._ttnn.reports.get_buffer_pages()
+    pages_before = ttnn._ttnn.reports.get_buffer_pages(device)
     ttnn.full(input_shape, device=device, fill_value=fill_value, optional_tensor=opt_tensor, queue_id=cq_id)
-    assert len(pages_before) == len(ttnn._ttnn.reports.get_buffer_pages())
+    assert len(pages_before) == len(ttnn._ttnn.reports.get_buffer_pages(device))
     assert ttnn.is_tensor_storage_on_device(opt_tensor)
     opt_tensor = ttnn.to_torch(opt_tensor)
 
-    assert_with_pcc(torch_tensor, opt_tensor, 0.9999)
+    assert_equal(torch_tensor, opt_tensor)
     assert torch.allclose(torch_tensor, opt_tensor)
 
 
@@ -258,76 +258,135 @@ def test_full_multi_device(mesh_device, input_shape, fill_value, layout):
 
     tensor = ttnn.full(input_shape, device=mesh_device, fill_value=fill_value, layout=layout)
     assert ttnn.is_tensor_storage_on_device(tensor)
-    output_tensors = ttnn.to_torch(tensor, mesh_composer=ttnn.ListMeshToTensor(mesh_device))
-
+    output_tensors = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(tensor.cpu())]
     for output_tensor in output_tensors:
-        assert_with_pcc(torch_tensor, output_tensor, 0.9999)
+        assert_equal(torch_tensor, output_tensor)
         assert torch.allclose(torch_tensor, output_tensor)
 
 
-@pytest.mark.parametrize(
-    "start",
-    [4, 8, 16, 32],
-)
+def test_arange_defaults():
+    start = 0
+    end = 10
+    step = 3
+    width_dim = int(((abs(end - start) + abs(step) - 1) // abs(step)))
+
+    output_tensor = ttnn.arange(start, end, step)
+    assert output_tensor.shape == [width_dim]
+
+    output_tensor = ttnn.arange(end)
+    assert output_tensor.shape == [end]
+
+    output_tensor = ttnn.arange(start, end)
+    assert output_tensor.shape == [end - start]
+
+    assert output_tensor.layout == ttnn.ROW_MAJOR_LAYOUT
+    assert output_tensor.dtype == ttnn.bfloat16
+    assert output_tensor.memory_config() == ttnn.DRAM_MEMORY_CONFIG
+
+
 @pytest.mark.parametrize(
     "end",
-    [100, 200, 300],
+    [100, 103, 226, 300, 3, 1, 0],
 )
 @pytest.mark.parametrize(
     "step",
-    [1, 2, 3, 4, 5],
+    [1, 2, 3, 5, 0, -1, -3, -4],
 )
-def test_arange(device, start, end, step):
-    torch_input_tensor = torch.rand((start, end, step), dtype=torch.bfloat16)
-    torch_output_tensor = torch.arange(start, end, step)
+@pytest.mark.parametrize(
+    "start",
+    [4, 8, 16, 0, 201, 135, 98],
+)
+def test_arange_tile_layout(device, start, end, step):
+    if (start > end and step > 0) or (start < end and step < 0) or (step == 0):
+        pytest.skip(f"Skipping invalid case: start={start}, end={end}, step={step}")
 
-    input_tensor = ttnn.from_torch(torch_input_tensor, layout=ttnn.TILE_LAYOUT)
-    input_tensor = ttnn.to_device(input_tensor, device)
+    torch_output_tensor = torch.arange(start, end, step).bfloat16()
 
-    output_tensor = ttnn.arange(
-        input_tensor.shape[0], input_tensor.shape[1], input_tensor.shape[2], ttnn.bfloat16, device
-    )
-    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    output_tensor = ttnn.arange(start, end, step, device=device, layout=ttnn.TILE_LAYOUT)
+    width_dim = int(((abs(end - start) + abs(step) - 1) // abs(step)))
+
+    assert output_tensor.layout == ttnn.TILE_LAYOUT
+    assert output_tensor.padded_shape == [ttnn.TILE_SIZE, math.ceil(width_dim / ttnn.TILE_SIZE) * ttnn.TILE_SIZE]
+    assert output_tensor.shape == [width_dim]
+    assert output_tensor.storage_type() == ttnn.DEVICE_STORAGE_TYPE
+
     output_tensor = ttnn.from_device(output_tensor)
     output_tensor = ttnn.to_torch(output_tensor)
-    output_tensor = output_tensor[-1, -1, -1, :]
-    if divup((end - start), step) % 2 != 0:
-        output_tensor = output_tensor[:-1]
 
-    assert_with_pcc(torch_output_tensor, output_tensor, 0.9999)
+    if torch_output_tensor.numel() == 0:
+        assert output_tensor.numel() == 0
+    else:
+        assert_equal(torch_output_tensor, output_tensor)
 
 
 @pytest.mark.parametrize(
     "start",
-    [4, 8, 16, 32],
+    [4, 8, 16, 0, 201, 135, 98],
 )
 @pytest.mark.parametrize(
     "end",
-    [100, 200, 300],
+    [100, 103, 226, 300, 3, 1, 0],
 )
 @pytest.mark.parametrize(
     "step",
-    [1, 2, 3, 4, 5],
+    [1, 2, 3, 5, 0, -1, -3, -4],
+)
+def test_arange(device, start, end, step):
+    if (start > end and step > 0) or (start < end and step < 0) or (step == 0):
+        pytest.skip(f"Skipping invalid case: start={start}, end={end}, step={step}")
+
+    # torch.arange has worse accuracy for bf16 than ttnn for some reason:
+    # https://github.com/tenstorrent/tt-metal/pull/19882#issuecomment-2772903175
+    torch_output_tensor_int = torch.arange(start, end, step, dtype=torch.int32)
+    torch_output_tensor = torch_output_tensor_int.to(torch.bfloat16)
+
+    output_tensor = ttnn.arange(start, end, step, dtype=ttnn.bfloat16, device=device)
+    assert output_tensor.layout == ttnn.ROW_MAJOR_LAYOUT
+    output_tensor = ttnn.from_device(output_tensor)
+    output_tensor = ttnn.to_torch(output_tensor)
+
+    if torch_output_tensor.numel() == 0:
+        assert output_tensor.numel() == 0
+    else:
+        assert_equal(torch_output_tensor, output_tensor)
+
+
+@pytest.mark.parametrize(
+    "start",
+    [4, 8, 16, 0, 201, 135, 98],
+)
+@pytest.mark.parametrize(
+    "end",
+    [100, 103, 226, 300, 3, 1, 0],
+)
+@pytest.mark.parametrize(
+    "step",
+    [1, 2, 3, 5, 0, -1, -3, -4],
 )
 def test_arange_multi_device(mesh_device, start, end, step):
-    torch_input_tensor = torch.rand((start, end, step), dtype=torch.bfloat16)
-    torch_output_tensor = torch.arange(start, end, step)
+    if (start > end and step > 0) or (start < end and step < 0) or (step == 0):
+        pytest.skip(f"Skipping invalid case: start={start}, end={end}, step={step}")
+    # torch.arange has worse accuracy for bf16 than ttnn for some reason:
+    # https://github.com/tenstorrent/tt-metal/pull/19882#issuecomment-2772903175
+    torch_output_tensor_int = torch.arange(start, end, step, dtype=torch.int32)
+    torch_output_tensor = torch_output_tensor_int.to(torch.bfloat16)
 
     output_tensor = ttnn.arange(
-        torch_input_tensor.shape[0],
-        torch_input_tensor.shape[1],
-        torch_input_tensor.shape[2],
-        ttnn.bfloat16,
-        mesh_device,
+        start,
+        end,
+        step,
+        dtype=ttnn.bfloat16,
+        device=mesh_device,
     )
-    output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
+    assert output_tensor.layout == ttnn.ROW_MAJOR_LAYOUT
+
     output_tensor = ttnn.from_device(output_tensor)
-    output_tensors = ttnn.to_torch(output_tensor, mesh_composer=ttnn.ListMeshToTensor(mesh_device))
+    output_tensors = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(output_tensor.cpu())]
     for output_tensor in output_tensors:
-        output_tensor = output_tensor[-1, -1, -1, :]
-        if divup((end - start), step) % 2 != 0:
-            output_tensor = output_tensor[:-1]
-        assert_with_pcc(torch_output_tensor, output_tensor, 0.9999)
+        if torch_output_tensor.numel() == 0:
+            assert output_tensor.numel() == 0
+        else:
+            assert_equal(torch_output_tensor, output_tensor)
 
 
 @pytest.mark.parametrize(
@@ -369,7 +428,7 @@ def test_empty_multi_device(mesh_device, input_shapes):
     output_tensor = ttnn.empty(input_shapes, ttnn.bfloat16, ttnn.TILE_LAYOUT, mesh_device, ttnn.DRAM_MEMORY_CONFIG)
     output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
     output_tensor = ttnn.from_device(output_tensor)
-    output_tensors = ttnn.to_torch(output_tensor, mesh_composer=ttnn.ListMeshToTensor(mesh_device))
+    output_tensors = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(output_tensor.cpu())]
     for output_tensor in output_tensors:
         assert list(torch_output_tensor.shape) == list(output_tensor.shape)
 
@@ -417,6 +476,20 @@ def test_empty_like_multi_device(mesh_device, input_shapes):
     output_tensor = ttnn.empty_like(input_tensor, layout=ttnn.TILE_LAYOUT)
     output_tensor = ttnn.to_layout(output_tensor, ttnn.ROW_MAJOR_LAYOUT)
     output_tensor = ttnn.from_device(output_tensor)
-    output_tensors = ttnn.to_torch(output_tensor, mesh_composer=ttnn.ListMeshToTensor(mesh_device))
+    output_tensors = [ttnn.to_torch(shard) for shard in ttnn.get_device_tensors(output_tensor.cpu())]
     for output_tensor in output_tensors:
         assert list(torch_input_tensor.shape) == list(output_tensor.shape)
+
+
+@pytest.mark.parametrize("input_shape, dtype", [([32, 32], ttnn.bfloat8_b), ((5, 96, 64), ttnn.bfloat8_b)])
+def test_zeros_bfp8(device, input_shape, dtype):
+    tensor = ttnn.zeros(input_shape, device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT)
+    assert tensor.dtype == ttnn.bfloat8_b, f"Expected dtype {dtype}, but got {tensor.dtype}"
+    assert tensor.storage_type() == ttnn.StorageType.DEVICE
+
+
+@pytest.mark.parametrize("input_shape, dtype", [([32, 32], ttnn.bfloat4_b), ((5, 96, 64), ttnn.bfloat4_b)])
+def test_zeros_bfp4(device, input_shape, dtype):
+    tensor = ttnn.zeros(input_shape, device=device, dtype=dtype, layout=ttnn.TILE_LAYOUT)
+    assert tensor.dtype == ttnn.bfloat4_b, f"Expected dtype {dtype}, but got {tensor.dtype}"
+    assert tensor.storage_type() == ttnn.StorageType.DEVICE

@@ -5,7 +5,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
-#include "cpp/pybind11/decorators.hpp"
+#include "ttnn-pybind/decorators.hpp"
 #include "reshard.hpp"
 #include "ttnn/types.hpp"
 #include <tt-metalium/core_coord.hpp>
@@ -24,15 +24,12 @@ void bind_reshard(pybind11::module& module, const data_movement_sharded_operatio
             [](const data_movement_sharded_operation_t& self,
                const ttnn::Tensor& input_tensor,
                const MemoryConfig& output_memory_config,
-               const std::optional<Tensor>& output_tensor,
-               uint8_t queue_id) -> ttnn::Tensor {
-                return self(queue_id, input_tensor, output_memory_config, output_tensor);
+               const std::optional<Tensor>& output_tensor) -> ttnn::Tensor {
+                return self(input_tensor, output_memory_config, output_tensor);
             },
             py::arg("input_tensor").noconvert(),
             py::arg("output_memory_config"),
             py::arg("output_tensor").noconvert() = std::nullopt,
-            py::kw_only(),
-            py::arg("queue_id") = 0,
 
         });
 }
@@ -51,9 +48,6 @@ void py_bind_reshard(pybind11::module& module) {
         Args:
             * :attr:`input_tensor` (ttnn.Tensor): input tensor
             * :attr:`output_memory_config` (MemoryConfig): Memory config with shard spec of output tensor
-
-        Keyword Args:
-            * :attr:`queue_id`: command queue id
 
         Example:
             >>> sharded_memory_config_dict = dict(

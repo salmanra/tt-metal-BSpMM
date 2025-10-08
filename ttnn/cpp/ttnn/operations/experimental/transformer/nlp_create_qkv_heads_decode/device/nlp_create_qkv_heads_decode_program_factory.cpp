@@ -6,20 +6,22 @@
 #include <tt-metalium/work_split.hpp>
 #include <tt-metalium/host_api.hpp>
 #include <tt-metalium/constants.hpp>
-#include <tt-metalium/util.hpp>
+#include <tt-metalium/tensor_accessor_args.hpp>
 
 using namespace tt::constants;
 using namespace tt;
 
 namespace ttnn::operations::experimental::transformer {
 
-operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode(
+tt::tt_metal::operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode(
     const Tensor& input_tensor,
     const uint32_t num_q_heads,
     const uint32_t num_kv_heads,
     const uint32_t head_dim,
     const bool overlap_qk_coregrid,
     const bool input_on_subcoregrids,
+    const std::optional<const Tensor>& batch_offset,
+    std::optional<const uint32_t> slice_size,
     std::vector<Tensor>& output,
     CoreCoord compute_with_storage_grid_size) {
     bool is_input_sharded = input_tensor.is_sharded();
@@ -31,6 +33,8 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode(
                 num_kv_heads,
                 head_dim,
                 overlap_qk_coregrid,
+                batch_offset,
+                slice_size,
                 output,
                 compute_with_storage_grid_size);
         } else {
@@ -40,6 +44,8 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode(
                 num_kv_heads,
                 head_dim,
                 overlap_qk_coregrid,
+                batch_offset,
+                slice_size,
                 output,
                 compute_with_storage_grid_size);
         }
@@ -49,7 +55,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode(
     }
 }
 
-operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_interleaved_input(
+tt::tt_metal::operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_interleaved_input(
     const Tensor& input_tensor,
     const uint32_t num_q_heads,
     const uint32_t num_kv_heads,
@@ -58,15 +64,9 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_interleav
     CoreCoord compute_with_storage_grid_size) {
     tt_metal::Program program = tt_metal::CreateProgram();
 
-    const auto& input_shape = input_tensor.get_padded_shape();
+    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor.dtype());
 
-    tt_metal::IDevice* device = input_tensor.device();
-
-    bool is_dram = input_tensor.memory_config().buffer_type == tt::tt_metal::BufferType::DRAM;
-
-    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
-
-    uint32_t single_tile_size = tt_metal::detail::TileSize(cb_data_format);
+    uint32_t single_tile_size = tt::tile_size(cb_data_format);
 
     uint32_t head_tiles = head_dim / TILE_WIDTH;
     uint32_t head_size = head_tiles * single_tile_size;
@@ -76,8 +76,6 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_interleav
     auto q_shard_spec = output[0].shard_spec().value();
     auto q_cores = q_shard_spec.grid;
     auto q_num_tiles = q_shard_spec.shape[0] * q_shard_spec.shape[1] / TILE_HW;
-    auto in_shape = input_tensor.get_padded_shape();
-    auto in_num_tiles = in_shape[-2] * in_shape[-1] / TILE_HW;
 
     uint32_t q_output_cb_index = CBIndex::c_16;
     tt_metal::CircularBufferConfig cb_q_output_config =
@@ -123,7 +121,8 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_interleav
         num_kv_heads,
         head_tiles,
         1,  // read the first phase
-        is_dram ? 1 : 0};
+    };
+    tt::tt_metal::TensorAccessorArgs(input_tensor.buffer()).append_to(reader_compile_time_args);
     auto reader_kernel_id = tt_metal::CreateKernel(
         program,
         "ttnn/cpp/ttnn/operations/experimental/transformer/nlp_create_qkv_heads_decode/device/kernels/"
@@ -145,7 +144,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_interleav
 
     for (uint32_t i = 0; i < num_cores; ++i) {
         uint32_t in_tile_offset_by_batch =
-            i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512 * element_size;
+            i < 16 ? i * sub_tile_line_bytes : ((i - 16) * sub_tile_line_bytes) + (512 * element_size);
 
         const auto& core = cores[i];
         std::vector<uint32_t> reader_runtime_args;
@@ -174,10 +173,6 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_interleav
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<Tensor>& output_tensors) {
-            auto src_buffer = input_tensors.at(0).buffer();
-
-            uint32_t src_kv_buffer_addr = 0;
-
             auto dst_buffer_query = output_tensors.at(0).buffer();
             auto dst_buffer_key = output_tensors.at(1).buffer();
             auto dst_buffer_value = output_tensors.at(2).buffer();
@@ -191,7 +186,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_interleav
 
             for (uint32_t i = 0; i < num_cores; ++i) {
                 uint32_t in_tile_offset_by_batch =
-                    i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512 * element_size;
+                    i < 16 ? i * sub_tile_line_bytes : ((i - 16) * sub_tile_line_bytes) + (512 * element_size);
                 const auto& core = cores[i];
                 auto& runtime_args = GetRuntimeArgs(program, reader_kernel_id, core);
                 runtime_args[0] = in_tile_offset_by_batch;
@@ -206,23 +201,26 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_interleav
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 }
 
-operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_input(
+tt::tt_metal::operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_input(
     const Tensor& input_tensor,
     const uint32_t num_q_heads,
     const uint32_t num_kv_heads,
     const uint32_t head_dim,
     const bool overlap_qk_coregrid,
+    const std::optional<const Tensor>& batch_offset,
+    std::optional<const uint32_t> slice_size,
     std::vector<Tensor>& output,
     CoreCoord compute_with_storage_grid_size) {
     tt_metal::Program program = tt_metal::CreateProgram();
 
-    const auto& input_shape = input_tensor.get_padded_shape();
-
     tt_metal::IDevice* device = input_tensor.device();
+    // Create CBs for reader/writer for batch_offset
+    uint32_t batch_offset_cb_index_reader = CBIndex::c_15;
+    uint32_t batch_offset_cb_index_writer = CBIndex::c_14;
 
-    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
+    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor.dtype());
 
-    uint32_t single_tile_size = tt_metal::detail::TileSize(cb_data_format);
+    uint32_t single_tile_size = tt::tile_size(cb_data_format);
 
     uint32_t head_tiles = head_dim / TILE_WIDTH;
     uint32_t head_size = head_tiles * single_tile_size;
@@ -232,9 +230,38 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
     auto q_shard_spec = output[0].shard_spec().value();
     auto q_cores = q_shard_spec.grid;
     auto q_num_tiles = q_shard_spec.shape[0] * q_shard_spec.shape[1] / TILE_HW;
+    auto k_shard_spec = output[1].shard_spec().value();
+    auto k_cores = k_shard_spec.grid;
+    auto k_num_tiles = k_shard_spec.shape[0] * k_shard_spec.shape[1] / TILE_HW;
     auto in_shard_spec = input_tensor.shard_spec().value();
     auto in_cores = in_shard_spec.grid;
-    auto in_num_tiles = in_shard_spec.shape[0] * in_shard_spec.shape[1] / TILE_HW;
+    uint32_t batch_offset_index_stick_size = 0;
+    auto qk_cores = q_cores;
+    if (!overlap_qk_coregrid) {
+        auto qk_cores_set = std::set<CoreRange>();
+        qk_cores_set.insert(q_cores.ranges().begin(), q_cores.ranges().end());
+        qk_cores_set.insert(k_cores.ranges().begin(), k_cores.ranges().end());
+        qk_cores = CoreRangeSet(qk_cores_set);
+    }
+    // if batch_offset is provided we need to allocate a buffer for it
+    if (batch_offset.has_value()) {
+        tt::DataFormat cb_batch_offset_data_format =
+            tt_metal::datatype_to_dataformat_converter(batch_offset.value().dtype());
+        uint32_t single_batch_offset_tile_size = tt::tile_size(cb_batch_offset_data_format);
+        batch_offset_index_stick_size = batch_offset.value().buffer()->aligned_page_size();
+
+        tt_metal::CircularBufferConfig cb_batch_offset_config_reader =
+            tt_metal::CircularBufferConfig(
+                single_batch_offset_tile_size, {{batch_offset_cb_index_reader, cb_batch_offset_data_format}})
+                .set_page_size(batch_offset_cb_index_reader, 1);
+        tt_metal::CreateCircularBuffer(program, qk_cores, cb_batch_offset_config_reader);
+
+        tt_metal::CircularBufferConfig cb_batch_offset_config_writer =
+            tt_metal::CircularBufferConfig(
+                single_batch_offset_tile_size, {{batch_offset_cb_index_writer, cb_batch_offset_data_format}})
+                .set_page_size(batch_offset_cb_index_writer, 1);
+        tt_metal::CreateCircularBuffer(program, qk_cores, cb_batch_offset_config_writer);
+    }
 
     uint32_t q_output_cb_index = CBIndex::c_16;
     tt_metal::CircularBufferConfig cb_q_output_config =
@@ -242,10 +269,6 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
             .set_page_size(q_output_cb_index, single_tile_size)
             .set_globally_allocated_address(*output[0].buffer());
     auto cb_q_output = tt_metal::CreateCircularBuffer(program, q_cores, cb_q_output_config);
-
-    auto k_shard_spec = output[1].shard_spec().value();
-    auto k_cores = k_shard_spec.grid;
-    auto k_num_tiles = k_shard_spec.shape[0] * k_shard_spec.shape[1] / TILE_HW;
 
     uint32_t k_output_cb_index = CBIndex::c_17;
     tt_metal::CircularBufferConfig cb_k_output_config =
@@ -274,14 +297,12 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
         const auto &q_cores_vector = grid_to_cores(q_num_cores, q_num_cores_x, q_num_cores_y, true);
 
         // cores for k
-        uint32_t k_num_cores = k_cores.num_cores(); // number of cores of the output
-        auto k_core_grid = k_cores.bounding_box();
+        uint32_t k_num_cores = k_cores.num_cores();  // number of cores of the output
         const auto &k_cores_vector = corerange_to_cores(k_cores, k_num_cores, true);
 
-    // cores for input
-    uint32_t in_num_cores = in_cores.num_cores();  // number of cores of the input
-    auto in_core_grid = in_cores.bounding_box();
-    uint32_t in_num_cores_x = in_core_grid.end_coord.x + 1, in_num_cores_y = in_core_grid.end_coord.y + 1;
+        // cores for input
+        auto in_core_grid = in_cores.bounding_box();
+        uint32_t in_num_cores_x = in_core_grid.end_coord.x + 1, in_num_cores_y = in_core_grid.end_coord.y + 1;
 
         std::vector<uint32_t> noc_x_coords;
         noc_x_coords.reserve(in_num_cores_x);
@@ -306,8 +327,8 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
 
         // We parallize the reader on risc0 and risc1, where each risc reads a sub-tile of the input (phase1 and phase2 of a tile respectively)
         std::vector<uint32_t> q_reader_compile_time_args = {
-            (std::uint32_t) element_size,
-            (std::uint32_t) sub_tile_line_bytes,
+            (std::uint32_t)element_size,
+            (std::uint32_t)sub_tile_line_bytes,
             q_output_cb_index,
             k_output_cb_index,
             v_output_cb_index,
@@ -315,12 +336,16 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
             num_q_heads,
             num_kv_heads,
             head_tiles,
-            1, // read the first phase
+            1,  // read the first phase
             in_num_cores_x,
             in_num_cores_y,
-            process_qv, //read and write q and v heads
-            process_k  // read and write k heads
-        };
+            process_qv,                        // read and write q and v heads
+            process_k,                         // read and write k heads
+            batch_offset.has_value() ? 1 : 0,  // use_batch_offset
+            batch_offset_index_stick_size,
+            batch_offset_cb_index_reader};
+        tt::tt_metal::TensorAccessorArgs(batch_offset.has_value() ? batch_offset.value().buffer() : nullptr)
+            .append_to(q_reader_compile_time_args);
         auto q_reader_kernel_id = tt_metal::CreateKernel(
             program,
             "ttnn/cpp/ttnn/operations/experimental/transformer/nlp_create_qkv_heads_decode/device/kernels/reader_tm_tile_layout_nlp_create_qkv_heads_decode.cpp",
@@ -334,7 +359,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
             q_cores,
             tt_metal::WriterDataMovementConfig(q_writer_compile_time_args));
 
-        KernelHandle k_reader_kernel_id = 0, k_writer_kernel_id = 0;
+        tt::tt_metal::KernelHandle k_reader_kernel_id = 0, k_writer_kernel_id = 0;
         if (!overlap_qk_coregrid) {
             // Switch process_qv and process_k for k kernels
             process_qv = 0;
@@ -357,18 +382,14 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
                 tt_metal::WriterDataMovementConfig(k_writer_compile_time_args));
         }
 
-    uint32_t q_start_addr = q_base_addr;
+        uint32_t q_start_addr = q_base_addr;
+        bool use_batch_offset = batch_offset.has_value();
 
         for (uint32_t i = 0; i < q_num_cores; ++i) {
-            uint32_t in_tile_offset_by_batch = i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512*element_size;
-
             const auto& core = q_cores_vector[i];
             std::vector<uint32_t> q_reader_runtime_args;
-            q_reader_runtime_args.reserve(2 + in_num_cores_x + in_num_cores_y);
-            q_reader_runtime_args = {
-                in_tile_offset_by_batch,
-                q_start_addr,
-            };
+            q_reader_runtime_args.reserve(3 + in_num_cores_x + in_num_cores_y);
+            q_reader_runtime_args = {q_start_addr, use_batch_offset ? batch_offset.value().buffer()->address() : 0, i};
             q_reader_runtime_args.insert(q_reader_runtime_args.end(), noc_x_coords.begin(), noc_x_coords.end());
             q_reader_runtime_args.insert(q_reader_runtime_args.end(), noc_y_coords.begin(), noc_y_coords.end());
 
@@ -376,51 +397,42 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
             tt_metal::SetRuntimeArgs(program, q_writer_kernel_id, core, q_reader_runtime_args);
         }
 
-        if (!overlap_qk_coregrid) {
-            for (uint32_t i = 0; i < k_num_cores; ++i) {
-                uint32_t in_tile_offset_by_batch = i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512*element_size;
+    if (!overlap_qk_coregrid) {
+        for (uint32_t i = 0; i < k_num_cores; ++i) {
+            const auto& core = k_cores_vector[i];
+            std::vector<uint32_t> k_reader_runtime_args;
+            k_reader_runtime_args.reserve(3 + in_num_cores_x + in_num_cores_y);
+            k_reader_runtime_args = {q_start_addr, use_batch_offset ? batch_offset.value().buffer()->address() : 0, i};
+            k_reader_runtime_args.insert(k_reader_runtime_args.end(), noc_x_coords.begin(), noc_x_coords.end());
+            k_reader_runtime_args.insert(k_reader_runtime_args.end(), noc_y_coords.begin(), noc_y_coords.end());
 
-                const auto& core = k_cores_vector[i];
-                std::vector<uint32_t> k_reader_runtime_args;
-                k_reader_runtime_args.reserve(2 + in_num_cores_x + in_num_cores_y);
-                k_reader_runtime_args = {
-                    in_tile_offset_by_batch,
-                    q_start_addr,
-                };
-                k_reader_runtime_args.insert(k_reader_runtime_args.end(), noc_x_coords.begin(), noc_x_coords.end());
-                k_reader_runtime_args.insert(k_reader_runtime_args.end(), noc_y_coords.begin(), noc_y_coords.end());
-
-                tt_metal::SetRuntimeArgs(program, k_reader_kernel_id, core, k_reader_runtime_args);
-                tt_metal::SetRuntimeArgs(program, k_writer_kernel_id, core, k_reader_runtime_args);
-            }
+            tt_metal::SetRuntimeArgs(program, k_reader_kernel_id, core, k_reader_runtime_args);
+            tt_metal::SetRuntimeArgs(program, k_writer_kernel_id, core, k_reader_runtime_args);
         }
+    }
 
-        auto override_runtime_arguments_callback = [
-                q_reader_kernel_id,
-                q_writer_kernel_id,
-                k_reader_kernel_id,
-                k_writer_kernel_id,
-                q_num_cores,
-                k_num_cores,
-                cb_q_output,
-                cb_k_output,
-                cb_v_output,
-                q_cores_vector,
-                k_cores_vector,
-                element_size,
-                sub_tile_line_bytes,
-                overlap_qk_coregrid
-        ]
-        (
+    auto override_runtime_arguments_callback =
+        [q_reader_kernel_id,
+         q_writer_kernel_id,
+         k_reader_kernel_id,
+         k_writer_kernel_id,
+         q_num_cores,
+         k_num_cores,
+         cb_q_output,
+         cb_k_output,
+         cb_v_output,
+         q_cores_vector,
+         k_cores_vector,
+         element_size,
+         sub_tile_line_bytes,
+         overlap_qk_coregrid,
+         slice_size,
+         use_batch_offset](
             const void* operation,
             Program& program,
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<Tensor>& output_tensors) {
-            auto src_buffer = input_tensors.at(0).buffer();
-
-            uint32_t src_kv_buffer_addr = 0;
-
             auto dst_buffer_query = output_tensors.at(0).buffer();
             auto dst_buffer_key = output_tensors.at(1).buffer();
             auto dst_buffer_value = output_tensors.at(2).buffer();
@@ -433,53 +445,60 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
             uint32_t q_start_addr = q_base_addr;
 
             for (uint32_t i = 0; i < q_num_cores; ++i) {
-                uint32_t in_tile_offset_by_batch = i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512*element_size;
                 const auto& core = q_cores_vector[i];
-                auto &runtime_args = GetRuntimeArgs(program, q_reader_kernel_id, core);
-                runtime_args[0] = in_tile_offset_by_batch;
-                runtime_args[1] = q_start_addr;
+                auto& runtime_args = GetRuntimeArgs(program, q_reader_kernel_id, core);
+                runtime_args[0] = q_start_addr;
+                runtime_args[1] = use_batch_offset ? optional_input_tensors.at(0).value().buffer()->address() : 0;
+                runtime_args[2] = i;
 
-                auto &runtime_args_writer = GetRuntimeArgs(program, q_writer_kernel_id, core);
-                runtime_args_writer[0] = in_tile_offset_by_batch;
-                runtime_args_writer[1] = q_start_addr;
+                auto& runtime_args_writer = GetRuntimeArgs(program, q_writer_kernel_id, core);
+                runtime_args_writer[0] = q_start_addr;
+                runtime_args_writer[1] =
+                    use_batch_offset ? optional_input_tensors.at(0).value().buffer()->address() : 0;
+                runtime_args_writer[2] = i;
             }
 
             if (!overlap_qk_coregrid) {
                 for (uint32_t i = 0; i < k_num_cores; ++i) {
-                    uint32_t in_tile_offset_by_batch = i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512*element_size;
                     const auto& core = k_cores_vector[i];
-                    auto &runtime_args = GetRuntimeArgs(program, k_reader_kernel_id, core);
-                    runtime_args[0] = in_tile_offset_by_batch;
-                    runtime_args[1] = q_start_addr;
+                    auto& runtime_args = GetRuntimeArgs(program, k_reader_kernel_id, core);
+                    runtime_args[0] = q_start_addr;
+                    runtime_args[1] = use_batch_offset ? optional_input_tensors.at(0).value().buffer()->address() : 0;
+                    runtime_args[2] = i;
 
-                    auto &runtime_args_writer = GetRuntimeArgs(program, k_writer_kernel_id, core);
-                    runtime_args_writer[0] = in_tile_offset_by_batch;
-                    runtime_args_writer[1] = q_start_addr;
+                    auto& runtime_args_writer = GetRuntimeArgs(program, k_writer_kernel_id, core);
+                    runtime_args_writer[0] = q_start_addr;
+                    runtime_args_writer[1] =
+                        use_batch_offset ? optional_input_tensors.at(0).value().buffer()->address() : 0;
+                    runtime_args_writer[2] = i;
                 }
             }
         };
 
-        return {.program=std::move(program), .override_runtime_arguments_callback=override_runtime_arguments_callback};
+    return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 
 }  // namespace ttnn::operations::experimental::transformer
 
-operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_input_subcoregrid(
+tt::tt_metal::operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_input_subcoregrid(
     const Tensor& input_tensor,
     const uint32_t num_q_heads,
     const uint32_t num_kv_heads,
     const uint32_t head_dim,
     const bool overlap_qk_coregrid,
+    const std::optional<const Tensor>& batch_offset,
+    std::optional<const uint32_t> slice_size,
     std::vector<Tensor>& output,
     CoreCoord compute_with_storage_grid_size) {
     tt_metal::Program program = tt_metal::CreateProgram();
 
-    const auto& input_shape = input_tensor.get_padded_shape();
-
     tt_metal::IDevice* device = input_tensor.device();
+    // Create CBs for reader/writer for batch_offset
+    uint32_t batch_offset_cb_index_reader = CBIndex::c_15;
+    uint32_t batch_offset_cb_index_writer = CBIndex::c_14;
 
-    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
+    tt::DataFormat cb_data_format = tt_metal::datatype_to_dataformat_converter(input_tensor.dtype());
 
-    const uint32_t single_tile_size = tt_metal::detail::TileSize(cb_data_format);
+    const uint32_t single_tile_size = tt::tile_size(cb_data_format);
 
     const uint32_t head_tiles = head_dim / TILE_WIDTH;
     const uint32_t head_size = head_tiles * single_tile_size;
@@ -489,9 +508,38 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
     const auto q_shard_spec = output[0].shard_spec().value();
     const auto q_cores = q_shard_spec.grid;
     const auto q_num_tiles = q_shard_spec.shape[0] * q_shard_spec.shape[1] / TILE_HW;
+    const auto k_shard_spec = output[1].shard_spec().value();
+    const auto k_cores = k_shard_spec.grid;
+    const auto k_num_tiles = k_shard_spec.shape[0] * k_shard_spec.shape[1] / TILE_HW;
     const auto in_shard_spec = input_tensor.shard_spec().value();
     const auto in_cores = in_shard_spec.grid;
-    const auto in_num_tiles = in_shard_spec.shape[0] * in_shard_spec.shape[1] / TILE_HW;
+    uint32_t batch_offset_index_stick_size = 0;
+    auto qk_cores = q_cores;
+    if (!overlap_qk_coregrid) {
+        auto qk_cores_set = std::set<CoreRange>();
+        qk_cores_set.insert(q_cores.ranges().begin(), q_cores.ranges().end());
+        qk_cores_set.insert(k_cores.ranges().begin(), k_cores.ranges().end());
+        qk_cores = CoreRangeSet(qk_cores_set);
+    }
+    // if batch_offset is provided we need to allocate a buffer for it
+    if (batch_offset.has_value()) {
+        tt::DataFormat cb_batch_offset_data_format =
+            tt_metal::datatype_to_dataformat_converter(batch_offset.value().dtype());
+        uint32_t single_batch_offset_tile_size = tt::tile_size(cb_batch_offset_data_format);
+        batch_offset_index_stick_size = batch_offset.value().buffer()->aligned_page_size();
+
+        tt_metal::CircularBufferConfig cb_batch_offset_config_reader =
+            tt_metal::CircularBufferConfig(
+                single_batch_offset_tile_size, {{batch_offset_cb_index_reader, cb_batch_offset_data_format}})
+                .set_page_size(batch_offset_cb_index_reader, 1);
+        tt_metal::CreateCircularBuffer(program, qk_cores, cb_batch_offset_config_reader);
+
+        tt_metal::CircularBufferConfig cb_batch_offset_config_writer =
+            tt_metal::CircularBufferConfig(
+                single_batch_offset_tile_size, {{batch_offset_cb_index_writer, cb_batch_offset_data_format}})
+                .set_page_size(batch_offset_cb_index_writer, 1);
+        tt_metal::CreateCircularBuffer(program, qk_cores, cb_batch_offset_config_writer);
+    }
 
     uint32_t q_output_cb_index = CBIndex::c_16;
     tt_metal::CircularBufferConfig cb_q_output_config =
@@ -499,10 +547,6 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
             .set_page_size(q_output_cb_index, single_tile_size)
             .set_globally_allocated_address(*output[0].buffer());
     auto cb_q_output = tt_metal::CreateCircularBuffer(program, q_cores, cb_q_output_config);
-
-    const auto k_shard_spec = output[1].shard_spec().value();
-    const auto k_cores = k_shard_spec.grid;
-    const auto k_num_tiles = k_shard_spec.shape[0] * k_shard_spec.shape[1] / TILE_HW;
 
     uint32_t k_output_cb_index = CBIndex::c_17;
     tt_metal::CircularBufferConfig cb_k_output_config =
@@ -570,9 +614,14 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
         head_tiles,
         1,  // read the first phase
         in_num_cores,
-        process_qv,  // read and write q and v heads
-        process_k    // read and write k heads
-    };
+        process_qv,                        // read and write q and v heads
+        process_k,                         // read and write k heads
+        batch_offset.has_value() ? 1 : 0,  // use_batch_offset
+        batch_offset_index_stick_size,
+        batch_offset_cb_index_reader};
+
+    tt::tt_metal::TensorAccessorArgs(batch_offset.has_value() ? batch_offset.value().buffer() : nullptr)
+        .append_to(q_reader_compile_time_args);
 
     auto q_reader_kernel_id = tt_metal::CreateKernel(
         program,
@@ -582,6 +631,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
         tt_metal::ReaderDataMovementConfig(q_reader_compile_time_args));
     std::vector<uint32_t> q_writer_compile_time_args = q_reader_compile_time_args;
     q_writer_compile_time_args[9] = 2;  // read the second phase
+    q_writer_compile_time_args[15] = batch_offset_cb_index_writer;
     auto q_writer_kernel_id = tt_metal::CreateKernel(
         program,
         "ttnn/cpp/ttnn/operations/experimental/transformer/nlp_create_qkv_heads_decode/device/kernels/"
@@ -589,7 +639,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
         q_cores,
         tt_metal::WriterDataMovementConfig(q_writer_compile_time_args));
 
-    KernelHandle k_reader_kernel_id = 0, k_writer_kernel_id = 0;
+    tt::tt_metal::KernelHandle k_reader_kernel_id = 0, k_writer_kernel_id = 0;
     if (!overlap_qk_coregrid) {
         // Switch process_qv and process_k for k kernels
         process_qv = 0;
@@ -606,6 +656,7 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
 
         std::vector<uint32_t> k_writer_compile_time_args = k_reader_compile_time_args;
         k_writer_compile_time_args[9] = 2;  // read the second phase
+        k_writer_compile_time_args[15] = batch_offset_cb_index_writer;
         k_writer_kernel_id = tt_metal::CreateKernel(
             program,
             "ttnn/cpp/ttnn/operations/experimental/transformer/nlp_create_qkv_heads_decode/device/kernels/"
@@ -615,18 +666,13 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
     }
 
     uint32_t q_start_addr = q_base_addr;
+    bool use_batch_offset = batch_offset.has_value();
 
     for (uint32_t i = 0; i < q_num_cores; ++i) {
-        uint32_t in_tile_offset_by_batch =
-            i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512 * element_size;
-
         const auto& core = q_cores_vector[i];
         std::vector<uint32_t> q_reader_runtime_args;
-        q_reader_runtime_args.reserve(2 + 2 * in_num_cores);
-        q_reader_runtime_args = {
-            in_tile_offset_by_batch,
-            q_start_addr,
-        };
+        q_reader_runtime_args.reserve(3 + (2 * in_num_cores));
+        q_reader_runtime_args = {q_start_addr, use_batch_offset ? batch_offset.value().buffer()->address() : 0, i};
         q_reader_runtime_args.insert(q_reader_runtime_args.end(), noc_x_coords.begin(), noc_x_coords.end());
         q_reader_runtime_args.insert(q_reader_runtime_args.end(), noc_y_coords.begin(), noc_y_coords.end());
         tt_metal::SetRuntimeArgs(program, q_reader_kernel_id, core, q_reader_runtime_args);
@@ -635,16 +681,10 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
 
     if (!overlap_qk_coregrid) {
         for (uint32_t i = 0; i < k_num_cores; ++i) {
-            uint32_t in_tile_offset_by_batch =
-                i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512 * element_size;
-
             const auto& core = k_cores_vector[i];
             std::vector<uint32_t> k_reader_runtime_args;
-            k_reader_runtime_args.reserve(2 + 2 * in_num_cores);
-            k_reader_runtime_args = {
-                in_tile_offset_by_batch,
-                q_start_addr,
-            };
+            k_reader_runtime_args.reserve(3 + (2 * in_num_cores));
+            k_reader_runtime_args = {q_start_addr, use_batch_offset ? batch_offset.value().buffer()->address() : 0, i};
             k_reader_runtime_args.insert(k_reader_runtime_args.end(), noc_x_coords.begin(), noc_x_coords.end());
             k_reader_runtime_args.insert(k_reader_runtime_args.end(), noc_y_coords.begin(), noc_y_coords.end());
             tt_metal::SetRuntimeArgs(program, k_reader_kernel_id, core, k_reader_runtime_args);
@@ -666,16 +706,14 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
          k_cores_vector,
          element_size,
          sub_tile_line_bytes,
-         overlap_qk_coregrid](
+         overlap_qk_coregrid,
+         slice_size,
+         use_batch_offset](
             const void* operation,
             Program& program,
             const std::vector<Tensor>& input_tensors,
             const std::vector<std::optional<const Tensor>>& optional_input_tensors,
             const std::vector<Tensor>& output_tensors) {
-            auto src_buffer = input_tensors.at(0).buffer();
-
-            uint32_t src_kv_buffer_addr = 0;
-
             auto dst_buffer_query = output_tensors.at(0).buffer();
             auto dst_buffer_key = output_tensors.at(1).buffer();
             auto dst_buffer_value = output_tensors.at(2).buffer();
@@ -691,16 +729,17 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
             auto& q_writer_args_by_core = GetRuntimeArgs(program, q_writer_kernel_id);
 
             for (uint32_t i = 0; i < q_num_cores; ++i) {
-                uint32_t in_tile_offset_by_batch =
-                    i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512 * element_size;
                 const auto& core = q_cores_vector[i];
                 auto& runtime_args = q_reader_args_by_core[core.x][core.y];
-                runtime_args[0] = in_tile_offset_by_batch;
-                runtime_args[1] = q_start_addr;
+                runtime_args[0] = q_start_addr;
+                runtime_args[1] = use_batch_offset ? optional_input_tensors.at(0).value().buffer()->address() : 0;
+                runtime_args[2] = i;
 
                 auto& runtime_args_writer = q_writer_args_by_core[core.x][core.y];
-                runtime_args_writer[0] = in_tile_offset_by_batch;
-                runtime_args_writer[1] = q_start_addr;
+                runtime_args_writer[0] = q_start_addr;
+                runtime_args_writer[1] =
+                    use_batch_offset ? optional_input_tensors.at(0).value().buffer()->address() : 0;
+                runtime_args_writer[2] = i;
             }
 
             if (!overlap_qk_coregrid) {
@@ -708,16 +747,17 @@ operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_decode_sharded_i
                 auto& k_writer_args_by_core = GetRuntimeArgs(program, k_writer_kernel_id);
 
                 for (uint32_t i = 0; i < k_num_cores; ++i) {
-                    uint32_t in_tile_offset_by_batch =
-                        i < 16 ? i * sub_tile_line_bytes : (i - 16) * sub_tile_line_bytes + 512 * element_size;
                     const auto& core = k_cores_vector[i];
                     auto& runtime_args = k_reader_args_by_core[core.x][core.y];
-                    runtime_args[0] = in_tile_offset_by_batch;
-                    runtime_args[1] = q_start_addr;
+                    runtime_args[0] = q_start_addr;
+                    runtime_args[1] = use_batch_offset ? optional_input_tensors.at(0).value().buffer()->address() : 0;
+                    runtime_args[2] = i;
 
                     auto& runtime_args_writer = k_writer_args_by_core[core.x][core.y];
-                    runtime_args_writer[0] = in_tile_offset_by_batch;
-                    runtime_args_writer[1] = q_start_addr;
+                    runtime_args_writer[0] = q_start_addr;
+                    runtime_args_writer[1] =
+                        use_batch_offset ? optional_input_tensors.at(0).value().buffer()->address() : 0;
+                    runtime_args_writer[2] = i;
                 }
             }
         };

@@ -2,13 +2,15 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <regex>
+#include <tt_stl/assert.hpp>
+#include "jit_build_utils.hpp"
+#include <cstddef>
+#include <fstream>
 #include <map>
 #include <mutex>
-#include <fstream>
-#include <utils.hpp>
+#include <string>
 
-#include <assert.hpp>
+#include <tt-logger/tt-logger.hpp>
 
 using namespace std;
 
@@ -41,6 +43,7 @@ void log_kernel_defines_and_args(
     } else {
         if (kernel_defines_and_args_[out_dir] != defines_as_csv) {
             log_error(
+                tt::LogBuildKernels,
                 "Multiple distinct kernel arguments found for: {}. Existing:\n{}, New:     \n{}",
                 out_dir,
                 kernel_defines_and_args_[full_kernel_name],
@@ -51,7 +54,7 @@ void log_kernel_defines_and_args(
 
 void dump_kernel_defines_and_args(const string& out_kernel_root_path) {
     // Make sure the directory exists
-    tt::utils::create_file(out_kernel_root_path);
+    tt::jit_build::utils::create_file(out_kernel_root_path);
 
     string kernel_args_csv = out_kernel_root_path + "kernel_args.csv";
 

@@ -14,14 +14,13 @@ from tests.sweep_framework.sweep_utils.utils import gen_shapes
 from tests.tt_eager.python_api_testing.sweep_tests.generation_funcs import gen_func_with_cast_tt
 
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 # Override the default timeout in seconds for hang detection.
 TIMEOUT = 360
 random.seed(0)
 
 
-@lru_cache(maxsize=5000)
 def get_factors(i, s):
     factors = []
     for j in range(s, i + 1, s):
@@ -30,7 +29,7 @@ def get_factors(i, s):
     return factors
 
 
-# @lru_cache(maxsize=5000)
+@lru_cache(maxsize=10000)
 def gen_reshape_shape(input_shape, step=1):
     volume = 1
     for x in input_shape:
@@ -63,7 +62,7 @@ def gen_reshape_shape(input_shape, step=1):
 
 # Does not have memory_config parameter
 parameters = {
-    "xfail": {
+    "nightly": {
         "input_shape": gen_shapes([1, 1, 1, 1], [6, 6, 256, 256], [1, 1, 1, 1], 16)
         + gen_shapes([1, 1, 1], [6, 256, 256], [1, 1, 1], 16)
         + gen_shapes([1, 1], [256, 256], [1, 1], 16),
@@ -108,7 +107,7 @@ def run(
         partial(torch_random, low=-100, high=100, dtype=torch.float32), input_a_dtype
     )(input_shape)
 
-    rehape_shape = gen_reshape_shape(input_shape)
+    rehape_shape = gen_reshape_shape(tuple(input_shape))
     num_tries = 50
     i = 0
 

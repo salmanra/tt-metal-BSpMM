@@ -2,13 +2,13 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 
 import ttnn
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     tt_to_torch_tensor,
     torch_to_tt_tensor_rm,
 )
@@ -53,7 +53,7 @@ class TtSwinEmbeddings(nn.Module):
     ) -> Tuple[ttnn.Tensor]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
-        _, batch_size, seq_len, _ = embeddings.shape.with_tile_padding()
+        _, batch_size, seq_len, _ = embeddings.padded_shape
 
         if bool_masked_pos is not None:
             mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
@@ -66,7 +66,7 @@ class TtSwinEmbeddings(nn.Module):
 
             mask_tokens = ttnn.mul(mask_tokens, mask)
 
-            unit_tensor = self.const_tensor(mask.shape.with_tile_padding(), 1)
+            unit_tensor = self.const_tensor(mask.padded_shape, 1)
             mask = ttnn.sub(unit_tensor, mask)
 
             embeddings = ttnn.mul(embeddings, mask)

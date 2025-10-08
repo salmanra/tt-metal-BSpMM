@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <optional>
+#include "ttnn/common/queue_id.hpp"
 #include "ttnn/core.hpp"
 #include "ttnn/decorators.hpp"
 #include "ttnn/operations/core/to_dtype/to_dtype_op.hpp"
@@ -13,7 +15,7 @@
 #include "ttnn/tensor/tensor_utils.hpp"
 #include "ttnn/tensor/types.hpp"
 #include "ttnn/types.hpp"
-#include "cpp/ttnn/operations/data_movement/reshape_view/reshape.hpp"
+#include "ttnn/operations/data_movement/reshape_view/reshape.hpp"
 
 namespace ttnn {
 
@@ -22,64 +24,20 @@ namespace core {
 
 ttnn::Tensor unsqueeze_to_4D(const ttnn::Tensor& tensor);
 
-ttnn::Tensor squeeze_from_4D(const ttnn::Tensor& tensor, const int rank);
-
-ttnn::Tensor to_device(
-    const ttnn::Tensor& tensor,
-    IDevice* device,
-    const std::optional<MemoryConfig>& memory_config,
-    uint8_t cq_id = ttnn::DefaultQueueId);
+ttnn::Tensor squeeze_from_4D(const ttnn::Tensor& tensor, int rank);
 
 ttnn::Tensor to_device(
     const ttnn::Tensor& tensor,
     MeshDevice* mesh_device,
     const std::optional<MemoryConfig>& memory_config,
-    uint8_t cq_id = ttnn::DefaultQueueId);
+    std::optional<QueueId> queue_id = std::nullopt);
 
-ttnn::Tensor allocate_tensor_on_device(
-    const SimpleShape& shape,
-    DataType data_type,
-    Layout layout,
-    IDevice* device,
-    const std::optional<MemoryConfig>& memory_config);
-
-ttnn::Tensor allocate_tensor_on_device(
-    const SimpleShape& shape,
-    DataType data_type,
-    Layout layout,
-    MeshDevice* mesh_device,
-    const std::optional<MemoryConfig>& memory_config);
-
-ttnn::Tensor allocate_tensor_on_device(const ttnn::TensorSpec& spec, IDevice* device);
-ttnn::Tensor allocate_tensor_on_device(const ttnn::TensorSpec& spec, MeshDevice* device);
-
-void copy_host_to_device_tensor(
-    const ttnn::Tensor& host_tensor, ttnn::Tensor device_tensor, uint8_t cq_id = ttnn::DefaultQueueId);
-
-ttnn::Tensor from_device(const ttnn::Tensor& tensor, bool blocking = true, uint8_t cq_id = ttnn::DefaultQueueId);
+ttnn::Tensor from_device(
+    const ttnn::Tensor& tensor, bool blocking = true, std::optional<QueueId> queue_id = std::nullopt);
 
 void deallocate(Tensor& tensor, bool force = true);
 
 Tensor reallocate(const Tensor& input_tensor, const std::optional<MemoryConfig>& memory_config);
-
-// Trace APIs - Single Device
-uint32_t begin_trace_capture(IDevice* device, const uint8_t cq_id);
-
-void end_trace_capture(IDevice* device, const uint32_t tid, const uint8_t cq_id);
-
-void execute_trace(IDevice* device, const uint32_t tid, const uint8_t cq_id, bool blocking);
-
-void release_trace(IDevice* device, const uint32_t tid);
-
-// Trace APIs - Multi Device
-uint32_t begin_trace_capture(MeshDevice* device, const uint8_t cq_id = ttnn::DefaultQueueId);
-
-void end_trace_capture(MeshDevice* device, const uint32_t tid, const uint8_t cq_id = ttnn::DefaultQueueId);
-
-void execute_trace(
-    MeshDevice* device, const uint32_t tid, const uint8_t cq_id = ttnn::DefaultQueueId, bool blocking = true);
-
-void release_trace(MeshDevice* device, const uint32_t tid);
 
 }  // namespace core
 }  // namespace operations
@@ -91,11 +49,9 @@ using operations::core::squeeze_from_4D;
 using operations::core::to_device;
 using operations::core::unsqueeze_to_4D;
 
-constexpr auto to_dtype =
-    ttnn::register_operation_with_auto_launch_op<"ttnn::to_dtype", ttnn::operations::core::ToDtype>();
+constexpr auto to_dtype = ttnn::register_operation<"ttnn::to_dtype", ttnn::operations::core::ToDtype>();
 constexpr auto to_memory_config =
-    ttnn::register_operation_with_auto_launch_op<"ttnn::to_memory_config", ttnn::operations::core::ToMemoryConfig>();
-constexpr auto to_layout =
-    ttnn::register_operation_with_auto_launch_op<"ttnn::to_layout", ttnn::operations::core::ToLayout>();
+    ttnn::register_operation<"ttnn::to_memory_config", ttnn::operations::core::ToMemoryConfig>();
+constexpr auto to_layout = ttnn::register_operation<"ttnn::to_layout", ttnn::operations::core::ToLayout>();
 
 }  // namespace ttnn

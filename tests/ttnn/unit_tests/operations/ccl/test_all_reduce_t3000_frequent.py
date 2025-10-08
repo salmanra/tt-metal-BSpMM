@@ -8,7 +8,7 @@ from loguru import logger
 import ttnn
 import math
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_pcc
-from models.utility_functions import skip_for_grayskull
+from tests.tests_common.skip_reasons import LEGACY_CCL_SKIP
 
 TILE_HEIGHT = 32
 TILE_WIDTH = 32
@@ -38,37 +38,38 @@ def run_with_trace(
     n_buffer,
     num_iters,
 ):
+    pytest.skip(LEGACY_CCL_SKIP)
+    assert False, "Legacy ccl call removed until new implementation is done"
+
     # Compile Run
     logger.info("Compiling model")
-    output_tensor_mesh = ttnn.experimental.all_reduce(
-        input_tensor_mesh,
-        math_op=math_op,
-        num_links=num_links,
-        memory_config=output_mem_config,
-    )
-    for device_id in mesh_device.get_device_ids():
-        ttnn.synchronize_device(mesh_device.get_device(device_id))
+    # output_tensor_mesh = ttnn.experimental.all_reduce(
+    #     input_tensor_mesh,
+    #     math_op=math_op,
+    #     num_links=num_links,
+    #     memory_config=output_mem_config,
+    # )
+    ttnn.synchronize_device(mesh_device)
 
     # Capture trace
     logger.info("Capturing trace")
     trace_id = ttnn.begin_trace_capture(mesh_device, cq_id=0)
     for i in range(num_iters):
-        output_tensor_mesh = ttnn.experimental.all_reduce(
-            input_tensor_mesh,
-            math_op=math_op,
-            num_links=num_links,
-            memory_config=output_mem_config,
-        )
+        pass
+        # output_tensor_mesh = ttnn.experimental.all_reduce(
+        #     input_tensor_mesh,
+        #     math_op=math_op,
+        #     num_links=num_links,
+        #     memory_config=output_mem_config,
+        # )
     ttnn.end_trace_capture(mesh_device, trace_id, cq_id=0)
-    for device_id in mesh_device.get_device_ids():
-        ttnn.synchronize_device(mesh_device.get_device(device_id))
+    ttnn.synchronize_device(mesh_device)
 
     # Run the op
     logger.info("Starting Trace perf test...")
     ttnn.execute_trace(mesh_device, trace_id, blocking=False)
     ttnn.release_trace(mesh_device, trace_id)
-    for device_id in mesh_device.get_device_ids():
-        ttnn.synchronize_device(mesh_device.get_device(device_id))
+    ttnn.synchronize_device(mesh_device)
 
     return output_tensor_mesh
 
@@ -82,9 +83,7 @@ def run_all_reduce_test(
     input_dtype,
     layout,
     mem_config,
-    use_program_cache,
     function_level_defaults,
-    enable_async=True,
     num_iters=1,
     topology=ttnn.Topology.Ring,
 ):
@@ -101,14 +100,10 @@ def run_all_reduce_test(
     if is_known_failure:
         pytest.skip(f"Skipping unsupported case {message}.")
 
-    mesh_device.enable_async(enable_async)
-    if enable_async:
-        logger.info(f"Using Async Mode for All Reduce Op Dispatch")
-
     logger.info(f"Per chip output shape: {per_chip_output_shape}, devices: {num_devices}")
     # Generate input tensors
 
-    tt_input_tensors = []
+    canonical_input_tensors = []
     input_tensors = []
 
     numel = math.prod(per_chip_output_shape)
@@ -116,29 +111,38 @@ def run_all_reduce_test(
         input_tensors[-1] = torch.arange(numel).reshape(per_chip_output_shape).bfloat16()
     for i in range(num_devices):
         input_tensor = torch.rand(per_chip_output_shape).bfloat16()
-        t = ttnn.from_torch(input_tensor, input_dtype, layout=layout)
-        t = t.to(mesh_device.get_device(mesh_device.get_device_ids()[i]), mem_config)
-        tt_input_tensors.append(t)
+        canonical_input_tensors.append(input_tensor)
         input_tensor = input_tensor.view(1, -1, input_tensor.shape[2], input_tensor.shape[3])
         input_tensors.append(input_tensor)
 
     unchunked_input_tensor = torch.cat(input_tensors)
 
-    assert len(tt_input_tensors) == num_devices
+    assert len(canonical_input_tensors) == num_devices
+    input_tensor_mesh = ttnn.from_torch(
+        torch.cat(canonical_input_tensors),
+        dtype=input_dtype,
+        layout=layout,
+        device=mesh_device,
+        memory_config=mem_config,
+        mesh_mapper=ttnn.create_mesh_mapper(
+            mesh_device,
+            ttnn.MeshMapperConfig([ttnn.PlacementReplicate(), ttnn.PlacementShard(0)], ttnn.MeshShape(1, num_devices)),
+        ),
+    )
 
-    input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
+    pytest.skip(LEGACY_CCL_SKIP)
+    assert False, "Legacy ccl call removed until new implementation is done"
+
     # Run the op
     for i in range(num_iters):
-        output_tensor_mesh = ttnn.experimental.all_reduce(
-            input_tensor_mesh,
-            math_op=math_op,
-            num_links=num_links,
-            memory_config=mem_config,
-            topology=topology,
-        )
-
-        for device_id in mesh_device.get_device_ids():
-            ttnn.synchronize_device(mesh_device.get_device(device_id))
+        # output_tensor_mesh = ttnn.experimental.all_reduce(
+        #     input_tensor_mesh,
+        #     math_op=math_op,
+        #     num_links=num_links,
+        #     memory_config=mem_config,
+        #     topology=topology,
+        # )
+        ttnn.synchronize_device(mesh_device)
         logger.info(f"Done iteration {i}")
 
     tt_out_tensors = ttnn.get_device_tensors(output_tensor_mesh)
@@ -153,7 +157,7 @@ def run_all_reduce_test(
         eq, output = comp_pcc(tt_output_tensor, golden_canonical_out_tensor)
         mismatch = mismatch or not eq
         if not eq:
-            logger.error(f"output mismatch for tensor {i}. Mesh device ID: {mesh_device.get_devices()[i].id()}")
+            logger.error(f"output mismatch for tensor {i}. Mesh device ID: {mesh_device.get_device_ids()[i]}")
             if debug:
                 for w in range(tt_output_tensor.shape[0]):
                     for z in range(tt_output_tensor.shape[1]):
@@ -169,7 +173,6 @@ def run_all_reduce_test(
     assert not mismatch, f"{i} FAILED: {output}"
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
@@ -215,7 +218,6 @@ def run_all_reduce_test(
     ],
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_ring_all_reduce_post_commit(
     t3k_mesh_device,
     num_devices,
@@ -225,9 +227,7 @@ def test_ring_all_reduce_post_commit(
     input_dtype,
     layout,
     mem_config,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=2,
 ):
     run_all_reduce_test(
@@ -239,14 +239,11 @@ def test_ring_all_reduce_post_commit(
         input_dtype,
         layout,
         mem_config,
-        use_program_cache,
         function_level_defaults,
         num_iters=num_iters,
-        enable_async=enable_async,
     )
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
@@ -280,7 +277,6 @@ def test_ring_all_reduce_post_commit(
     ],
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_ring_all_reduce_post_commit_2chip(
     pcie_mesh_device,
     num_devices,
@@ -290,9 +286,7 @@ def test_ring_all_reduce_post_commit_2chip(
     input_dtype,
     layout,
     mem_config,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=2,
 ):
     run_all_reduce_test(
@@ -304,9 +298,7 @@ def test_ring_all_reduce_post_commit_2chip(
         input_dtype,
         layout,
         mem_config,
-        use_program_cache,
         function_level_defaults,
         num_iters=num_iters,
-        enable_async=enable_async,
         topology=ttnn.Topology.Linear,
     )

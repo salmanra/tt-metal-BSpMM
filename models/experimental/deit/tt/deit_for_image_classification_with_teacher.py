@@ -2,18 +2,17 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 
 from torch import nn
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 from transformers import DeiTForImageClassificationWithTeacher
 
 import ttnn
 
 from models.experimental.deit.tt.deit_config import DeiTConfig
 from models.experimental.deit.tt.deit_model import TtDeiTModel
-from models.helper_funcs import Linear as TtLinear
-from models.utility_functions import (
+from models.common.helper_funcs import Linear as TtLinear
+from models.common.utility_functions import (
     torch_to_tt_tensor_rm,
     tt_to_torch_tensor,
 )
@@ -75,7 +74,7 @@ class TtDeiTForImageClassificationWithTeacher(nn.Module):
 
         # during inference, return the average of both classifier predictions
         logits = ttnn.add(cls_logits, distillation_logits)
-        half = ttnn.full(logits.shape.with_tile_padding(), 0.5)
+        half = ttnn.full(logits.padded_shape, 0.5)
         logits = ttnn.mul(logits, half)
 
         # if not return_dict:

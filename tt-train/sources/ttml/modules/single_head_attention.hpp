@@ -1,6 +1,8 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
+
+#pragma once
 
 #include "autograd/tensor.hpp"
 #include "dropout_module.hpp"
@@ -9,7 +11,7 @@
 
 namespace ttml::modules {
 
-class SingleHeadAttention : public ttml::autograd::ModuleBase {
+class SingleHeadAttention : public ttml::modules::ModuleBase {
     std::shared_ptr<LinearLayer> q_linear;
     std::shared_ptr<LinearLayer> k_linear;
     std::shared_ptr<LinearLayer> v_linear;
@@ -19,7 +21,8 @@ class SingleHeadAttention : public ttml::autograd::ModuleBase {
 public:
     explicit SingleHeadAttention(uint32_t embedding_dim, float dropout_prob);
 
-    autograd::TensorPtr operator()(const autograd::TensorPtr& x, const autograd::TensorPtr& mask);
+    [[nodiscard]] autograd::TensorPtr operator()(
+        const autograd::TensorPtr& x, const autograd::TensorPtr& mask) override;
 };
 
 }  // namespace ttml::modules

@@ -12,13 +12,12 @@ from tests.sweep_framework.sweep_utils.utils import gen_shapes
 from tests.tt_eager.python_api_testing.sweep_tests.generation_funcs import gen_func_with_cast_tt
 
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 # Override the default timeout in seconds for hang detection.
 # TIMEOUT = 30
 
 random.seed(0)
-
 
 # Parameters provided to the test vector generator are defined here.
 # They are defined as dict-type suites that contain the arguments to the run function as keys, and lists of possible inputs as values.
@@ -108,7 +107,7 @@ parameters = {
             {"input_shape": [1, 19200, 256], "min": -4.000000e00, "max": 4.000000e00},
             {"input_shape": [1, 19200, 256], "min": -1.000000e00, "max": 1.000000e00},
         ],
-        "input_a_dtype": [ttnn.float32],  # [ttnn.int32, ttnn.float32],
+        "input_a_dtype": [ttnn.float32, ttnn.int32],
         "input_a_layout": [ttnn.TILE_LAYOUT],
         "input_a_memory_config": [ttnn.DRAM_MEMORY_CONFIG],
         "output_memory_config": [ttnn.DRAM_MEMORY_CONFIG],

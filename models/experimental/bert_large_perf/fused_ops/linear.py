@@ -2,8 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-from typing import List, Union, Optional
-from ttnn import matmul
+from typing import Optional
 import ttnn
 
 
@@ -19,7 +18,7 @@ def Linear(
 
     ``weight`` must be the weight as a tilized list of values.
     """
-    assert weight.shape.with_tile_padding() == [1, 1, out_features, in_features]
+    assert weight.padded_shape == [1, 1, out_features, in_features]
     # weight = ttnn.Tensor(
     #     weight,
     #     [1, 1, out_features, in_features],
@@ -31,7 +30,7 @@ def Linear(
     if bias is None:
         bias = None
     else:
-        assert bias.shape.with_tile_padding() == [1, 1, 32, out_features]
+        assert bias.padded_shape == [1, 1, 32, out_features]
         # bias = ttnn.Tensor(
         #     bias,
         #     [1, 1, 32, out_features],

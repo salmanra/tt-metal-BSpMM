@@ -12,18 +12,10 @@ void kernel_main() {
     uint32_t start_id = get_arg_val<uint32_t>(3);
 
     constexpr uint32_t cb_id_out0 = get_compile_time_arg_val(0);
+    constexpr uint32_t page_size = get_compile_time_arg_val(1);
+    constexpr auto dst0_args = TensorAccessorArgs<2>();
 
-    constexpr bool dst0_is_dram = get_compile_time_arg_val(1) == 1;
-#define dst_stick_size_is_pow2 get_compile_time_arg_val(2) == 1
-#if (dst_stick_size_is_pow2)
-    constexpr uint32_t dst_log_base_2_of_page_size = get_compile_time_arg_val(3);
-    const InterleavedPow2AddrGen<dst0_is_dram> s0 = {
-        .bank_base_address = dst_addr,
-        .log_base_2_of_page_size = dst_log_base_2_of_page_size  // TODO(AP): refactor
-    };
-#else
-    const InterleavedAddrGen<dst0_is_dram> s0 = {.bank_base_address = dst_addr, .page_size = stick_size};
-#endif
+    const auto s0 = TensorAccessor(dst0_args, dst_addr, page_size);
 
 #ifdef BACKWARDS
     uint32_t end_id = start_id - num_sticks;

@@ -34,8 +34,8 @@ struct MorehNllLossUnreducedBackwardDeviceOperation {
 
     struct Factory {
         struct shared_variables_t {
-            KernelHandle unary_reader_kernel_id;
-            KernelHandle unary_writer_kernel_id;
+            tt::tt_metal::KernelHandle unary_reader_kernel_id;
+            tt::tt_metal::KernelHandle unary_writer_kernel_id;
             std::size_t num_cores;
             std::size_t num_cores_y;
         };
@@ -72,7 +72,7 @@ struct MorehNllLossUnreducedBackwardDeviceOperation {
         const Tensor& output_grad_tensor,
         const std::optional<Tensor>& weight_tensor,
         const std::optional<Tensor>& input_grad_tensor,
-        const int32_t ignore_index,
+        int32_t ignore_index,
         const std::optional<ttnn::MemoryConfig>& memory_config,
         std::optional<const ttnn::DeviceComputeKernelConfig> compute_kernel_config);
 };

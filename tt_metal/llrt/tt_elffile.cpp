@@ -4,21 +4,20 @@
 
 #include "tt_elffile.hpp"
 
-#include <algorithm>
-#include <array>
-
-#include <assert.hpp>
-// C++
-#include <map>
-// C
-#include <errno.h>
-// OS
+#include <tt_stl/assert.hpp>
 #include <elf.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <algorithm>
+#include <cstring>
+#include <iterator>
+#include <map>
+
+#include <tt-logger/tt-logger.hpp>
 
 // Verify some knowledge of, and compatibilty with, RiscV
 #ifndef EM_RISCV
@@ -57,17 +56,15 @@ class ElfFile::Impl {
 private:
     std::span<Elf32_Phdr> phdrs_;
     std::span<Elf32_Shdr> shdrs_;
-    std::string const& path_;
+    const std::string path_;
     ElfFile& owner_;
 
-private:
     class Weakener;
 
 public:
-    Impl(ElfFile& owner, std::string const& path) : owner_(owner), path_(path) {}
+    Impl(ElfFile& owner, std::string_view path) : owner_(owner), path_(std::string(path)) {}
     ~Impl() = default;
 
-public:
     void LoadImage();
     void WeakenDataSymbols(std::span<std::string_view const> strong_names);
     void XIPify();
@@ -133,7 +130,6 @@ private:
         return symbol.st_shndx < GetShdrs().size() && GetSegmentIx(GetShdr(symbol.st_shndx)) > 0;
     }
 
-private:
     template <typename T = std::byte>
     [[nodiscard]] static T* ByteOffset(std::byte* base, size_t offset = 0) {
         return reinterpret_cast<T*>(base + offset);
@@ -163,9 +159,9 @@ void ElfFile::ReleaseImpl() {
     pimpl_ = nullptr;
 }
 
-void ElfFile::ReadImage(std::string const& path) {
+void ElfFile::ReadImage(const std::string& path) {
     int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
-    struct stat st;
+    struct stat st{};
     void* buffer = MAP_FAILED;
     if (fd >= 0 && fstat(fd, &st) >= 0) {
         buffer = mmap(nullptr, st.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
@@ -322,6 +318,48 @@ void ElfFile::Impl::LoadImage() {
                 section.sh_addr,
                 section.sh_size,
                 section.sh_offset);
+        }
+        // If the name begins with .empty. it should be empty.  We can
+        // generate a better error here than the linker can -- and one
+        // has the binary to examine.
+        if (section.sh_flags & SHF_ALLOC && section.sh_size != 0) {
+            auto* name = GetName(section);
+            constexpr auto* prefix = ".empty.";
+            if (std::strncmp(name, prefix, std::strlen(prefix)) == 0) {
+                TT_THROW("{}: {} section has contents (namespace-scope constructor present?)", path_, name);
+            }
+        }
+        if (!(section.sh_flags & SHF_ALLOC) && section.sh_type == SHT_PROGBITS &&
+             std::strcmp(GetName(section), ".phdrs") == 0) {
+            // Specifies phdr size limits
+            auto bytes = GetContents(section);
+            auto words = std::span(reinterpret_cast<uint32_t const *>(bytes.data()), bytes.size() / sizeof(uint32_t));
+            for (unsigned ix = 0; ix != words.size(); ix++) {
+                if (ix >= GetSegments().size())
+                    continue;
+                uint32_t limit = words[ix];
+                auto const &seg = GetSegments()[ix];
+                if (seg.membytes > limit) {
+                    TT_THROW("{}: phdr[{}] [{},+{}) overflows limit of {} bytes, {}",
+                             path_, ix, seg.address, seg.membytes, limit,
+                             ix == 0 ? "reduce the code size" :
+                             ix == 1 ? "reduce the number of statically allocated variables (e.g, globals)" :
+                             "examine executable for segment details"
+                        );
+                }
+            }
+        }
+        if (std::strcmp(GetName(section), ".data") == 0) {
+            // Verify this is at the start of segment 1 -- we had a
+            // linker script bug at one point.
+            bool in_range = GetSegments().size() >= 2;
+            if (!in_range || section.sh_addr != GetSegments()[1].address) {
+                TT_THROW("{}: .data section at [{},+{}) not at start of data segment at [{},+{})",
+                         path_,
+                         section.sh_addr, section.sh_size,
+                         in_range ? GetSegments()[1].address : 0,
+                         in_range ? GetSegments()[1].membytes : 0);
+            }
         }
     }
     if (haveStack) {
@@ -506,7 +544,9 @@ void ElfFile::Impl::XIPify() {
         Elf32_Rela const* sub_reloc = nullptr;  // Active sub reloc.
         for (auto ix = relocs.size(); ix--;) {
             auto& reloc = relocs[ix];
-            if (reloc.r_offset & 3 || reloc.r_offset - section.sh_addr >= section.sh_size) {
+            // We can get a RISCV_NONE right at the end (!)
+            if (reloc.r_offset & 3 ||
+                reloc.r_offset - section.sh_addr >= section.sh_size + int(ELF32_R_TYPE(reloc.r_info) == R_RISCV_NONE)) {
                 TT_THROW(
                     "{}: relocation @ {} is {} section {}",
                     path_,
@@ -520,14 +560,17 @@ void ElfFile::Impl::XIPify() {
             auto const* symbol = &symbols[sym_ix];
             bool is_to_text = IsTextSymbol(*symbol);
 
-            // Check add/sub relocs are paired and do not cross text/non-text boundary.
-            if (bool(sub_reloc) != (type == R_RISCV_ADD32) || (sub_reloc && sub_reloc->r_offset != reloc.r_offset)) {
-            unpaired_sub:
+            auto throw_unpaired = [&]() {
                 TT_THROW(
                     "{}: unpaired {} reloc at {}",
                     path_,
                     sub_reloc ? "sub32" : "add32",
                     (sub_reloc ? sub_reloc : &reloc)->r_offset);
+            };
+
+            // Check add/sub relocs are paired and do not cross text/non-text boundary.
+            if (bool(sub_reloc) != (type == R_RISCV_ADD32) || (sub_reloc && sub_reloc->r_offset != reloc.r_offset)) {
+                throw_unpaired();
             }
             if (type == R_RISCV_ADD32) {
                 auto const* sub_symbol = &symbols[ELF32_R_SYM(sub_reloc->r_info)];
@@ -541,11 +584,12 @@ void ElfFile::Impl::XIPify() {
             if (type == R_RISCV_SUB32) {
                 sub_reloc = &reloc;
                 if (!ix) {
-                    goto unpaired_sub;
+                    throw_unpaired();
                 }
             }
 
             unsigned kind = PCREL;
+            // NOLINTBEGIN(bugprone-switch-missing-default-case)
             switch (type) {
                 case R_RISCV_LO12_I:
                 case R_RISCV_LO12_S: kind = ABS; [[fallthrough]];
@@ -594,20 +638,21 @@ void ElfFile::Impl::XIPify() {
                 } break;
 
                 case R_RISCV_JAL:
-                    if (is_from_text != is_to_text) {
-                        TT_THROW("{}: segment-crossing R_RISCV_JAL relocation found at {}", path_, reloc.r_offset);
-                    }
-                    break;
-
                 case R_RISCV_CALL:
                 case R_RISCV_CALL_PLT:
-                    TT_THROW("{}: R_RISCV_CALL_PLT relocation found at {}", path_, reloc.r_offset);
+                    if (is_from_text != is_to_text) {
+                        TT_THROW(
+                            "{}: segment-crossing R_RISCV_(JAL|CALL|CALL_PLT) relocation found at {}",
+                            path_,
+                            reloc.r_offset);
+                    }
                     break;
 
                 case R_RISCV_32_PCREL:
                     TT_THROW("{}: R_RISCV_32_PCREL relocation found at {}", path_, reloc.r_offset);
                     break;
             }
+            // NOLINTEND(bugprone-switch-missing-default-case)
         }
 
         // Combine hi/lo relocs

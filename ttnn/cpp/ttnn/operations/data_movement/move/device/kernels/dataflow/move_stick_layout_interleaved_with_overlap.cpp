@@ -31,29 +31,15 @@ void kernel_main() {
     uint32_t range_2_end_noc_y = get_arg_val<uint32_t>(22);
     uint32_t range_2_size = get_arg_val<uint32_t>(23);
     bool do_third_multicast = get_arg_val<uint32_t>(24) == 1;
-    uint32_t page_size = get_arg_val<uint32_t>(25);
-    uint32_t aligned_page_size = get_arg_val<uint32_t>(26);
-    uint32_t log_base_2_of_page_size = get_arg_val<uint32_t>(27);
+    uint32_t aligned_page_size = get_arg_val<uint32_t>(25);
 
     constexpr uint32_t cb_id = get_compile_time_arg_val(0);
-    constexpr bool src_is_dram = get_compile_time_arg_val(1) == 1;
-    constexpr bool dst_is_dram = get_compile_time_arg_val(2) == 1;
+    constexpr uint32_t page_size = get_compile_time_arg_val(1);
+    constexpr auto src_args = TensorAccessorArgs<2>();
+    constexpr auto dst_args = TensorAccessorArgs<src_args.next_compile_time_args_offset()>();
 
-#define page_size_is_pow2 get_compile_time_arg_val(3) == 1
-
-#if (page_size_is_pow2)
-    const InterleavedPow2AddrGen<src_is_dram> src_addrgen = {
-        .bank_base_address = src_addr,
-        .log_base_2_of_page_size = log_base_2_of_page_size  // TODO(AP): refactor
-    };
-    const InterleavedPow2AddrGen<dst_is_dram> dst_addrgen = {
-        .bank_base_address = dst_addr,
-        .log_base_2_of_page_size = log_base_2_of_page_size  // TODO(AP): refactor
-    };
-#else
-    const InterleavedAddrGen<src_is_dram> src_addrgen = {.bank_base_address = src_addr, .page_size = page_size};
-    const InterleavedAddrGen<dst_is_dram> dst_addrgen = {.bank_base_address = dst_addr, .page_size = page_size};
-#endif
+    const auto src_addrgen = TensorAccessor(src_args, src_addr, page_size);
+    const auto dst_addrgen = TensorAccessor(dst_args, dst_addr, page_size);
 
     // if controller core then this local address will be incremented by remote cores,
     // otherwise controller core will set this to signal that write to dst can be done once controller core sees

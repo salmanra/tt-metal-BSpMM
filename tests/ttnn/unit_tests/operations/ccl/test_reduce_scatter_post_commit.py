@@ -7,7 +7,7 @@ import pytest
 from loguru import logger
 import ttnn
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_pcc
-from models.utility_functions import skip_for_grayskull
+from tests.tests_common.skip_reasons import LEGACY_CCL_SKIP
 
 
 def is_unsupported_case(input_shape, dim, math_op, mem_config, num_devices, num_links, input_dtype, layout):
@@ -39,43 +39,44 @@ def run_with_trace(
 ):
     # Compile Run
     logger.info("Compiling model")
-    output_tensor_mesh = ttnn.reduce_scatter(
-        input_tensor_mesh,
-        dim=dim,
-        math_op=math_op,
-        num_links=num_links,
-        memory_config=output_mem_config,
-        num_workers=n_worker,
-        num_buffers_per_channel=n_buffer,
-        topology=topology,
-    )
-    for device_id in t3k_mesh_device.get_device_ids():
-        ttnn.synchronize_device(t3k_mesh_device.get_device(device_id))
+    pytest.skip(LEGACY_CCL_SKIP)
+    # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+    # output_tensor_mesh = ttnn.reduce_scatter(
+    #     input_tensor_mesh,
+    #     dim=dim,
+    #     math_op=math_op,
+    #     num_links=num_links,
+    #     memory_config=output_mem_config,
+    #     num_workers=n_worker,
+    #     num_buffers_per_channel=n_buffer,
+    #     topology=topology,
+    # )
+    ttnn.synchronize_device(t3k_mesh_device)
 
     # Capture trace
     logger.info("Capturing trace")
     trace_id = ttnn.begin_trace_capture(t3k_mesh_device, cq_id=0)
     for i in range(num_iters):
-        output_tensor_mesh = ttnn.reduce_scatter(
-            input_tensor_mesh,
-            dim=dim,
-            math_op=math_op,
-            num_links=num_links,
-            memory_config=output_mem_config,
-            num_workers=n_worker,
-            num_buffers_per_channel=n_buffer,
-            topology=topology,
-        )
+        pytest.skip(LEGACY_CCL_SKIP)
+        # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+        # output_tensor_mesh = ttnn.reduce_scatter(
+        #     input_tensor_mesh,
+        #     dim=dim,
+        #     math_op=math_op,
+        #     num_links=num_links,
+        #     memory_config=output_mem_config,
+        #     num_workers=n_worker,
+        #     num_buffers_per_channel=n_buffer,
+        #     topology=topology,
+        # )
     ttnn.end_trace_capture(t3k_mesh_device, trace_id, cq_id=0)
-    for device_id in t3k_mesh_device.get_device_ids():
-        ttnn.synchronize_device(t3k_mesh_device.get_device(device_id))
+    ttnn.synchronize_device(t3k_mesh_device)
 
     # Run the op
     logger.info("Starting Trace perf test...")
     ttnn.execute_trace(t3k_mesh_device, trace_id, blocking=False)
     ttnn.release_trace(t3k_mesh_device, trace_id)
-    for device_id in t3k_mesh_device.get_device_ids():
-        ttnn.synchronize_device(t3k_mesh_device.get_device(device_id))
+    ttnn.synchronize_device(t3k_mesh_device)
 
     return output_tensor_mesh
 
@@ -90,9 +91,7 @@ def run_reduce_scatter_test(
     input_dtype,
     layout,
     mem_config,
-    use_program_cache,
     function_level_defaults,
-    enable_async=True,
     num_iters=1,
     topology=ttnn.Topology.Ring,
     trace_mode=False,
@@ -110,34 +109,25 @@ def run_reduce_scatter_test(
     if is_known_failure:
         pytest.skip(f"Skipping unsupported case {message}.")
 
-    mesh_device.enable_async(enable_async)
-    if enable_async:
-        logger.info(f"Using Async Mode for Reduce Scatter Op Dispatch")
-
     logger.info(f"Per chip output shape: {per_chip_output_shape}, devices: {num_devices}, dim: {dim}")
 
     # Generate input tensors
     canonical_input_shape = per_chip_output_shape.copy()
     canonical_input_shape[dim] *= num_devices
-    tt_input_tensors = []
+    torch_tensor_shape = canonical_input_shape.copy()
+    torch_tensor_shape[dim] *= num_devices
 
-    numel = canonical_input_shape[0] * canonical_input_shape[1] * canonical_input_shape[2] * canonical_input_shape[3]
-    input_tensors = [
-        torch.rand(canonical_input_shape).bfloat16() if not debug else torch.ones(canonical_input_shape).bfloat16()
-        for _ in range(num_devices)
-    ]
+    torch_tensor = torch.rand(torch_tensor_shape).bfloat16()
     if debug:
-        input_tensors[-1] = torch.arange(numel).reshape(canonical_input_shape).bfloat16()
-    for i, canonical_input_tensor in enumerate(input_tensors):
-        tt_input_tensors.append(
-            ttnn.Tensor(canonical_input_tensor, input_dtype)
-            .to(layout)
-            .to(mesh_device.get_device(mesh_device.get_device_ids()[i]), mem_config)
-        )
-
-    assert len(tt_input_tensors) == num_devices
-
-    input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
+        torch_tensor = torch.arange(torch_tensor.numel()).reshape(canonical_input_shape).bfloat16()
+    input_tensors = torch.chunk(torch_tensor, num_devices, dim)
+    input_tensor_mesh = ttnn.from_torch(
+        torch_tensor,
+        dtype=input_dtype,
+        layout=layout,
+        mesh_mapper=ttnn.ShardTensorToMesh(mesh_device, dim),
+        device=mesh_device,
+    )
     # Run the op
     if trace_mode:
         output_tensor_mesh = run_with_trace(
@@ -152,17 +142,18 @@ def run_reduce_scatter_test(
         )
     else:
         for i in range(num_iters):
-            output_tensor_mesh = ttnn.reduce_scatter(
-                input_tensor_mesh,
-                dim=dim,
-                math_op=math_op,
-                num_links=num_links,
-                memory_config=mem_config,
-                topology=topology,
-            )
+            pytest.skip(LEGACY_CCL_SKIP)
+            # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+            # output_tensor_mesh = ttnn.reduce_scatter(
+            #     input_tensor_mesh,
+            #     dim=dim,
+            #     math_op=math_op,
+            #     num_links=num_links,
+            #     memory_config=mem_config,
+            #     topology=topology,
+            # )
 
-            for device_id in mesh_device.get_device_ids():
-                ttnn.synchronize_device(mesh_device.get_device(device_id))
+            ttnn.synchronize_device(mesh_device)
             logger.info(f"Done iteration {i}")
 
     # ttnn.visualize_mesh_device(t3k_mesh_device, tensor=output_tensor_mesh)
@@ -184,7 +175,7 @@ def run_reduce_scatter_test(
         eq, output = comp_pcc(tt_output_tensor, golden_output_tensors[i])
         mismatch = mismatch or not eq
         if not eq:
-            logger.error(f"output mismatch for tensor {i}. Mesh device ID: {mesh_device.get_devices()[i].id()}")
+            logger.error(f"output mismatch for tensor {i}. Mesh device ID: {mesh_device.get_device_ids()[i]}")
             if debug:
                 for w in range(tt_output_tensor.shape[0]):
                     for z in range(tt_output_tensor.shape[1]):
@@ -201,7 +192,6 @@ def run_reduce_scatter_test(
 
 
 # ~2:45 extra time in the current state
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
@@ -236,7 +226,6 @@ def run_reduce_scatter_test(
     ],
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_ring_reduce_scatter_post_commit(
     t3k_mesh_device,
     num_devices,
@@ -247,9 +236,7 @@ def test_ring_reduce_scatter_post_commit(
     input_dtype,
     layout,
     mem_config,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=1,
 ):
     run_reduce_scatter_test(
@@ -262,15 +249,12 @@ def test_ring_reduce_scatter_post_commit(
         input_dtype,
         layout,
         mem_config,
-        use_program_cache,
         function_level_defaults,
         num_iters=num_iters,
-        enable_async=enable_async,
     )
 
 
 # ~2:45 extra time in the current state
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
@@ -301,7 +285,6 @@ def test_ring_reduce_scatter_post_commit(
     ],
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_line_reduce_scatter_post_commit(
     t3k_mesh_device,
     num_devices,
@@ -312,9 +295,7 @@ def test_line_reduce_scatter_post_commit(
     input_dtype,
     layout,
     mem_config,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=1,
 ):
     run_reduce_scatter_test(
@@ -327,16 +308,13 @@ def test_line_reduce_scatter_post_commit(
         input_dtype,
         layout,
         mem_config,
-        use_program_cache,
         function_level_defaults,
         num_iters=num_iters,
-        enable_async=enable_async,
         topology=ttnn.Topology.Linear,
     )
 
 
 # ~2:45 extra time in the current state
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
@@ -364,7 +342,6 @@ def test_line_reduce_scatter_post_commit(
     ],
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_line_reduce_scatter_post_commit_4chip(
     pcie_mesh_device,
     num_devices,
@@ -375,9 +352,7 @@ def test_line_reduce_scatter_post_commit_4chip(
     input_dtype,
     layout,
     mem_config,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=1,
 ):
     run_reduce_scatter_test(
@@ -390,10 +365,8 @@ def test_line_reduce_scatter_post_commit_4chip(
         input_dtype,
         layout,
         mem_config,
-        use_program_cache,
         function_level_defaults,
         num_iters=num_iters,
-        enable_async=enable_async,
         topology=ttnn.Topology.Linear,
     )
 
@@ -411,12 +384,10 @@ def run_reduce_scatter_sharded_test(
     input_dtype,
     tensor_layout,
     tensor_mem_layout,
-    use_program_cache,
     function_level_defaults,
     in_shard_override=None,
     in_shard_grid_override=None,
     topology=ttnn.Topology.Ring,
-    enable_async=True,
     num_iters=1,
     n_worker=None,
     n_buffer=None,
@@ -430,8 +401,6 @@ def run_reduce_scatter_sharded_test(
     logger.info(f"Per chip output shape: {per_chip_output_shape}, devices: {num_devices}, dim: {dim}")
 
     debug = False
-
-    t3k_mesh_device.enable_async(enable_async)
 
     # Generate input tensors
     if in_shard_grid_override is None:
@@ -470,20 +439,23 @@ def run_reduce_scatter_sharded_test(
 
     numel = canonical_input_shape[0] * canonical_input_shape[1] * canonical_input_shape[2] * canonical_input_shape[3]
     input_tensors = [
-        # torch.rand(canonical_input_shape).bfloat16() if not debug else torch.arange(numel).reshape(canonical_input_shape).bfloat16()
         torch.rand(canonical_input_shape).bfloat16() if not debug else torch.ones(canonical_input_shape).bfloat16()
         for _ in range(num_devices)
     ]
     if debug:
         input_tensors[-1] = torch.arange(numel).reshape(canonical_input_shape).bfloat16()
-    for i, canonical_input_tensor in enumerate(input_tensors):
-        tt_input_tensors.append(
-            ttnn.Tensor(canonical_input_tensor, input_dtype)
-            .to(tensor_layout)
-            .to(t3k_mesh_device.get_device(t3k_mesh_device.get_device_ids()[i]), input_mem_config)
-        )
 
-    input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors)
+    input_tensor_mesh = ttnn.from_torch(
+        torch.cat(input_tensors, dim=0),
+        device=t3k_mesh_device,
+        layout=tensor_layout,
+        dtype=input_dtype,
+        memory_config=input_mem_config,
+        mesh_mapper=ttnn.create_mesh_mapper(
+            t3k_mesh_device,
+            ttnn.MeshMapperConfig([ttnn.PlacementReplicate(), ttnn.PlacementShard(0)], ttnn.MeshShape(1, num_devices)),
+        ),
+    )
 
     # Run the op
     if trace_mode:
@@ -500,17 +472,18 @@ def run_reduce_scatter_sharded_test(
         )
     else:
         for i in range(num_iters):
-            output_tensor_mesh = ttnn.reduce_scatter(
-                input_tensor_mesh,
-                dim=dim,
-                math_op=math_op,
-                num_links=num_links,
-                memory_config=output_mem_config,
-                topology=topology,
-            )
+            pytest.skip(LEGACY_CCL_SKIP)
+            # Legacy ccl call removed until new implementation is done - see https://github.com/tenstorrent/tt-metal/issues/26649
+            # output_tensor_mesh = ttnn.reduce_scatter(
+            #     input_tensor_mesh,
+            #     dim=dim,
+            #     math_op=math_op,
+            #     num_links=num_links,
+            #     memory_config=output_mem_config,
+            #     topology=topology,
+            # )
 
-            for device_id in t3k_mesh_device.get_device_ids():
-                ttnn.synchronize_device(t3k_mesh_device.get_device(device_id))
+            ttnn.synchronize_device(t3k_mesh_device)
             logger.info(f"Done iteration {i}")
 
     # Compute golden
@@ -537,7 +510,6 @@ def run_reduce_scatter_sharded_test(
     assert not mismatch, f"{i} FAILED: {output}"
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
@@ -591,7 +563,6 @@ def run_reduce_scatter_sharded_test(
     ),
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_width_sharded_reduce_scatter_post_commit(
     t3k_mesh_device,
     num_devices,
@@ -605,9 +576,7 @@ def test_width_sharded_reduce_scatter_post_commit(
     input_dtype,
     tensor_layout,
     tensor_mem_layout,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=1,
 ):
     run_reduce_scatter_sharded_test(
@@ -623,14 +592,11 @@ def test_width_sharded_reduce_scatter_post_commit(
         input_dtype,
         tensor_layout,
         tensor_mem_layout,
-        use_program_cache=use_program_cache,
         function_level_defaults=function_level_defaults,
-        enable_async=enable_async,
         num_iters=num_iters,
     )
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
@@ -676,7 +642,6 @@ def test_width_sharded_reduce_scatter_post_commit(
 )
 @pytest.mark.parametrize("topology", [ttnn.Topology.Ring, ttnn.Topology.Linear])
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_width_sharded_reduce_scatter_post_commit_4chip(
     pcie_mesh_device,
     num_devices,
@@ -691,11 +656,9 @@ def test_width_sharded_reduce_scatter_post_commit_4chip(
     input_dtype,
     tensor_layout,
     tensor_mem_layout,
-    use_program_cache,
     function_level_defaults,
     in_shard_override,
     in_shard_grid_override,
-    enable_async,
     num_iters=1,
 ):
     run_reduce_scatter_sharded_test(
@@ -711,17 +674,14 @@ def test_width_sharded_reduce_scatter_post_commit_4chip(
         input_dtype,
         tensor_layout,
         tensor_mem_layout,
-        use_program_cache=use_program_cache,
         function_level_defaults=function_level_defaults,
         in_shard_override=in_shard_override,
         in_shard_grid_override=in_shard_grid_override,
         topology=topology,
-        enable_async=enable_async,
         num_iters=num_iters,
     )
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.skip("Hangs")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
@@ -757,7 +717,6 @@ def test_width_sharded_reduce_scatter_post_commit_4chip(
     ),
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_height_sharded_reduce_scatter_post_commit(
     t3k_mesh_device,
     num_devices,
@@ -771,9 +730,7 @@ def test_height_sharded_reduce_scatter_post_commit(
     input_dtype,
     tensor_layout,
     tensor_mem_layout,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=1,
 ):
     run_reduce_scatter_sharded_test(
@@ -789,14 +746,11 @@ def test_height_sharded_reduce_scatter_post_commit(
         input_dtype,
         tensor_layout,
         tensor_mem_layout,
-        use_program_cache=use_program_cache,
         function_level_defaults=function_level_defaults,
-        enable_async=enable_async,
         num_iters=num_iters,
     )
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.timeout(120)
 @pytest.mark.parametrize(
     "num_devices, num_links",
@@ -831,7 +785,6 @@ def test_height_sharded_reduce_scatter_post_commit(
     ),
 )
 @pytest.mark.parametrize("math_op", [ttnn.ReduceType.Sum])
-@pytest.mark.parametrize("enable_async", [True])
 def test_block_sharded_reduce_scatter_post_commit(
     t3k_mesh_device,
     num_devices,
@@ -845,9 +798,7 @@ def test_block_sharded_reduce_scatter_post_commit(
     input_dtype,
     tensor_layout,
     tensor_mem_layout,
-    use_program_cache,
     function_level_defaults,
-    enable_async,
     num_iters=1,
 ):
     run_reduce_scatter_sharded_test(
@@ -863,8 +814,6 @@ def test_block_sharded_reduce_scatter_post_commit(
         input_dtype,
         tensor_layout,
         tensor_mem_layout,
-        use_program_cache=use_program_cache,
         function_level_defaults=function_level_defaults,
-        enable_async=enable_async,
         num_iters=num_iters,
     )

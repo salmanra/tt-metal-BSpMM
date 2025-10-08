@@ -2,25 +2,41 @@ name: "Create and Publish Release Docker Image"
 
 on:
   workflow_dispatch:
+    inputs:
+      tag-latest:
+        description: 'Tag the image as latest (WARNING: Affects production!)'
+        required: true
+        type: boolean
+        default: false
 jobs:
   build-artifact:
     uses: ./.github/workflows/build-artifact.yaml
+    permissions:
+      packages: write
+      contents: read
     secrets: inherit
-  build-wheels:
-    needs: build-artifact
-    strategy:
-      matrix:
-        # Since pre-compiled builds only run on 20.04, we can only test on 20.04 for now
-        # The full 22.04 flow can be tested without precompiled
-        os: [ubuntu-20.04]
-    uses: ./.github/workflows/_build-wheels-impl.yaml
     with:
-      os: ${{ matrix.os }}
-      from-precompiled: true
+      build-wheel: true
+      version: "22.04"
+  create-image-tag-name:
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag-name: ${{ steps.set-tag-name.outputs.image-tag-name }}
+    steps:
+      - name: Set the tag name of the docker image
+        id: set-tag-name
+        run: |
+          echo "image-tag-name=${GITHUB_REF_NAME//\//-}" >> $GITHUB_OUTPUT
   publish-release-image:
-    needs: build-wheels
     uses: ./.github/workflows/publish-release-image.yaml
+    permissions:
+      packages: write
+      contents: read
+    needs:
+      - build-artifact
+      - create-image-tag-name
     secrets: inherit
     with:
-      version: dev-${GITHUB_REF_NAME//\//-}
-      is_major_version: false
+      version: dev-${{ needs.create-image-tag-name.outputs.image-tag-name }}
+      tag-latest: ${{ inputs.tag-latest }}
+      wheel-artifact-name: ${{ needs.build-artifact.outputs.wheel-artifact-name }}

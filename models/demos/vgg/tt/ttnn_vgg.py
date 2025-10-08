@@ -2,13 +2,12 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+import math
+from typing import Dict, List, Union
+
 import torch.nn as nn
 
-from typing import List, Union, Dict
-
 import ttnn
-
-import math
 
 cfgs: Dict[str, List[Union[str, int]]] = {
     "A": [64, "M", 128, "M", 256, 256, "M", 512, 512, "M", 512, 512, "M"],
@@ -88,13 +87,10 @@ def ttnn_vgg16(
             if conv_ttnn_params[iter_conv_id][0] > 128:
                 h_sharding = False
             conv_config = ttnn.Conv2dConfig(
-                dtype=model_config["ACTIVATIONS_DTYPE"],
                 weights_dtype=model_config["WEIGHTS_DTYPE"],
-                activation="relu",
+                activation=ttnn.UnaryWithParam(ttnn.UnaryOpType.RELU),
                 deallocate_activation=False,
-                input_channels_alignment=32,
                 reallocate_halo_output=False,
-                transpose_shards=True,
                 shard_layout=(
                     ttnn.TensorMemoryLayout.HEIGHT_SHARDED if h_sharding else ttnn.TensorMemoryLayout.BLOCK_SHARDED
                 ),
@@ -115,26 +111,52 @@ def ttnn_vgg16(
             tt_weight = ttnn.to_layout(ttnn.from_device(tt_weight), layout=ttnn.ROW_MAJOR_LAYOUT)
             tt_bias = parameters.features[conv_feature_ids[iter_conv_id]].bias
             tt_bias = ttnn.to_layout(ttnn.from_device(tt_bias), layout=ttnn.ROW_MAJOR_LAYOUT)
+
+            conv_kwargs = {
+                "in_channels": conv_ttnn_params[iter_conv_id][0],
+                "out_channels": conv_ttnn_params[iter_conv_id][1],
+                "batch_size": batch_size,
+                "input_height": conv_ttnn_params[iter_conv_id][2],
+                "input_width": conv_ttnn_params[iter_conv_id][3],
+                "kernel_size": (3, 3),
+                "stride": (1, 1),
+                "padding": (1, 1),
+                "dilation": (1, 1),
+                "groups": 1,
+                "device": device,
+                "conv_config": conv_config,
+            }
+
+            if not ttnn.is_tensor_storage_on_device(tt_weight):
+                tt_weight = ttnn.prepare_conv_weights(
+                    weight_tensor=tt_weight,
+                    weights_format="OIHW",
+                    input_memory_config=ttnn.L1_MEMORY_CONFIG,
+                    input_layout=tt_x.get_layout(),
+                    has_bias=True,
+                    **conv_kwargs,
+                    input_dtype=model_config["ACTIVATIONS_DTYPE"],
+                )
+
+                tt_bias = ttnn.prepare_conv_bias(
+                    bias_tensor=tt_bias,
+                    input_memory_config=ttnn.L1_MEMORY_CONFIG,
+                    input_layout=tt_x.get_layout(),
+                    **conv_kwargs,
+                    input_dtype=model_config["ACTIVATIONS_DTYPE"],
+                )
+
+                tt_weight = ttnn.to_device(tt_weight, device)
+                tt_bias = ttnn.to_device(tt_bias, device)
             # Call ttnn.conv
-            conv_op_cache = {}
-            [tt_output_tensor_on_device, [out_height, out_width], [weights_device, bias_device]] = ttnn.conv2d(
+            tt_output_tensor_on_device = ttnn.conv2d(
                 input_tensor=tt_x,
                 weight_tensor=tt_weight,
-                in_channels=conv_ttnn_params[iter_conv_id][0],
-                out_channels=conv_ttnn_params[iter_conv_id][1],
-                device=device,
                 bias_tensor=tt_bias,
-                kernel_size=(3, 3),
-                stride=(1, 1),
-                padding=(1, 1),
-                batch_size=batch_size,
-                input_height=conv_ttnn_params[iter_conv_id][2],
-                input_width=conv_ttnn_params[iter_conv_id][3],
-                conv_config=conv_config,
+                **conv_kwargs,
                 compute_config=compute_config,
-                conv_op_cache=conv_op_cache,
-                return_output_dim=True,
-                return_weights_and_bias=True,
+                dtype=model_config["ACTIVATIONS_DTYPE"],
+                slice_config=ttnn.Conv2dL1FullSliceConfig,
             )
             tt_x = ttnn.from_device(tt_output_tensor_on_device)
             ttnn.deallocate(tt_output_tensor_on_device)
@@ -219,13 +241,10 @@ def ttnn_vgg11(
             if conv_ttnn_params_2[iter_conv_id][0] > 128:
                 h_sharding = False
             conv_config = ttnn.Conv2dConfig(
-                dtype=model_config["ACTIVATIONS_DTYPE"],
                 weights_dtype=model_config["WEIGHTS_DTYPE"],
-                activation="relu",
+                activation=ttnn.UnaryWithParam(ttnn.UnaryOpType.RELU),
                 deallocate_activation=False,
-                input_channels_alignment=32,
                 reallocate_halo_output=False,
-                transpose_shards=True,
                 shard_layout=(
                     ttnn.TensorMemoryLayout.HEIGHT_SHARDED if h_sharding else ttnn.TensorMemoryLayout.BLOCK_SHARDED
                 ),
@@ -245,26 +264,52 @@ def ttnn_vgg11(
             tt_bias = parameters.features[conv_feature_ids_2[iter_conv_id]].bias
             tt_bias = ttnn.to_layout(ttnn.from_device(tt_bias), layout=ttnn.ROW_MAJOR_LAYOUT)
 
+            conv_kwargs = {
+                "in_channels": conv_ttnn_params_2[iter_conv_id][0],
+                "out_channels": conv_ttnn_params_2[iter_conv_id][1],
+                "batch_size": batch_size,
+                "input_height": conv_ttnn_params_2[iter_conv_id][2],
+                "input_width": conv_ttnn_params_2[iter_conv_id][3],
+                "kernel_size": (3, 3),
+                "stride": (1, 1),
+                "padding": (1, 1),
+                "dilation": (1, 1),
+                "groups": 1,
+                "device": device,
+                "conv_config": conv_config,
+            }
+
+            if not ttnn.is_tensor_storage_on_device(tt_weight):
+                tt_weight = ttnn.prepare_conv_weights(
+                    weight_tensor=tt_weight,
+                    weights_format="OIHW",
+                    input_memory_config=ttnn.L1_MEMORY_CONFIG,
+                    input_layout=tt_x.get_layout(),
+                    has_bias=True,
+                    **conv_kwargs,
+                    input_dtype=model_config["ACTIVATIONS_DTYPE"],
+                )
+
+                tt_bias = ttnn.prepare_conv_bias(
+                    bias_tensor=tt_bias,
+                    input_memory_config=ttnn.L1_MEMORY_CONFIG,
+                    input_layout=tt_x.get_layout(),
+                    **conv_kwargs,
+                    input_dtype=model_config["ACTIVATIONS_DTYPE"],
+                )
+
+                tt_weight = ttnn.to_device(tt_weight, device)
+                tt_bias = ttnn.to_device(tt_bias, device)
+
             # Call ttnn.conv
-            conv_op_cache = {}
-            [tt_output_tensor_on_device, [out_height, out_width], [weights_device, bias_device]] = ttnn.conv2d(
+            tt_output_tensor_on_device = ttnn.conv2d(
                 input_tensor=tt_x,
                 weight_tensor=tt_weight,
-                in_channels=conv_ttnn_params_2[iter_conv_id][0],
-                out_channels=conv_ttnn_params_2[iter_conv_id][1],
-                device=device,
                 bias_tensor=tt_bias,
-                kernel_size=(3, 3),
-                stride=(1, 1),
-                padding=(1, 1),
-                batch_size=batch_size,
-                input_height=conv_ttnn_params_2[iter_conv_id][2],
-                input_width=conv_ttnn_params_2[iter_conv_id][3],
-                conv_config=conv_config,
+                **conv_kwargs,
+                slice_config=ttnn.Conv2dL1FullSliceConfig,
                 compute_config=compute_config,
-                conv_op_cache=conv_op_cache,
-                return_output_dim=True,
-                return_weights_and_bias=True,
+                dtype=model_config["ACTIVATIONS_DTYPE"],
             )
             tt_x = ttnn.from_device(tt_output_tensor_on_device)
             ttnn.deallocate(tt_output_tensor_on_device)

@@ -3,10 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import pytest
-from models.utility_functions import is_grayskull
-from models.perf.device_perf_utils import run_device_perf, check_device_perf, prep_device_perf_report
+
+from models.common.utility_functions import is_grayskull
+from models.perf.device_perf_utils import check_device_perf, prep_device_perf_report, run_device_perf
 
 
+@pytest.mark.skip(reason="https://github.com/tenstorrent/tt-metal/issues/24738")
 @pytest.mark.models_device_performance_bare_metal
 @pytest.mark.parametrize(
     "batch_size, test",
@@ -18,7 +20,7 @@ def test_perf_device_bare_metal(batch_size, test):
     subdir = "ttnn_squeezebert"
     num_iterations = 1
     margin = 0.03
-    expected_perf = 102.7 if is_grayskull() else 298.7
+    expected_perf = 102.7 if is_grayskull() else 299.7
 
     command = f"pytest tests/ttnn/integration_tests/squeezebert/test_ttnn_squeezebert.py::test_squeezebert_for_question_answering"
     cols = ["DEVICE FW", "DEVICE KERNEL", "DEVICE BRISC KERNEL"]

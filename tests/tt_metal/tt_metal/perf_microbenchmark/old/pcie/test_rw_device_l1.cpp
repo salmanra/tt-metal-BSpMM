@@ -2,14 +2,28 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <algorithm>
-#include <functional>
-#include <random>
-#include <string>
-
+#include <chrono>
+#include <errno.h>
+#include <fmt/base.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
 #include <tt-metalium/bfloat16.hpp>
-#include <tt-metalium/tt_metal.hpp>
 #include <tt-metalium/host_api.hpp>
+#include <tt-metalium/tt_metal.hpp>
+#include <tt-metalium/distributed.hpp>
+#include <tt-metalium/mesh_device.hpp>
+#include <algorithm>
+#include <cstring>
+#include <exception>
+#include <string>
+#include <tuple>
+#include <vector>
+
+#include <tt_stl/assert.hpp>
+#include <tt-metalium/core_coord.hpp>
+#include <tt-logger/tt-logger.hpp>
+#include "test_common.hpp"
 
 using namespace tt;
 using namespace tt::tt_metal;
@@ -24,7 +38,7 @@ int main(int argc, char** argv) {
         // Initial Runtime Args Parse
         std::vector<std::string> input_args(argv, argv + argc);
 
-        string size_string = "";
+        std::string size_string = "";
         try {
             std::tie(size_string, input_args) = test_args::get_command_option_and_remaining_args(input_args, "--size");
         } catch (const std::exception& e) {
@@ -36,16 +50,16 @@ int main(int argc, char** argv) {
 
         // Device Setup
         int device_id = 0;
-        tt_metal::IDevice* device = tt_metal::CreateDevice(device_id);
+        auto device = tt_metal::distributed::MeshDevice::create_unit_mesh(device_id);
 
         // Application Setup
-        srand(time(0));
+        srand(time(nullptr));
         size_t core_x = rand() % 8;
         size_t core_y = rand() % 8;
         log_info(LogTest, "Target core (x,y) = ({},{})", core_x, core_y);
         CoreCoord core = {core_x, core_y};
 
-        // Can accomodate input size up to 920*1024
+        // Can accommodate input size up to 920*1024
         uint32_t target_cb_addr = 107 * 1024;
 
         // Execute Application
@@ -54,7 +68,7 @@ int main(int argc, char** argv) {
 
         {
             auto begin = std::chrono::steady_clock::now();
-            pass &= tt_metal::detail::WriteToDeviceL1(device, core, target_cb_addr, src_vec);
+            pass &= tt_metal::detail::WriteToDeviceL1(device->get_devices()[0], core, target_cb_addr, src_vec);
             auto end = std::chrono::steady_clock::now();
             auto elapsed_us = duration_cast<microseconds>(end - begin).count();
             auto bw = (buffer_size / 1024.0 / 1024.0 / 1024.0) / (elapsed_us / 1000.0 / 1000.0);
@@ -64,7 +78,7 @@ int main(int argc, char** argv) {
         std::vector<uint32_t> result_vec;
         {
             auto begin = std::chrono::steady_clock::now();
-            tt_metal::detail::ReadFromDeviceL1(device, core, target_cb_addr, buffer_size, result_vec);
+            tt_metal::detail::ReadFromDeviceL1(device->get_devices()[0], core, target_cb_addr, buffer_size, result_vec);
             auto end = std::chrono::steady_clock::now();
 
             auto elapsed_us = duration_cast<microseconds>(end - begin).count();
@@ -74,7 +88,7 @@ int main(int argc, char** argv) {
 
         // Validation & Teardown
         pass &= (src_vec == result_vec);
-        pass &= tt_metal::CloseDevice(device);
+        pass &= device->close();
     } catch (const std::exception& e) {
         pass = false;
         log_error(LogTest, "{}", e.what());

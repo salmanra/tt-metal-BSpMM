@@ -7,7 +7,7 @@ import torch
 from loguru import logger
 
 import ttnn
-from models.utility_functions import comp_allclose_and_pcc
+from models.common.utility_functions import comp_allclose_and_pcc
 from tests.ttnn.unit_tests.operations.test_utils import (
     get_compute_kernel_options,
     compute_kernel_options,
@@ -112,7 +112,7 @@ def test_moreh_dot(input_shape, dtype, device):
         None,
     ),
 )
-def test_moreh_matmul_1d_callback(input_shape, dtype, device, use_program_cache):
+def test_moreh_matmul_1d_callback(input_shape, dtype, device):
     torch.manual_seed(3072)
 
     for i in range(2):

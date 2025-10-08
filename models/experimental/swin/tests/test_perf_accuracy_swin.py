@@ -7,22 +7,17 @@ import pytest
 import evaluate
 
 import ttnn
-import os
-import random
-from pathlib import Path
 from loguru import logger
 from transformers import AutoFeatureExtractor
-from PIL import Image
 import torchvision.transforms as transforms
 from transformers import AutoImageProcessor
 
-from models.sample_data.huggingface_imagenet_classes import IMAGENET2012_CLASSES as labels_dict
 from models.experimental.swin.tt.swin_for_image_classification import (
     TtSwinForImageClassification,
 )
 from transformers import SwinForImageClassification as HF_SwinForImageClassification
 
-from models.utility_functions import (
+from models.common.utility_functions import (
     profiler,
     enable_persistent_kernel_cache,
     disable_persistent_kernel_cache,
@@ -121,7 +116,7 @@ def run_swin_perf(device, model_name, iterations, model_location_generator):
     "model_name,iterations",
     (("microsoft/swin-tiny-patch4-window7-224", 20),),
 )
-def test_perf_bare_metal(device, use_program_cache, model_name, iterations, model_location_generator):
+def test_perf_bare_metal(device, model_name, iterations, model_location_generator):
     run_swin_perf(device, model_name, iterations, model_location_generator)
 
 
@@ -130,5 +125,5 @@ def test_perf_bare_metal(device, use_program_cache, model_name, iterations, mode
     "model_name,iterations",
     (("microsoft/swin-tiny-patch4-window7-224", 20),),
 )
-def test_perf_virtual_machine(device, use_program_cache, model_name, iterations, model_location_generator):
+def test_perf_virtual_machine(device, model_name, iterations, model_location_generator):
     run_swin_perf(device, model_name, iterations, model_location_generator)

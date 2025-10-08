@@ -7,7 +7,7 @@ import torch
 from loguru import logger
 
 import ttnn
-from models.utility_functions import comp_allclose, is_wormhole_b0
+from models.common.utility_functions import comp_allclose, is_wormhole_b0
 from tests.ttnn.unit_tests.operations.test_utils import (
     check_dim,
     compute_kernel_ids,
@@ -374,7 +374,7 @@ def test_moreh_norm_compute_kernel_options(
 )
 @pytest.mark.parametrize("keepdim", [True, False])
 @pytest.mark.parametrize("is_linalg_vector_norm", [False, True])
-def test_moreh_norm_callback(dim_rtol_atol, keepdim, device, is_linalg_vector_norm, use_program_cache):
+def test_moreh_norm_callback(dim_rtol_atol, keepdim, device, is_linalg_vector_norm):
     """
     Parametrized test for ttnn's norm operation. Compares the output of ttnn's norm with torch's norm.
     """
@@ -510,7 +510,7 @@ def test_moreh_norm_backward_compute_kernel_options(
 )
 @pytest.mark.parametrize("keepdim", [True, False])
 @pytest.mark.parametrize("is_linalg_vector_norm", [False, True])
-def test_moreh_norm_backward_callback(dim_rtol_atol, keepdim, device, is_linalg_vector_norm, use_program_cache):
+def test_moreh_norm_backward_callback(dim_rtol_atol, keepdim, device, is_linalg_vector_norm):
     """
     Parametrized test for ttnn's norm backward operation. Compares the output of ttnn's norm backward with torch's norm backward.
     """

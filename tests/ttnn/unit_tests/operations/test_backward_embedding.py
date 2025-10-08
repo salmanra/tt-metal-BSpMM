@@ -8,11 +8,10 @@ import ttnn
 from tests.tt_eager.python_api_testing.sweep_tests import (
     comparison_funcs,
 )
-from models.utility_functions import skip_for_grayskull
+from models.common.utility_functions import skip_for_blackhole
 from loguru import logger
 
 
-@skip_for_grayskull()
 @pytest.mark.parametrize(
     "batch_size, seq_len, embedding_dim, num_embeddings",
     [
@@ -68,7 +67,6 @@ def test_embedding_bw(input_dtype, output_dtype, batch_size, seq_len, embedding_
     assert comp_pass
 
 
-@skip_for_grayskull()
 @pytest.mark.parametrize(
     "batch_size, seq_len, embedding_dim, num_embeddings",
     [
@@ -89,7 +87,7 @@ def test_embedding_bw(input_dtype, output_dtype, batch_size, seq_len, embedding_
     ],
 )
 def test_embedding_bw_with_program_cache(
-    input_dtype, output_dtype, batch_size, seq_len, embedding_dim, num_embeddings, device, use_program_cache
+    input_dtype, output_dtype, batch_size, seq_len, embedding_dim, num_embeddings, device
 ):
     torch.manual_seed(1234)
 

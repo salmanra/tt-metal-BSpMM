@@ -7,7 +7,7 @@ import torch
 from loguru import logger
 
 import ttnn
-from models.utility_functions import comp_allclose
+from models.common.utility_functions import comp_allclose
 from tests.ttnn.unit_tests.operations.test_utils import (
     TILE_HEIGHT,
     TILE_WIDTH,
@@ -88,7 +88,7 @@ def run_moreh_mean_backward(
     # run ttnn
     ttnn_output_grad = create_ttnn_tilized_tensor(torch_output_grad, device, ttnn_dtype)
     if create_input_grad:
-        input_grad_shape = ttnn._ttnn.types.Shape(torch_input.shape)
+        input_grad_shape = tuple(torch_input.shape)
         ttnn_input_grad = ttnn.operations.moreh.mean_backward(
             ttnn_output_grad,
             dim=dim,
@@ -188,7 +188,7 @@ def test_moreh_mean_optional_output(input_shape_dim, optional_output, device):
         [[3, 4, 5, TILE_HEIGHT * 3 - 15, TILE_WIDTH * 4 - 10], [1]],  # c
     ],
 )
-def test_moreh_mean_callback(input_shape_dim, device, use_program_cache):
+def test_moreh_mean_callback(input_shape_dim, device):
     torch.manual_seed(2024)
     num_program_cache_entries_list = []
     for i in range(2):
@@ -259,7 +259,7 @@ def test_moreh_mean_backward_compute_kernel_options(input_shape_dim, compute_ker
         [[3, 4, 5, TILE_HEIGHT * 3 - 15, TILE_WIDTH * 4 - 10], [1]],  # c
     ],
 )
-def test_moreh_mean_backward_callback(input_shape_dim, device, use_program_cache):
+def test_moreh_mean_backward_callback(input_shape_dim, device):
     torch.manual_seed(2024)
     num_program_cache_entries_list = []
     for i in range(2):

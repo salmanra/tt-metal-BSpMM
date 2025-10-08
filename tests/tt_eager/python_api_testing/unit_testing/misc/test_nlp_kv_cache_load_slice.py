@@ -9,7 +9,7 @@ import numpy as np
 import torch
 
 import ttnn
-from models.utility_functions import is_grayskull, comp_pcc
+from models.common.utility_functions import is_grayskull, comp_pcc
 
 
 def unpadding_test(
@@ -76,7 +76,6 @@ def test_run_unpadding_test(
     seq_len_end,
     device,
     dtype,
-    use_program_cache,
 ):
     if is_grayskull():
         pytest.skip("Skipping test on Grayskull")

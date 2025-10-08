@@ -4,8 +4,8 @@
 
 #include <stdint.h>
 #include "dataflow_api.h"
-#include "cpp/ttnn/deprecated/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
-#include "cpp/ttnn/deprecated/tt_dnn/kernels/dataflow/generate_bcast_scalar.hpp"
+#include "ttnn/deprecated/tt_dnn/kernels/dataflow/generate_reduce_scaler.hpp"
+#include "ttnn/deprecated/tt_dnn/kernels/dataflow/generate_bcast_scalar.hpp"
 
 void kernel_main() {
     uint32_t src_addr = get_arg_val<uint32_t>(0);
@@ -17,57 +17,39 @@ void kernel_main() {
     uint32_t beta_addr = get_arg_val<uint32_t>(7);
     uint32_t b_addr = get_arg_val<uint32_t>(8);
 
-    constexpr uint32_t cb_id_in0 = 0, cb_id_in1 = 1;
-    constexpr uint32_t cb_id_gamma = 5;
-    constexpr uint32_t cb_id_beta = 6;
+    constexpr uint32_t cb_id_in0 = tt::CBIndex::c_0, cb_id_in1 = tt::CBIndex::c_1;
+    constexpr uint32_t cb_id_gamma = tt::CBIndex::c_5;
+    constexpr uint32_t cb_id_beta = tt::CBIndex::c_6;
 
     // ublocks size defined in tiles
     const uint32_t src0_tile_bytes = get_tile_size(cb_id_in0);
     const DataFormat src0_data_format = get_dataformat(cb_id_in0);
 
-    constexpr bool src0_is_dram = get_compile_time_arg_val(0) == 1;
-    constexpr bool src1_is_dram = get_compile_time_arg_val(1) == 1;
-    constexpr bool gamma_is_dram = get_compile_time_arg_val(2) == 1;
-    constexpr bool beta_is_dram = get_compile_time_arg_val(3) == 1;
-    constexpr uint32_t blk = get_compile_time_arg_val(4);  // needed for correctness of softmax/LN kernels
+    constexpr uint32_t blk = get_compile_time_arg_val(0);  // needed for correctness of softmax/LN kernels
+    constexpr auto src0_args = TensorAccessorArgs<1>();
+    constexpr auto src1_args = TensorAccessorArgs<src0_args.next_compile_time_args_offset()>();
+    constexpr auto gamma_args = TensorAccessorArgs<src1_args.next_compile_time_args_offset()>();
+    constexpr auto beta_args = TensorAccessorArgs<gamma_args.next_compile_time_args_offset()>();
+    constexpr uint32_t stick_size = get_compile_time_arg_val(beta_args.next_compile_time_args_offset());
 
-    const InterleavedAddrGenFast<src0_is_dram> src_a = {
-        .bank_base_address = src_addr, .page_size = src0_tile_bytes, .data_format = src0_data_format};
+    const auto src_a = TensorAccessor(src0_args, src_addr, src0_tile_bytes);
 
-#define stick_size_is_pow2 get_compile_time_arg_val(5) == 1
-#if (stick_size_is_pow2)
-    const uint32_t log_base_2_of_page_size = get_compile_time_arg_val(6);
-#else
-    const uint32_t page_size = get_compile_time_arg_val(6);
-#endif
 #ifdef FUSE_GAMMA
-#if (stick_size_is_pow2)
-    const InterleavedPow2AddrGen<gamma_is_dram> addrg = {
-        .bank_base_address = gamma_addr, .log_base_2_of_page_size = log_base_2_of_page_size};
-#else
-    const InterleavedAddrGen<gamma_is_dram> addrg = {.bank_base_address = gamma_addr, .page_size = page_size};
-#endif
     const uint32_t gamma_tile_bytes = get_tile_size(cb_id_gamma);
+    const auto addrg = TensorAccessor(gamma_args, gamma_addr, stick_size);
 #endif
 #ifdef FUSE_BETA
-#if (stick_size_is_pow2)
-    const InterleavedPow2AddrGen<beta_is_dram> addrb = {
-        .bank_base_address = beta_addr, .log_base_2_of_page_size = log_base_2_of_page_size};
-#else
-    const InterleavedAddrGen<beta_is_dram> addrb = {.bank_base_address = beta_addr, .page_size = page_size};
-#endif
     const uint32_t beta_tile_bytes = get_tile_size(cb_id_beta);
+    const auto addrb = TensorAccessor(beta_args, beta_addr, stick_size);
 #endif
 #ifdef FUSE_PRE_ADD
     const uint32_t src1_tile_bytes = get_tile_size(cb_id_in1);
-    const DataFormat src1_data_format = get_dataformat(cb_id_in1);
-    const InterleavedAddrGenFast<src1_is_dram> src_b = {
-        .bank_base_address = b_addr, .page_size = src1_tile_bytes, .data_format = src1_data_format};
+    const auto src_b = TensorAccessor(src1_args, b_addr, src1_tile_bytes);
 #endif
 
     // Generate constant tiles for layernorm compute
     {
-        constexpr uint32_t cb_in_2 = 2;
+        constexpr uint32_t cb_in_2 = tt::CBIndex::c_2;
         uint32_t scaler = get_arg_val<uint32_t>(4);
         generate_reduce_scaler(cb_in_2, scaler);
     }

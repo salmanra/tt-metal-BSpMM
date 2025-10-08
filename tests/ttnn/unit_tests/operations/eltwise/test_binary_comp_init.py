@@ -9,10 +9,8 @@ from tests.ttnn.unit_tests.operations.eltwise.backward.utility_funcs import (
     data_gen_with_range,
     data_gen_with_range_dtype,
 )
-from models.utility_functions import is_grayskull, skip_for_blackhole
 
 
-@skip_for_blackhole("Mismatching on BH, see #12349")
 @pytest.mark.parametrize(
     "input_shapes",
     (
@@ -36,9 +34,6 @@ from models.utility_functions import is_grayskull, skip_for_blackhole
     (ttnn.lt, ttnn.gt, ttnn.eq, ttnn.le, ttnn.ge, ttnn.ne, ttnn.logical_and, ttnn.logical_or, ttnn.logical_xor),
 )
 def test_binary_comp_ops(input_shapes, out_dtype, mem_configs, ttnn_function, device):
-    if is_grayskull():
-        pytest.skip("GS does not support fp32/uint32/uint16 data types")
-
     in_data, input_tensor = data_gen_with_range(input_shapes, -100, 100, device, True)
     other_data, other_tensor = data_gen_with_range(input_shapes, -90, 100, device, True)
 
@@ -59,7 +54,6 @@ def test_binary_comp_ops(input_shapes, out_dtype, mem_configs, ttnn_function, de
     assert are_equal
 
 
-@skip_for_blackhole("Mismatching on BH, see #12349")
 @pytest.mark.parametrize(
     "input_shapes",
     (
@@ -83,9 +77,6 @@ def test_binary_comp_ops(input_shapes, out_dtype, mem_configs, ttnn_function, de
     (ttnn.lt, ttnn.gt, ttnn.eq, ttnn.le, ttnn.ge, ttnn.ne, ttnn.logical_and, ttnn.logical_or, ttnn.logical_xor),
 )
 def test_binary_comp_opt_out(input_shapes, out_dtype, mem_configs, ttnn_function, device):
-    if is_grayskull():
-        pytest.skip("GS does not support fp32/uint32/uint16 data types")
-
     in_data, input_tensor = data_gen_with_range(input_shapes, -100, 100, device, True)
     other_data, other_tensor = data_gen_with_range(input_shapes, -90, 100, device, True)
 
@@ -106,7 +97,6 @@ def test_binary_comp_opt_out(input_shapes, out_dtype, mem_configs, ttnn_function
     assert are_equal
 
 
-@skip_for_blackhole("Mismatching on BH, see #12349")
 @pytest.mark.parametrize(
     "input_shapes",
     (
@@ -141,9 +131,6 @@ def test_binary_comp_opt_out(input_shapes, out_dtype, mem_configs, ttnn_function
     ),
 )
 def test_binary_comp_ops_scalar(input_shapes, scalar, out_dtype, mem_configs, ttnn_function, device):
-    if is_grayskull():
-        pytest.skip("GS does not support fp32/uint32/uint16 data types")
-
     in_data, input_tensor = data_gen_with_range(input_shapes, -100, 100, device, True)
 
     cq_id = 0
@@ -161,3 +148,51 @@ def test_binary_comp_ops_scalar(input_shapes, scalar, out_dtype, mem_configs, tt
 
     are_equal = torch.equal(output_tensor, golden_tensor)
     assert are_equal
+
+
+@pytest.mark.parametrize(
+    "input_shapes",
+    (
+        (torch.Size([100])),
+        (torch.Size([64, 64])),
+        (torch.Size([2, 32, 32])),
+        (torch.Size([1, 1, 320, 384])),
+        (torch.Size([1, 1, 3, 320, 384])),
+    ),
+)
+@pytest.mark.parametrize(
+    "mem_configs",
+    (
+        ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.DRAM),
+        ttnn.MemoryConfig(ttnn.TensorMemoryLayout.INTERLEAVED, ttnn.BufferType.L1),
+    ),
+)
+@pytest.mark.parametrize(
+    "ttnn_function",
+    (ttnn.eq, ttnn.ne),
+)
+@pytest.mark.parametrize("use_legacy", (True, False))
+def test_binary_comp_uint16_ops(input_shapes, mem_configs, ttnn_function, device, use_legacy):
+    in_data = torch.randint(0, 100, input_shapes, dtype=torch.int32)
+    in_data[-1] = 65535
+    # Make a copy of in_data so 50% of values are the same
+    other_data = in_data.clone()
+    # Replace half of them with new random values
+    mask = torch.rand(input_shapes) > 0.5
+    input_tensor = ttnn.from_torch(in_data, dtype=ttnn.uint16, layout=ttnn.TILE_LAYOUT, device=device)
+    other_data[mask] = torch.randint(0, 100, input_shapes, dtype=torch.int32)[mask]
+    other_data[-1] = 65535
+    other_tensor = ttnn.from_torch(other_data, dtype=ttnn.uint16, layout=ttnn.TILE_LAYOUT, device=device)
+    cq_id = 0
+    mem_cfg = mem_configs
+
+    output_tensor = ttnn_function(
+        input_tensor, other_tensor, memory_config=mem_cfg, queue_id=cq_id, use_legacy=use_legacy
+    )
+
+    golden_fn = ttnn.get_golden_function(ttnn_function)
+    golden_tensor = golden_fn(in_data, other_data)
+    golden_tensor = golden_tensor.int()
+
+    output_tensor = ttnn.to_torch(output_tensor)
+    assert torch.equal(output_tensor, golden_tensor)

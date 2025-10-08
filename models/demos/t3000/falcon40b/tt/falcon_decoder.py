@@ -2,23 +2,22 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 from typing import Optional, Tuple
 
-import ttnn
-from ttnn import ReplicateTensorToMesh
+import torch
 
+import ttnn
 from models.demos.t3000.falcon40b.tt.falcon_attention import TtFalconAttention
 from models.demos.t3000.falcon40b.tt.falcon_mlp import TtFalconMLP
-from models.utility_functions import torch2tt_tensor
-
 from models.demos.t3000.falcon40b.tt.model_utils import fused_partial_layernorm
+from ttnn import ReplicateTensorToMesh
 
 
 class TtFalconDecoderLayer:
     def __init__(
         self,
         mesh_device,
+        tt_ccl,
         state_dict,
         base_url,
         layer_num,
@@ -34,6 +33,7 @@ class TtFalconDecoderLayer:
         self.state_dict = state_dict
         self.base_url = base_url
         self.mesh_device = mesh_device
+        self.tt_ccl = tt_ccl
         self.layer_num = layer_num
         self.max_position_embeddings = max_position_embeddings
         self.model_config = model_config
@@ -44,6 +44,7 @@ class TtFalconDecoderLayer:
 
         self.self_attn = TtFalconAttention(
             mesh_device=mesh_device,
+            tt_ccl=tt_ccl,
             state_dict=state_dict,
             base_url=base_url,
             layer_num=layer_num,
@@ -56,6 +57,7 @@ class TtFalconDecoderLayer:
 
         self.mlp = TtFalconMLP(
             mesh_device=mesh_device,
+            tt_ccl=tt_ccl,
             state_dict=state_dict,
             base_url=base_url,
             layer_num=layer_num,
@@ -209,11 +211,17 @@ class TtFalconDecoderLayer:
                 replicated_hidden_states, self.model_config["BFP8_DTYPE"], memory_config=ttnn.DRAM_MEMORY_CONFIG
             )
 
-        replicated_hidden_states = ttnn.all_gather(
+        replicated_hidden_states = ttnn.experimental.all_gather_async(
             replicated_hidden_states,
+            persistent_output_buffer=None,
             dim=3,
+            multi_device_global_semaphore=self.tt_ccl.get_and_cycle_ag_semaphore_handles(),
             num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
             memory_config=self.model_config["DEFAULT_MEMCFG"],
+            barrier_semaphore=self.tt_ccl.get_and_cycle_barrier_semaphore_handle(),
+            chunks_per_sync=10,
+            num_workers_per_link=2,
+            num_buffers_per_channel=2,
         )
 
         if self.model_config["LN_INPUT_DTYPE"] != self.model_config["BFP8_DTYPE"]:
@@ -307,12 +315,19 @@ class TtFalconDecoderLayer:
             memory_config=self.model_config["DEFAULT_MEMCFG"],
         )
 
-        replicated_hidden_states = ttnn.all_gather(
+        replicated_hidden_states = ttnn.experimental.all_gather_async(
             replicated_hidden_states,
+            persistent_output_buffer=None,
             dim=3,
+            multi_device_global_semaphore=self.tt_ccl.get_and_cycle_ag_semaphore_handles(),
             num_links=self.model_config["ALL_GATHER_NUM_LINKS"],
             memory_config=self.model_config["DEFAULT_MEMCFG"],
+            barrier_semaphore=self.tt_ccl.get_and_cycle_barrier_semaphore_handle(),
+            chunks_per_sync=10,
+            num_workers_per_link=2,
+            num_buffers_per_channel=2,
         )
+
         replicated_hidden_states = ttnn.interleaved_to_sharded(
             replicated_hidden_states,
             self.model_config["DECODER_ALL_GATHER_OUTPUT_MEMCFG"],
@@ -325,6 +340,7 @@ class TtFalconDecoderLayer:
             bias=self.ln_attn_beta,
             memory_config=self.model_config["LN_ATTN_OUTPUT_MEMCFG"],
             program_config=self.model_config["LN_ATTN_PROGCFG"],
+            compute_kernel_config=ttnn.WormholeComputeKernelConfig(math_fidelity=ttnn.MathFidelity.HiFi4),
         )
         mlp_ln_output = ttnn.layer_norm(
             replicated_hidden_states,
@@ -333,6 +349,7 @@ class TtFalconDecoderLayer:
             bias=self.ln_mlp_beta,
             memory_config=self.model_config["LN_MLP_OUTPUT_MEMCFG"],
             program_config=self.model_config["LN_MLP_PROGCFG"],
+            compute_kernel_config=ttnn.WormholeComputeKernelConfig(math_fidelity=ttnn.MathFidelity.HiFi4),
         )
 
         output = hidden_states

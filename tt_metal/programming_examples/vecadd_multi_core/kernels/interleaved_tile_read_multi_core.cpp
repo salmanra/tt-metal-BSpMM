@@ -11,11 +11,13 @@ void kernel_main() {
     uint32_t a_addr = get_arg_val<uint32_t>(0);
     uint32_t b_addr = get_arg_val<uint32_t>(1);
     uint32_t n_tiles = get_arg_val<uint32_t>(2);
-    uint32_t core_id = get_arg_val<uint32_t>(3);  // Add core ID argument
+    uint32_t start_tile_id = get_arg_val<uint32_t>(3);
 
     // The circular buffers to read the tiles into
+    // These buffers can be accessed using either the index or the name, since
+    // the mapping was defined in the CreateKernel call.
     constexpr uint32_t cb_in0 = get_compile_time_arg_val(0);
-    constexpr uint32_t cb_in1 = get_compile_time_arg_val(1);
+    constexpr uint32_t cb_in1 = get_named_compile_time_arg_val("c_1");
 
     // Get the tile size used in the circular buffers. We assume the
     // circular buffers are created with the same tile size as the DRAM
@@ -27,25 +29,17 @@ void kernel_main() {
     //  Setting the page size to be tile_size_bytes works because we set it up
     //  explicitly in host code. This is usually a good idea as it makes coding
     //  easy. But may not be the most efficient way to do it in all cases.
-    const InterleavedAddrGenFast<true> a = {
-        .bank_base_address = a_addr,           // The base address of the buffer
-        .page_size = tile_size_bytes,          // The size of a buffer page
-        .data_format = DataFormat::Float16_b,  // The data format of the buffer
-    };
-    const InterleavedAddrGenFast<true> b = {
-        .bank_base_address = b_addr,
-        .page_size = tile_size_bytes,
-        .data_format = DataFormat::Float16_b,
-    };
+    constexpr auto a_args = TensorAccessorArgs<2>();
+    const auto a = TensorAccessor(a_args, a_addr, tile_size_bytes);
+    constexpr auto b_args = TensorAccessorArgs<a_args.next_compile_time_args_offset()>();
+    const auto b = TensorAccessor(b_args, b_addr, tile_size_bytes);
 
     // Calculate the range of tiles this core should process
-    const uint32_t tiles_per_core = n_tiles;
-    const uint32_t start_tile = core_id * tiles_per_core;
-    const uint32_t end_tile = start_tile + tiles_per_core;
+    const uint32_t end_tile_id = start_tile_id + n_tiles;
 
     // Now we loop over the assigned tiles and read them into the circular
     // buffers
-    for (uint32_t i = start_tile; i < end_tile; i++) {
+    for (uint32_t i = start_tile_id; i < end_tile_id; i++) {
         // First we make sure there is space in the circular buffers
         cb_reserve_back(cb_in0, 1);
         cb_reserve_back(

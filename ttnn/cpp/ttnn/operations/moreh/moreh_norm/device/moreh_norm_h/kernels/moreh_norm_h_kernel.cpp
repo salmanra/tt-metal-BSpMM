@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cpp/ttnn/deprecated/tt_dnn/kernels/compute/moreh_common.hpp"
+#include "ttnn/deprecated/tt_dnn/kernels/compute/moreh_common.hpp"
 
 namespace NAMESPACE {
 void MAIN {
@@ -46,7 +46,7 @@ void MAIN {
     constexpr uint32_t dst0 = 0;
     constexpr uint32_t dst1 = 1;
 
-    binary_op_init_common(tt::CBIndex::c_0, tt::CBIndex::c_0);
+    binary_op_init_common(tt::CBIndex::c_0, tt::CBIndex::c_0, tt::CBIndex::c_16);
 
     cb_wait_front(cb_one, onetile);              // comes from the reader
     cb_wait_front(cb_decimal, onetile);          // comes from the reader
@@ -131,9 +131,9 @@ void MAIN {
         cb_wait_front(cb_xpowadd, onetile);
         cb_reserve_back(cb_xpowsum, onetile);
 
-        reduce_init_delta_with_dt<false>(cb_xpowsum, cb_xpowadd, cb_one);
+        reduce_init_delta_with_dt(cb_xpowsum, cb_xpowadd, cb_one);
         reduce_tile(cb_xpowadd, cb_one, 0, 0, dst0);
-        reduce_revert_delta(cb_xpowsum);
+        reduce_uninit();
         tile_regs_commit();
 
         tile_regs_wait();

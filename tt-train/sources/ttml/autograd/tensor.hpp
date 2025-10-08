@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -41,6 +41,8 @@ public:
     tt::tt_metal::Tensor &get_grad();
     bool get_requires_grad() const;
     const std::optional<NodeId> &get_node() const;
+    const ttnn::Shape &get_shape() const;
+    uint32_t get_rank() const;
 
     void backward(bool retain_graph = false);
 

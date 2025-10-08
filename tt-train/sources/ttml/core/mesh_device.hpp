@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -11,7 +11,7 @@ namespace ttml::core {
 // should I implement pimpl or its fine
 class MeshDevice {
 public:
-    explicit MeshDevice(tt::tt_metal::distributed::MeshShape shape);
+    explicit MeshDevice(const tt::tt_metal::distributed::MeshShape& shape, const std::vector<int>& device_ids);
     MeshDevice(MeshDevice&& device) = default;
     MeshDevice(const MeshDevice&) = delete;
 
@@ -20,6 +20,7 @@ public:
     ~MeshDevice();
 
     [[nodiscard]] ttnn::distributed::MeshDevice& get_device();
+    [[nodiscard]] std::shared_ptr<ttnn::distributed::MeshDevice> get_device_ptr() const;
 
 private:
     std::shared_ptr<ttnn::distributed::MeshDevice> m_mesh_device;

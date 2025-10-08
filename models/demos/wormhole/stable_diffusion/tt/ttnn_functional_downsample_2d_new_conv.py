@@ -3,18 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 
-import ttnn
-import torch
 from typing import Optional
-import torch.nn as nn
-from tt_lib.fallback_ops import fallback_ops
-from models.utility_functions import torch_to_tt_tensor_rm, tt_to_torch_tensor
-from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import (
-    run_ttnn_conv_with_pre_and_post_tensor_formatting,
-)
-from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import conv_cache
 
-import math
+import torch
+
+import ttnn
+from models.demos.wormhole.stable_diffusion.sd_helper_funcs import reshard_for_output_channels_divisibility
+from models.demos.wormhole.stable_diffusion.tt.ttnn_functional_utility_functions import get_default_compute_config
 
 
 def permute_conv_parameters(weight, bias):
@@ -44,7 +39,6 @@ class downsample_2d:
         self,
         device,
         parameters,
-        reader_patterns_cache,
         batch_size,
         input_height,
         input_width,
@@ -94,10 +88,10 @@ class downsample_2d:
                 output_height=self.output_height,
                 output_width=self.output_width,
                 output_channels=self.out_channels,
+                input_channels_alignment=32,
                 compute_grid_size=self.device.compute_with_storage_grid_size(),
                 block_shard_orientation=ttnn.ShardOrientation.ROW_MAJOR,
                 enable_channels_padding=False,
-                is_out_tiled=True,
             ),
             tile_size=32,
         )
@@ -124,55 +118,45 @@ class downsample_2d:
         #     hidden_states = ttnn.to_memory_config(hidden_states, self.conv.conv.input_sharded_memory_config)
         # hidden_states = self.conv(hidden_states)
         conv_config = ttnn.Conv2dConfig(
-            dtype=ttnn.bfloat8_b,
             weights_dtype=ttnn.bfloat8_b,
-            activation="",
             shard_layout=self.shard_layout,
-            input_channels_alignment=32,
-            transpose_shards=False,
             reshard_if_not_optimal=False,
+            enable_act_double_buffer=True,
+            enable_weights_double_buffer=True,
         )
 
         if hidden_states.memory_config() != self.input_memory_config:
             hidden_states = ttnn.to_memory_config(hidden_states, self.input_memory_config)
 
-        compute_config = ttnn.init_device_compute_kernel_config(
-            self.device.arch(),
-            math_fidelity=ttnn.MathFidelity.LoFi,
-            math_approx_mode=True,
-            fp32_dest_acc_en=True,
-            packer_l1_acc=False,
-        )
+        compute_config = get_default_compute_config(self.device)
         if self.conv_config_override and "act_block_h" in self.conv_config_override:
             conv_config.act_block_h_override = self.conv_config_override["act_block_h"]
 
-        [hidden_states, [self.conv_weights, self.conv_bias]] = ttnn.conv2d(
+        conv_kwargs = {
+            "in_channels": self.in_channels,
+            "out_channels": self.out_channels,
+            "batch_size": self.batch_size,
+            "input_height": self.input_height,
+            "input_width": self.input_width,
+            "kernel_size": (3, 3),
+            "stride": (self.stride, self.stride),
+            "padding": (1, 1),
+            "dilation": (1, 1),
+            "groups": 1,
+            "device": self.device,
+            "conv_config": conv_config,
+            "slice_config": ttnn.Conv2dL1FullSliceConfig,
+        }
+
+        hidden_states, [self.conv_weights, self.conv_bias] = ttnn.conv2d(
             input_tensor=hidden_states,
-            in_channels=self.in_channels,
-            out_channels=self.out_channels,
-            kernel_size=(3, 3),
-            stride=(self.stride, self.stride),
-            padding=(1, 1),
-            device=self.device,
-            batch_size=self.batch_size,
-            input_height=self.input_height,
-            input_width=self.input_width,
+            **conv_kwargs,
             weight_tensor=self.conv_weights,
             bias_tensor=self.conv_bias,
-            conv_config=conv_config,
             compute_config=compute_config,
-            conv_op_cache=conv_cache,
-            return_output_dim=False,
+            dtype=ttnn.bfloat8_b,
             return_weights_and_bias=True,
         )
-        # hidden_states = run_ttnn_conv_with_pre_and_post_tensor_formatting(
-        #     self.device,
-        #     self.conv,
-        #     hidden_states,
-        #     self.conv.batch_size,
-        #     self.conv.output_height,
-        #     self.conv.output_width,
-        #     self.conv.out_channels,
-        # )
+        hidden_states = reshard_for_output_channels_divisibility(hidden_states, self.out_channels)
 
         return hidden_states

@@ -2,8 +2,10 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
 import argparse
+
+import torch
+
 from models.demos.t3000.mixtral8x7b.tt.model_config import TtModelArgs
 
 
@@ -29,6 +31,9 @@ def repack_mixtral_weights(ckpt_dir, repack_dir):
             or k in ["tok_embeddings.weight", "norm.weight", "output.weight"]
         )
     }
+
+    # clear the state dict to lower the memory footprint
+    state_dict.clear()
 
     base_address = "feed_forward."
     for l in range(model_args.n_layers):

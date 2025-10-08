@@ -2,37 +2,57 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <chrono>
-
-#include "ttnn/tensor/host_buffer/types.hpp"
-#include "ttnn/tensor/tensor.hpp"
-#include "ttnn/operation.hpp"
-#include "ttnn/operations/normalization/softmax/softmax.hpp"
+#include <fmt/base.h>
 #include <tt-metalium/constants.hpp>
 #include <tt-metalium/host_api.hpp>
-#include "ttnn/operations/functions.hpp"
-#include "ttnn/operations/matmul/matmul.hpp"
-#include "ttnn/operations/normalization/layernorm/layernorm.hpp"
-#include "ttnn/operations/eltwise/binary/binary.hpp"
-#include "ttnn/operations/experimental/transformer/split_query_key_value_and_split_heads/split_query_key_value_and_split_heads.hpp"
-#include "ttnn/operations/experimental/transformer/concatenate_heads/concatenate_heads.hpp"
+#include <chrono>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <string>
+#include <utility>
 
-using Parameters = std::map<std::string, Tensor>;
+#include <tt_stl/assert.hpp>
+#include <tt-metalium/bfloat16.hpp>
+#include <tt-metalium/buffer_types.hpp>
+#include <tt-metalium/core_coord.hpp>
+#include <tt-metalium/device.hpp>
+#include <tt-logger/tt-logger.hpp>
+#include <tt-metalium/shape.hpp>
+#include <tt-metalium/shape_base.hpp>
+#include <tt-metalium/tile.hpp>
+#include "ttnn/decorators.hpp"
+#include "ttnn/operations/data_movement/reshape_view/reshape.hpp"
+#include "ttnn/operations/eltwise/binary/binary.hpp"
+#include "ttnn/operations/eltwise/unary/common/unary_op_types.hpp"
+#include "ttnn/operations/experimental/transformer/concatenate_heads/concatenate_heads.hpp"
+#include "ttnn/operations/experimental/transformer/split_query_key_value_and_split_heads/split_query_key_value_and_split_heads.hpp"
+#include "ttnn/operations/functions.hpp"
+#include "ttnn/operations/matmul/device/matmul_op.hpp"
+#include "ttnn/operations/normalization/layernorm/layernorm.hpp"
+#include "ttnn/operations/normalization/softmax/softmax.hpp"
+#include "ttnn/tensor/shape/shape.hpp"
+#include "ttnn/tensor/tensor.hpp"
+#include "ttnn/tensor/types.hpp"
+
+using Parameters = std::map<std::string, ttnn::Tensor>;
 using ttnn::operations::unary::UnaryOpType;
 using ttnn::operations::unary::UnaryWithParam;
 
-MemoryConfig l1_memory_config = tt::tt_metal::MemoryConfig{
-    .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED, .buffer_type = tt::tt_metal::BufferType::L1};
-MemoryConfig dram_memory_config = tt::tt_metal::MemoryConfig{
-    .memory_layout = tt::tt_metal::TensorMemoryLayout::INTERLEAVED, .buffer_type = tt::tt_metal::BufferType::DRAM};
+ttnn::MemoryConfig l1_memory_config =
+    ttnn::MemoryConfig{tt::tt_metal::TensorMemoryLayout::INTERLEAVED, tt::tt_metal::BufferType::L1};
+ttnn::MemoryConfig dram_memory_config =
+    ttnn::MemoryConfig{tt::tt_metal::TensorMemoryLayout::INTERLEAVED, tt::tt_metal::BufferType::DRAM};
 
-Tensor encoder(
-    Tensor&& hidden_states,
-    const Tensor& attention_mask,
+ttnn::Tensor encoder(
+    ttnn::Tensor&& hidden_states,
+    const ttnn::Tensor& attention_mask,
     const Parameters& parameters,
     std::size_t encoder_index,
     const std::uint32_t head_size) {
-    auto batch_size = hidden_states.get_padded_shape()[0];
+    auto batch_size = hidden_states.padded_shape()[0];
 
     auto fused_qkv_matmul_program_config = ttnn::operations::matmul::MatmulMultiCoreReuseMultiCastProgramConfig{
         .compute_with_storage_grid_size = {12, batch_size},
@@ -192,7 +212,7 @@ Tensor encoder(
     return feedforward_layernorm_output;
 }
 
-Tensor qa_head(Tensor&& hidden_states, const Parameters& parameters) {
+ttnn::Tensor qa_head(ttnn::Tensor&& hidden_states, const Parameters& parameters) {
     auto output = ttnn::operations::matmul::matmul(
         hidden_states, parameters.at("qa_head_weight"), /*bias=*/std::nullopt, ttnn::operations::matmul::Matmul{});
     hidden_states.deallocate();
@@ -210,11 +230,12 @@ void test_bert() {
     using tt::tt_metal::Tensor;
 
     int device_id = 0;
-    auto device = tt::tt_metal::CreateDevice(device_id);
+    auto device_owner = tt::tt_metal::distributed::MeshDevice::create_unit_mesh(device_id);
+    auto device = device_owner.get();
     CoreCoord compute_grid_size = device->compute_with_storage_grid_size();
 
     if (compute_grid_size.x * compute_grid_size.y == 88) {
-        tt::log_info(tt::LogTest, "Skipping test_bert for E75");
+        log_info(tt::LogTest, "Skipping test_bert for E75");
         return;
     }
 
@@ -227,114 +248,101 @@ void test_bert() {
     std::uint32_t hidden_size = num_heads * head_size;
     std::uint32_t intermediate_size = hidden_size * 4;
 
-    auto attention_mask = ttnn::random::uniform(
-                              bfloat16(-1.0f),
-                              bfloat16(1.0f),
-                              ttnn::SimpleShape({batch_size, 1, TILE_HEIGHT, sequence_size}),
-                              Layout::TILE)
-                              .to(device, l1_memory_config);
+    auto attention_mask =
+        ttnn::random::uniform(
+            bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({batch_size, 1, TILE_HEIGHT, sequence_size}), Layout::TILE)
+            .to_device(device, l1_memory_config);
 
     auto parameters = Parameters{};
     for (auto encoder_index = 0; encoder_index < num_encoders; encoder_index++) {
         parameters.emplace(
             fmt::format("fused_qkv_weight_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f), bfloat16(1.0f), ttnn::SimpleShape({1, 1, hidden_size, hidden_size * 3}), Layout::TILE)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, hidden_size, hidden_size * 3}), Layout::TILE)
+                .to_device(device, dram_memory_config));
         parameters.emplace(
             fmt::format("fused_qkv_bias_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f), bfloat16(1.0f), ttnn::SimpleShape({1, 1, TILE_HEIGHT, hidden_size * 3}), Layout::TILE)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, TILE_HEIGHT, hidden_size * 3}), Layout::TILE)
+                .to_device(device, dram_memory_config));
         parameters.emplace(
             fmt::format("selfout_weight_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f), bfloat16(1.0f), ttnn::SimpleShape({1, 1, hidden_size, hidden_size}), Layout::TILE)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, hidden_size, hidden_size}), Layout::TILE)
+                .to_device(device, dram_memory_config));
         parameters.emplace(
             fmt::format("selfout_bias_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f), bfloat16(1.0f), ttnn::SimpleShape({1, 1, TILE_HEIGHT, hidden_size}), Layout::TILE)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, TILE_HEIGHT, hidden_size}), Layout::TILE)
+                .to_device(device, dram_memory_config));
         parameters.emplace(
             fmt::format("attention_layernorm_weight_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f), bfloat16(1.0f), ttnn::SimpleShape({1, 1, TILE_HEIGHT, TILE_WIDTH}), Layout::ROW_MAJOR)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, TILE_HEIGHT, TILE_WIDTH}), Layout::ROW_MAJOR)
+                .to_device(device, dram_memory_config));
         parameters.emplace(
             fmt::format("attention_layernorm_bias_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f), bfloat16(1.0f), ttnn::SimpleShape({1, 1, TILE_HEIGHT, TILE_WIDTH}), Layout::ROW_MAJOR)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, TILE_HEIGHT, TILE_WIDTH}), Layout::ROW_MAJOR)
+                .to_device(device, dram_memory_config));
         parameters.emplace(
             fmt::format("ff1_weight_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f),
-                bfloat16(1.0f),
-                ttnn::SimpleShape({1, 1, hidden_size, intermediate_size}),
-                Layout::TILE)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, hidden_size, intermediate_size}), Layout::TILE)
+                .to_device(device, dram_memory_config));
         parameters.emplace(
             fmt::format("ff1_bias_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f),
-                bfloat16(1.0f),
-                ttnn::SimpleShape({1, 1, TILE_HEIGHT, intermediate_size}),
-                Layout::TILE)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, TILE_HEIGHT, intermediate_size}), Layout::TILE)
+                .to_device(device, dram_memory_config));
         parameters.emplace(
             fmt::format("ff2_weight_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f),
-                bfloat16(1.0f),
-                ttnn::SimpleShape({1, 1, intermediate_size, hidden_size}),
-                Layout::TILE)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, intermediate_size, hidden_size}), Layout::TILE)
+                .to_device(device, dram_memory_config));
         parameters.emplace(
             fmt::format("ff2_bias_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f), bfloat16(1.0f), ttnn::SimpleShape({1, 1, TILE_HEIGHT, hidden_size}), Layout::TILE)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, TILE_HEIGHT, hidden_size}), Layout::TILE)
+                .to_device(device, dram_memory_config));
         parameters.emplace(
             fmt::format("feedforward_layernorm_weight_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f), bfloat16(1.0f), ttnn::SimpleShape({1, 1, TILE_HEIGHT, TILE_WIDTH}), Layout::ROW_MAJOR)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, TILE_HEIGHT, TILE_WIDTH}), Layout::ROW_MAJOR)
+                .to_device(device, dram_memory_config));
         parameters.emplace(
             fmt::format("feedforward_layernorm_bias_{}", encoder_index),
             ttnn::random::uniform(
-                bfloat16(-1.0f), bfloat16(1.0f), ttnn::SimpleShape({1, 1, TILE_HEIGHT, TILE_WIDTH}), Layout::ROW_MAJOR)
-                .to(device, dram_memory_config));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, TILE_HEIGHT, TILE_WIDTH}), Layout::ROW_MAJOR)
+                .to_device(device, dram_memory_config));
     };
     parameters.emplace(
         "qa_head_weight",
         ttnn::random::uniform(
-            bfloat16(-1.0f), bfloat16(1.0f), ttnn::SimpleShape({1, 1, hidden_size, TILE_WIDTH}), Layout::TILE)
-            .to(device, dram_memory_config));
+            bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, hidden_size, TILE_WIDTH}), Layout::TILE)
+            .to_device(device, dram_memory_config));
     parameters.emplace(
         "qa_head_bias",
         ttnn::reshape(
             ttnn::random::uniform(
-                bfloat16(-1.0f), bfloat16(1.0f), ttnn::SimpleShape({1, 1, TILE_HEIGHT, TILE_WIDTH}), Layout::TILE)
-                .to(device, dram_memory_config),
-            ttnn::SimpleShape({1, 1, 1, TILE_WIDTH})));
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({1, 1, TILE_HEIGHT, TILE_WIDTH}), Layout::TILE)
+                .to_device(device, dram_memory_config),
+            ttnn::Shape({1, 1, 1, TILE_WIDTH})));
 
     auto run_bert = [&]() {
-        tt::log_debug(tt::LogTest, "run_bert started");
+        log_debug(tt::LogTest, "run_bert started");
         auto begin = std::chrono::steady_clock::now();
-        auto hidden_states = ttnn::random::uniform(
-                                 bfloat16(-1.0f),
-                                 bfloat16(1.0f),
-                                 ttnn::SimpleShape({batch_size, 1, sequence_size, hidden_size}),
-                                 Layout::TILE)
-                                 .to(device, l1_memory_config);
+        auto hidden_states =
+            ttnn::random::uniform(
+                bfloat16(-1.0f), bfloat16(1.0f), ttnn::Shape({batch_size, 1, sequence_size, hidden_size}), Layout::TILE)
+                .to_device(device, l1_memory_config);
         for (auto encoder_index = 0; encoder_index < num_encoders; encoder_index++) {
             hidden_states = encoder(std::move(hidden_states), attention_mask, parameters, encoder_index, head_size);
         }
         auto output = qa_head(std::move(hidden_states), parameters).cpu();
         auto end = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-        tt::log_info(tt::LogTest, "run_bert finished in {} microseconds", duration);
+        log_info(tt::LogTest, "run_bert finished in {} microseconds", duration);
         return duration;
     };
 
@@ -345,16 +353,13 @@ void test_bert() {
         }
         auto average_duration = total_duration / num_iterations;
         auto num_samples_per_second = 1e6 / average_duration * batch_size;
-        tt::log_info(tt::LogTest, "total duration: {} microseconds", total_duration);
-        tt::log_info(tt::LogTest, "average duration: {} average_duration", total_duration);
-        tt::log_info(tt::LogTest, "samples per second: {}", num_samples_per_second);
+        log_info(tt::LogTest, "total duration: {} microseconds", total_duration);
+        log_info(tt::LogTest, "average duration: {} average_duration", total_duration);
+        log_info(tt::LogTest, "samples per second: {}", num_samples_per_second);
     };
-    device->enable_program_cache();
+
     run_bert();
     run_loop();
-    device->disable_and_clear_program_cache();
-
-    TT_FATAL(tt::tt_metal::CloseDevice(device), "Error");
 }
 
 int main(int argc, char** argv) {

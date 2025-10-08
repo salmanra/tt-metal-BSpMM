@@ -1,11 +1,16 @@
-// SPDX-FileCopyrightText: (c) 2025 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
 #include "core/distributed/distributed.hpp"
 
+#include <core/ttnn_all_includes.hpp>
+#include <ttnn/operations/creation.hpp>
+#include <ttnn/operations/eltwise/binary/binary.hpp>
+
 #include "autograd/auto_context.hpp"
 #include "core/tt_tensor_utils.hpp"
+#include "ttnn_fixed/distributed/ttnn_ops.hpp"
 
 namespace ttml::core::distributed {
 
@@ -19,8 +24,7 @@ ttnn::Tensor synchronize_tensor(const ttnn::Tensor& tensor) {
     }
 
     // all_reduce Mean is not supported, use sum and divide by #devices
-    auto result = ttnn::experimental::all_reduce(
-        tensor, ttnn::operations::reduction::ReduceType::Sum, 1, std::nullopt, ttnn::ccl::Topology::Ring);
+    auto result = ttnn_fixed::distributed::all_reduce(tensor);
     result = ttnn::multiply(result, 1.0F / static_cast<float>(devices_count));
     return result;
 }

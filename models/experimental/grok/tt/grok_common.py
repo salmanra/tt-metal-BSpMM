@@ -5,8 +5,8 @@
 from loguru import logger
 import torch
 import ttnn
-from ttnn import ShardTensorToMesh, ConcatMeshToTensor, ReplicateTensorToMesh
-from models.utility_functions import nearest_32
+from ttnn import ReplicateTensorToMesh
+from models.common.utility_functions import nearest_32
 
 
 class LightweightModule:

@@ -6,10 +6,10 @@ import torch
 
 import ttnn
 import pytest
-from models.utility_functions import comp_allclose_and_pcc
+from models.common.utility_functions import comp_allclose_and_pcc
 from loguru import logger
 import torch.nn.functional as F
-from models.utility_functions import is_wormhole_b0
+from models.common.utility_functions import is_wormhole_b0
 
 from tests.ttnn.unit_tests.operations.test_utils import (
     get_compute_kernel_options,
@@ -469,7 +469,7 @@ def test_softmin_backward_optional_output_tensor(shape_dim, dtype, device):
         ttnn.bfloat16,
     ],
 )
-def test_softmin_callback(shape_dim_strategy, dtype, device, use_program_cache):
+def test_softmin_callback(shape_dim_strategy, dtype, device):
     shape, dim, strategy = shape_dim_strategy
     torch.manual_seed(0)
     rtol = atol = 0.05
@@ -500,7 +500,7 @@ def test_softmin_callback(shape_dim_strategy, dtype, device, use_program_cache):
         ttnn.bfloat16,
     ],
 )
-def test_softmin_backward_callback(shape_dim_strategy, dtype, device, use_program_cache):
+def test_softmin_backward_callback(shape_dim_strategy, dtype, device):
     shape, dim, strategy = shape_dim_strategy
     torch.manual_seed(0)
     rtol = atol = 0.05

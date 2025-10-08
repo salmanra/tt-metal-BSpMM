@@ -7,8 +7,8 @@ import torch.nn as nn
 
 import ttnn
 
-from models.helper_funcs import Linear as TTLinear
-from models.utility_functions import (
+from models.common.helper_funcs import Linear as TTLinear
+from models.common.utility_functions import (
     tt2torch_tensor,
     pad_by_zero,
 )
@@ -31,8 +31,8 @@ class TtRobertaPooler(nn.Module):
         self.dense_weight = pad_by_zero(state_dict[f"{base_address}.dense.weight"], self.device)[0]
         self.dense_bias = pad_by_zero(state_dict[f"{base_address}.dense.bias"], self.device)[0]
         self.dense_linear = TTLinear(
-            self.dense_weight.shape.with_tile_padding()[-1],
-            self.dense_weight.shape.with_tile_padding()[-2],
+            self.dense_weight.padded_shape[-1],
+            self.dense_weight.padded_shape[-2],
             self.dense_weight,
             self.dense_bias,
         )

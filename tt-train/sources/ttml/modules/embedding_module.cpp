@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -14,11 +14,11 @@
 
 namespace ttml::modules {
 
+using namespace tt::constants;
+
 void Embedding::initialize_tensors(uint32_t num_embeddings, uint32_t embedding_dim) {
-    auto* device = &autograd::ctx().get_device();
     m_weight = autograd::create_tensor();
-    init::normal_init(
-        m_weight, core::create_shape({1, 1, num_embeddings, embedding_dim}), /* normal params */ {0.F, 1.F});
+    init::normal_init(m_weight, ttnn::Shape({1, 1, num_embeddings, embedding_dim}), /* normal params */ {0.F, 1.F});
 }
 
 Embedding::Embedding(uint32_t num_embeddings, uint32_t embedding_dim) {
@@ -37,7 +37,7 @@ Embedding::Embedding(uint32_t num_embeddings, uint32_t embedding_dim) {
 }
 
 autograd::TensorPtr Embedding::operator()(const autograd::TensorPtr& tensor) {
-    auto sentence_size = tensor->get_value().get_logical_shape()[-1];
+    auto sentence_size = tensor->get_value().logical_shape()[-1];
     if (sentence_size % TILE_HEIGHT != 0 || sentence_size % TILE_WIDTH != 0) {
         throw std::logic_error(fmt::format(
             "sentence_size must be a multiple of TILE_HEIGHT and TILE_WIDTH, current sentence_size {}", sentence_size));
@@ -45,13 +45,14 @@ autograd::TensorPtr Embedding::operator()(const autograd::TensorPtr& tensor) {
     return ops::embedding_op(tensor, m_weight);
 }
 
-void Embedding::set_weight(const autograd::TensorPtr& weight) {
-    m_weight = weight;
-    override_tensor(m_weight, "weight");
-}
-
 autograd::TensorPtr Embedding::get_weight() const {
     return m_weight;
+}
+
+Embedding::Embedding(const autograd::TensorPtr& weight) {
+    m_weight = weight;
+    create_name("embedding");
+    register_tensor(m_weight, "weight");
 }
 
 }  // namespace ttml::modules

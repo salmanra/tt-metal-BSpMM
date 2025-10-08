@@ -2,20 +2,52 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <algorithm>
 #include <chrono>
-#include <functional>
-#include <random>
-#include <thread>
-
+#include <errno.h>
+#include <fmt/base.h>
+#include <stdlib.h>
 #include <tt-metalium/bfloat16.hpp>
-#include <tt-metalium/test_tiles.hpp>
 #include <tt-metalium/device.hpp>
-#include <tt-metalium/tt_metal.hpp>
-#include <tt-metalium/util.hpp>
 #include <tt-metalium/host_api.hpp>
-#include <tt-metalium/dprint_server.hpp>
+#include <tt-metalium/tensor_accessor_args.hpp>
+#include <tt-metalium/tilize_utils.hpp>
+#include <tt-metalium/tt_metal.hpp>
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <exception>
+#include <iterator>
+#include <map>
+#include <memory>
+#include <optional>
+#include <ratio>
+#include <set>
+#include <string>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include <tt_stl/assert.hpp>
+#include <tt-metalium/base_types.hpp>
+#include <tt-metalium/buffer.hpp>
+#include <tt-metalium/buffer_types.hpp>
+#include <tt-metalium/circular_buffer_config.hpp>
+#include <tt-metalium/core_coord.hpp>
+#include <tt-metalium/data_types.hpp>
+#include <tt-metalium/tt_metal_profiler.hpp>
+#include "hostdevcommon/common_values.hpp"
+#include "hostdevcommon/kernel_structs.h"
+#include <tt-metalium/kernel_types.hpp>
+#include <tt-logger/tt-logger.hpp>
+#include <tt-metalium/program.hpp>
+#include <tt_stl/span.hpp>
+#include "test_common.hpp"
+#include <tt-metalium/tt_backend_api_types.hpp>
 #include "tt_metal/test_utils/deprecated/tensor.hpp"
+#include <tt-metalium/mesh_device.hpp>
+#include <tt-metalium/distributed.hpp>
 
 using std::vector;
 using namespace tt;
@@ -34,7 +66,7 @@ CoreCoord get_core_range(
 
 // took & revise from bmm_op_multi_core_reuse_mcast_2d_optimized.cpp
 tt_metal::Program create_program_mcast_in0_in1(
-    tt_metal::IDevice* device,
+    tt_metal::distributed::MeshDevice* device,
     MathFidelity math_fidelity,
     CoreCoord core_range,
     uint32_t B,
@@ -47,20 +79,20 @@ tt_metal::Program create_program_mcast_in0_in1(
     uint32_t out_subblock_w,
     uint32_t per_core_M,
     uint32_t per_core_N,
-    const std::shared_ptr<tt_metal::Buffer>& in0_buffer,
-    const std::shared_ptr<tt_metal::Buffer>& in1_buffer,
-    const std::shared_ptr<tt_metal::Buffer>& bias_buffer,
-    const std::shared_ptr<tt_metal::Buffer>& out_buffer,
+    const std::shared_ptr<tt_metal::distributed::MeshBuffer>& in0_buffer,
+    const std::shared_ptr<tt_metal::distributed::MeshBuffer>& in1_buffer,
+    const std::shared_ptr<tt_metal::distributed::MeshBuffer>& bias_buffer,
+    const std::shared_ptr<tt_metal::distributed::MeshBuffer>& out_buffer,
     tt::DataFormat in0_data_format,
     tt::DataFormat in1_data_format,
     tt::DataFormat bias_data_format,
     tt::DataFormat output_data_format) {
     tt_metal::Program program{};
 
-    uint32_t in0_single_tile_size = tt_metal::detail::TileSize(in0_data_format);
-    uint32_t in1_single_tile_size = tt_metal::detail::TileSize(in1_data_format);
-    uint32_t bias_single_tile_size = tt_metal::detail::TileSize(bias_data_format);
-    uint32_t output_single_tile_size = tt_metal::detail::TileSize(output_data_format);
+    uint32_t in0_single_tile_size = tt::tile_size(in0_data_format);
+    uint32_t in1_single_tile_size = tt::tile_size(in1_data_format);
+    uint32_t bias_single_tile_size = tt::tile_size(bias_data_format);
+    uint32_t output_single_tile_size = tt::tile_size(output_data_format);
 
     uint32_t in0_block_tiles = per_core_M * in0_block_w;
     uint32_t in0_CB_tiles = in0_block_tiles * 2;  // double buffer
@@ -184,17 +216,11 @@ tt_metal::Program create_program_mcast_in0_in1(
     auto top_left_core_plus_one_physical = device->worker_core_from_logical_core(top_left_core_plus_one);
     auto bottom_right_core_physical = device->worker_core_from_logical_core(bottom_right_core);
 
-    bool in0_is_dram = in0_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
-    bool in1_is_dram = in1_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool in3_is_dram = true;
     if (bias_buffer != nullptr) {
-        in3_is_dram = bias_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+        in3_is_dram = bias_buffer->device_local_config().buffer_type == tt_metal::BufferType::DRAM;
     }
-    bool out_is_dram = out_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     std::vector<uint32_t> in0_sender_compile_time_args = {
-        // interleaved accessor args
-        (std::uint32_t)in0_is_dram,
-
         // in0 tensor args
         (std::uint32_t)1,            // in0_tensor_stride_w
         (std::uint32_t)K,            // in0_tensor_stride_h
@@ -215,11 +241,8 @@ tt_metal::Program create_program_mcast_in0_in1(
         (std::uint32_t)M * K,  // MtKt
         (std::uint32_t)B       // batch
     };
+    tt::tt_metal::TensorAccessorArgs(in0_buffer).append_to(in0_sender_compile_time_args);
     std::vector<uint32_t> in1_sender_writer_compile_time_args = {
-        // interleaved accessor args
-        (std::uint32_t)in1_is_dram,
-        (std::uint32_t)out_is_dram,
-
         // READER
         // in1 tensor args
         (std::uint32_t)1,                // in1_tensor_stride_w
@@ -255,7 +278,10 @@ tt_metal::Program create_program_mcast_in0_in1(
         // batch args
         (std::uint32_t)M * N  // MtNt
     };
+    tt::tt_metal::TensorAccessorArgs(in1_buffer).append_to(in1_sender_writer_compile_time_args);
+    tt::tt_metal::TensorAccessorArgs(out_buffer).append_to(in1_sender_writer_compile_time_args);
     if (bias_buffer != nullptr) {
+        tt::tt_metal::TensorAccessorArgs(bias_buffer).append_to(in1_sender_writer_compile_time_args);
         // in3 mcast args
         in1_sender_writer_compile_time_args.push_back((std::uint32_t)in3_is_dram);
         // in1 tensor args
@@ -281,9 +307,6 @@ tt_metal::Program create_program_mcast_in0_in1(
         (std::uint32_t)B  // batch
     };
     std::vector<uint32_t> in1_receiver_writer_compile_time_args = {
-        // interleaved accessor args
-        (std::uint32_t)out_is_dram,
-
         // READER
         // in1 block args
         (std::uint32_t)per_core_N * in0_block_w,  // in1_block_num_tiles
@@ -317,11 +340,12 @@ tt_metal::Program create_program_mcast_in0_in1(
         in1_receiver_writer_compile_time_args.push_back((std::uint32_t)in3_mcast_sender_semaphore_id);
         in1_receiver_writer_compile_time_args.push_back((std::uint32_t)in3_mcast_receiver_semaphore_id);
     }
+    tt::tt_metal::TensorAccessorArgs(out_buffer).append_to(in1_receiver_writer_compile_time_args);
 
-    std::map<string, string> mm_kernel_defines;
-    std::map<string, string> mm_kernel_in1_sender_writer_defines;
-    std::map<string, string> mm_kernel_in1_receiver_writer_defines;
-    std::map<string, string> mm_kernel_in1_receiver_writer_other_noc_setup_defines;
+    std::map<std::string, std::string> mm_kernel_defines;
+    std::map<std::string, std::string> mm_kernel_in1_sender_writer_defines;
+    std::map<std::string, std::string> mm_kernel_in1_receiver_writer_defines;
+    std::map<std::string, std::string> mm_kernel_in1_receiver_writer_other_noc_setup_defines;
     if (bias_buffer != nullptr) {
         mm_kernel_defines["FUSE_BIAS"] = "1";
         mm_kernel_in1_sender_writer_defines["FUSE_BIAS"] = "1";
@@ -485,7 +509,7 @@ tt_metal::Program create_program_mcast_in0_in1(
     bool fp32_dest_acc_en = false;
     // Gelu currently has better accuracy when run in approx mode
     bool math_approx_mode = false;
-    auto mm_kernel = tt_metal::CreateKernel(
+    tt_metal::CreateKernel(
         program,
         "tests/tt_metal/tt_metal/perf_microbenchmark/old/matmul/kernels/"
         "bmm_large_block_zm_fused_bias_activation.cpp",
@@ -502,13 +526,13 @@ tt_metal::Program create_program_mcast_in0_in1(
     tt_metal::CircularBufferConfig src_cb0_config =
         tt_metal::CircularBufferConfig(in0_CB_size, {{src0_cb_index, in0_data_format}})
             .set_page_size(src0_cb_index, in0_single_tile_size);
-    auto cb_src0 = tt_metal::CreateCircularBuffer(program, all_cores, src_cb0_config);
+    tt_metal::CreateCircularBuffer(program, all_cores, src_cb0_config);
 
     uint32_t src1_cb_index = tt::CBIndex::c_1;
     tt_metal::CircularBufferConfig src_cb1_config =
         tt_metal::CircularBufferConfig(in1_CB_size, {{src1_cb_index, in1_data_format}})
             .set_page_size(src1_cb_index, in1_single_tile_size);
-    auto cb_src1 = tt_metal::CreateCircularBuffer(program, all_cores, src_cb1_config);
+    tt_metal::CreateCircularBuffer(program, all_cores, src_cb1_config);
 
     uint32_t output_cb_index = tt::CBIndex::c_16;
     uint32_t interm0_cb_index = tt::CBIndex::c_24;
@@ -518,7 +542,7 @@ tt_metal::Program create_program_mcast_in0_in1(
         tt_metal::CircularBufferConfig(out_CB_size, interim_and_out_data_format_spec)
             .set_page_size(output_cb_index, output_single_tile_size)
             .set_page_size(interm0_cb_index, output_single_tile_size);
-    auto cb_output = tt_metal::CreateCircularBuffer(program, CoreRangeSet({all_cores}), cb_output_config);
+    tt_metal::CreateCircularBuffer(program, CoreRangeSet({all_cores}), cb_output_config);
 
     // CB for bias
     if (bias_buffer != nullptr) {
@@ -526,20 +550,20 @@ tt_metal::Program create_program_mcast_in0_in1(
         tt_metal::CircularBufferConfig cb_src3_config =
             tt_metal::CircularBufferConfig(in3_CB_size, {{src3_cb_index, bias_data_format}})
                 .set_page_size(src3_cb_index, bias_single_tile_size);
-        auto cb_src3 = tt_metal::CreateCircularBuffer(program, all_cores, cb_src3_config);
+        tt_metal::CreateCircularBuffer(program, all_cores, cb_src3_config);
 
         uint32_t interm1_cb_index = 25;
         tt_metal::CircularBufferConfig cb_interm1_config =
             tt_metal::CircularBufferConfig(interm1_CB_size, {{interm1_cb_index, output_data_format}})
                 .set_page_size(interm1_cb_index, output_single_tile_size);
-        auto cb_interm1 = tt_metal::CreateCircularBuffer(program, all_cores, cb_interm1_config);
+        tt_metal::CreateCircularBuffer(program, all_cores, cb_interm1_config);
     }
 
     // Parameters for last row, col, or block
     uint32_t last_block_h = M % per_core_M == 0 ? per_core_M : M % per_core_M;
     uint32_t last_block_w = N % per_core_N == 0 ? per_core_N : N % per_core_N;
-    uint32_t last_block_num_nonzero_subblocks_h = (last_block_h - 1) / out_subblock_h + 1;
-    uint32_t last_block_num_nonzero_subblocks_w = (last_block_w - 1) / out_subblock_w + 1;
+    uint32_t last_block_num_nonzero_subblocks_h = ((last_block_h - 1) / out_subblock_h) + 1;
+    uint32_t last_block_num_nonzero_subblocks_w = ((last_block_w - 1) / out_subblock_w) + 1;
     uint32_t last_subblock_of_last_block_h =
         last_block_h % out_subblock_h == 0 ? out_subblock_h : last_block_h % out_subblock_h;
     uint32_t last_subblock_of_last_block_w =
@@ -595,7 +619,8 @@ tt_metal::Program create_program_mcast_in0_in1(
                     // WRITER
                     // out tensor args
                     (std::uint32_t)out_buffer->address(),
-                    (std::uint32_t)core_idx_x * per_core_N + core_idx_y * per_core_M * N,  // out_tensor_start_tile_id
+                    ((std::uint32_t)core_idx_x * per_core_N) +
+                        (core_idx_y * per_core_M * N),  // out_tensor_start_tile_id
 
                     // padding args (READER)
                     (std::uint32_t)per_core_N,  // last_block_w
@@ -650,7 +675,8 @@ tt_metal::Program create_program_mcast_in0_in1(
                     // WRITER
                     // out tensor args
                     (std::uint32_t)out_buffer->address(),
-                    (std::uint32_t)core_idx_x * per_core_N + core_idx_y * per_core_M * N  // out_tensor_start_tile_id
+                    ((std::uint32_t)core_idx_x * per_core_N) +
+                        (core_idx_y * per_core_M * N)  // out_tensor_start_tile_id
                 };
 
                 if (core_idx_y == num_cores_r - 1) {
@@ -715,7 +741,8 @@ tt_metal::Program create_program_mcast_in0_in1(
                     // WRITER
                     // out tensor args
                     (std::uint32_t)out_buffer->address(),
-                    (std::uint32_t)core_idx_x * per_core_N + core_idx_y * per_core_M * N  // out_tensor_start_tile_id
+                    ((std::uint32_t)core_idx_x * per_core_N) +
+                        (core_idx_y * per_core_M * N)  // out_tensor_start_tile_id
                 };
 
                 if (core_idx_x == num_cores_c - 1) {
@@ -779,8 +806,9 @@ tt_metal::Program create_program_mcast_in0_in1(
 
                     // WRITER
                     // out tensor args
-                    (std::uint32_t)out_buffer->address(),                                 // out_tensor_addr
-                    (std::uint32_t)core_idx_x * per_core_N + core_idx_y * per_core_M * N  // out_tensor_start_tile_id
+                    (std::uint32_t)out_buffer->address(),  // out_tensor_addr
+                    ((std::uint32_t)core_idx_x * per_core_N) +
+                        (core_idx_y * per_core_M * N)  // out_tensor_start_tile_id
                 };
 
                 if (core_idx_x == num_cores_c - 1 and core_idx_y == num_cores_r - 1) {
@@ -869,58 +897,7 @@ tt_metal::Program create_program_mcast_in0_in1(
             }
         }
     }
-    return std::move(program);
-}
-
-// Given a tensor that is row-major datums, make it tilized
-// so that its row major within a tile, and each tile's data
-// is contiguous
-template <typename T>
-std::vector<T> tilize(std::vector<T> data, int rows, int cols) {
-    TT_FATAL(rows % 32 == 0, "Error");
-    TT_FATAL(cols % 32 == 0, "Error");
-    int num_tiles_r = rows / 32;
-    int num_tiles_c = cols / 32;
-    std::vector<T> result;
-    for (auto r = 0; r < num_tiles_r; r++) {
-        for (auto c = 0; c < num_tiles_c; c++) {
-            for (auto j = 0; j < 32; j++) {      // tile rows
-                for (auto i = 0; i < 32; i++) {  // tile cols
-                    // each row of tiles is 32x32 * num_tiles_c
-                    // each row within the row of tiles is cols
-                    // each col of tiles is 32
-                    // pick row of tiles, pick the row within the tile, pick col tile
-                    int index = r * 32 * 32 * num_tiles_c + j * cols + c * 32 + i;
-                    result.push_back(data.at(index));
-                }
-            }
-        }
-    }
-    return result;
-}
-
-// Given a tilized data (each tile's data is contiguous and row major within the
-// tile) transform it back to row major full tensor. (This function inverts the
-// tilize() function)
-template <typename T>
-std::vector<T> untilize(std::vector<T> data, int rows, int cols) {
-    TT_FATAL(rows % 32 == 0, "Error");
-    TT_FATAL(cols % 32 == 0, "Error");
-    int num_tiles_r = rows / 32;
-    int num_tiles_c = cols / 32;
-    std::vector<T> result;
-    for (auto r = 0; r < num_tiles_r; r++) {
-        for (auto i = 0; i < 32; i++) {
-            for (auto c = 0; c < num_tiles_c; c++) {
-                int offset = r * 32 * 32 * num_tiles_c + c * 32 * 32 + i * 32;
-                for (auto j = 0; j < 32; j++) {
-                    result.push_back(data.at(offset + j));
-                }
-            }
-        }
-    }
-
-    return result;
+    return program;
 }
 
 std::vector<bfloat16> select_columns(std::vector<bfloat16> data, int M, int K, int N) {
@@ -1017,7 +994,7 @@ int main(int argc, char** argv) {
         //                      Device Setup
         ////////////////////////////////////////////////////////////////////////////
         int device_id = 0;
-        tt_metal::IDevice* device = tt_metal::CreateDevice(device_id);
+        auto device = tt_metal::distributed::MeshDevice::create_unit_mesh(device_id);
 
         ////////////////////////////////////////////////////////////////////////////
         //                      Inputs Setup
@@ -1039,7 +1016,6 @@ int main(int argc, char** argv) {
         log_info(LogTest, "weights = {}x{}", Kt * 32, Nt * 32);
         log_info(LogTest, "output = {}x{}", Mt * 32, Nt * 32);
 
-        tt::DataFormat data_format = tt::DataFormat::Float16_b;
         uint32_t single_tile_size = 2 * 1024;
 
         // buffer creation
@@ -1050,16 +1026,21 @@ int main(int argc, char** argv) {
         BufferType in1_buffer_type = (l1_in1 == 0) ? (BufferType::DRAM) : (BufferType::L1);
         BufferType out_buffer_type = (l1_out == 0) ? (BufferType::DRAM) : (BufferType::L1);
 
-        tt_metal::InterleavedBufferConfig in0_config{
-            .device = device, .size = in0_buffer_size, .page_size = single_tile_size, .buffer_type = in0_buffer_type};
-        tt_metal::InterleavedBufferConfig in1_config{
-            .device = device, .size = in1_buffer_size, .page_size = single_tile_size, .buffer_type = in1_buffer_type};
-        tt_metal::InterleavedBufferConfig out_config{
-            .device = device, .size = out_buffer_size, .page_size = single_tile_size, .buffer_type = out_buffer_type};
+        tt_metal::distributed::ReplicatedBufferConfig global_in0_config{.size = in0_buffer_size};
+        tt_metal::distributed::DeviceLocalBufferConfig local_in0_config{
+            .page_size = single_tile_size, .buffer_type = in0_buffer_type};
 
-        auto in0_buffer = CreateBuffer(in0_config);
-        auto in1_buffer = CreateBuffer(in1_config);
-        auto out_buffer = CreateBuffer(out_config);
+        tt_metal::distributed::ReplicatedBufferConfig global_in1_config{.size = in1_buffer_size};
+        tt_metal::distributed::DeviceLocalBufferConfig local_in1_config{
+            .page_size = single_tile_size, .buffer_type = in1_buffer_type};
+
+        tt_metal::distributed::ReplicatedBufferConfig global_out_config{.size = out_buffer_size};
+        tt_metal::distributed::DeviceLocalBufferConfig local_out_config{
+            .page_size = single_tile_size, .buffer_type = out_buffer_type};
+
+        auto in0_buffer = tt_metal::distributed::MeshBuffer::create(global_in0_config, local_in0_config, device.get());
+        auto in1_buffer = tt_metal::distributed::MeshBuffer::create(global_in1_config, local_in1_config, device.get());
+        auto out_buffer = tt_metal::distributed::MeshBuffer::create(global_out_config, local_out_config, device.get());
 
         SHAPE in0_shape = {1, 1, Mt * 32, Kt * 32};
         tt::deprecated::Tensor<bfloat16> tensor = tt::deprecated::initialize_tensor<bfloat16>(
@@ -1068,16 +1049,24 @@ int main(int argc, char** argv) {
             0,
             100,
             std::chrono::system_clock::now().time_since_epoch().count());
-        auto activations_tilized = tilize(tensor.get_values(), Mt * 32, Kt * 32);
-        auto activations_tile_layout = convert_to_tile_layout(activations_tilized);
+        auto activations_tilized = tilize_swizzled(tensor.get_values(), Mt * 32, Kt * 32);
+        auto activations_tile_layout =
+            convert_layout_tile_swizzled_to_tile_nfaces(tt::stl::make_const_span(activations_tilized));
         auto activations = pack_bfloat16_vec_into_uint32_vec(activations_tile_layout);
-        tt_metal::detail::WriteToBuffer(in0_buffer, activations);
+        tt_metal::distributed::WriteShard(
+            device->mesh_command_queue(0),
+            in0_buffer,
+            activations,
+            tt::tt_metal::distributed::MeshCoordinate(0, 0),
+            true);
 
         auto identity = create_identity_matrix(Kt * 32, Nt * 32, std::min(Kt, Nt) * 32);
-        auto identity_tilized = tilize(identity, Kt * 32, Nt * 32);
-        auto weights_tile_layout = convert_to_tile_layout(identity_tilized);
+        auto identity_tilized = tilize_swizzled(identity, Kt * 32, Nt * 32);
+        auto weights_tile_layout =
+            convert_layout_tile_swizzled_to_tile_nfaces(tt::stl::make_const_span(identity_tilized));
         auto weights = pack_bfloat16_vec_into_uint32_vec(weights_tile_layout);
-        tt_metal::detail::WriteToBuffer(in1_buffer, weights);
+        tt_metal::distributed::WriteShard(
+            device->mesh_command_queue(0), in1_buffer, weights, tt::tt_metal::distributed::MeshCoordinate(0, 0), true);
 
         ////////////////////////////////////////////////////////////////////////////
         //                      Matmul Parameters Setup
@@ -1085,8 +1074,8 @@ int main(int argc, char** argv) {
         uint32_t B = 1;
         TT_FATAL(Kt % in0_block_w == 0, "Error");
 
-        uint32_t num_blocks_y = (Mt - 1) / per_core_Mt + 1;
-        uint32_t num_blocks_x = (Nt - 1) / per_core_Nt + 1;
+        uint32_t num_blocks_y = ((Mt - 1) / per_core_Mt) + 1;
+        uint32_t num_blocks_x = ((Nt - 1) / per_core_Nt) + 1;
         uint32_t num_blocks_total = num_blocks_y * num_blocks_x;
         TT_FATAL(num_blocks_total <= num_cores_x * num_cores_y, "Error");
         CoreCoord core_range = get_core_range(num_blocks_y, num_blocks_x, num_cores_y, num_cores_x);
@@ -1099,7 +1088,7 @@ int main(int argc, char** argv) {
         MathFidelity math_fidelity = MathFidelity::HiFi4;
 
         auto program = create_program_mcast_in0_in1(
-            device,
+            device.get(),
             math_fidelity,
             core_range,
             B,
@@ -1121,15 +1110,19 @@ int main(int argc, char** argv) {
             tt::DataFormat::Float16_b,
             tt::DataFormat::Float16_b);
 
-        std::chrono::duration<double, std::nano> duration;
+        std::chrono::duration<double, std::nano> duration{};
 
         // took from run_operation.cpp
+        auto mesh_workload = tt_metal::distributed::MeshWorkload();
+        distributed::MeshCoordinate zero_coord = distributed::MeshCoordinate::zero_coordinate(device->shape().dims());
+        distributed::MeshCoordinateRange device_range = distributed::MeshCoordinateRange(zero_coord, zero_coord);
+        mesh_workload.add_program(device_range, std::move(program));
         auto start = std::chrono::high_resolution_clock::now();
-        EnqueueProgram(device->command_queue(), program, false);
-        Finish(device->command_queue());
+        tt_metal::distributed::EnqueueMeshWorkload(device->mesh_command_queue(), mesh_workload, false);
+        tt_metal::distributed::Finish(device->mesh_command_queue());
         auto end = std::chrono::high_resolution_clock::now();
         duration = end - start;
-        tt_metal::DumpDeviceProfileResults(device, program);
+        tt_metal::ReadMeshDeviceProfilerResults(*device);
 
         uint64_t num_of_matmul_ops =
             (2 * static_cast<uint64_t>(Kt) * 32 - 1) * (static_cast<uint64_t>(Mt) * static_cast<uint64_t>(Nt) * 1024);
@@ -1144,14 +1137,19 @@ int main(int argc, char** argv) {
         //                      Validation & Teardown
         ////////////////////////////////////////////////////////////////////////////
         std::vector<uint32_t> result_vec;
-        tt_metal::detail::ReadFromBuffer(out_buffer, result_vec);
+        tt_metal::distributed::ReadShard(
+            device->mesh_command_queue(0),
+            result_vec,
+            out_buffer,
+            tt::tt_metal::distributed::MeshCoordinate(0, 0),
+            true);
         auto result_bfp16 = unpack_uint32_vec_into_bfloat16_vec(result_vec);
-        auto result_flat_layout = convert_to_flat_layout(result_bfp16);
-        auto result_untilized = untilize(result_flat_layout, Mt * 32, Nt * 32);
+        auto result_flat_layout = convert_layout_tile_nfaces_to_tile_swizzled(tt::stl::make_const_span(result_bfp16));
+        auto result_untilized = untilize_swizzled(result_flat_layout, Mt * 32, Nt * 32);
 
         auto golden = select_columns(tensor.get_values(), Mt, Kt, Nt);
         pass &= (golden == result_untilized);
-        pass &= tt_metal::CloseDevice(device);
+        pass &= device->close();
 
     } catch (const std::exception& e) {
         pass = false;

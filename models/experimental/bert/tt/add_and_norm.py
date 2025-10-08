@@ -7,13 +7,11 @@ from loguru import logger
 
 import torch
 from transformers import BertForQuestionAnswering
-import numpy as np
 
 import ttnn
 from models.experimental.bert.fused_ops.add_and_norm import AddAndNorm
-from tt_lib.utils import pad_activation, pad_weight, print_diff_argmax
-from models.utility_functions import (
-    enable_persistent_kernel_cache,
+from tt_lib.utils import pad_activation, pad_weight
+from models.common.utility_functions import (
     comp_pcc,
     comp_allclose,
 )
@@ -82,7 +80,7 @@ class TtAddAndNormModel(torch.nn.Module):
         )
 
     def forward(self, a, b):
-        print(a.shape.with_tile_padding(), b.shape.with_tile_padding())
+        print(a.padded_shape, b.padded_shape)
         return self.add_and_norm(a, b)
 
 

@@ -4,10 +4,9 @@
 
 import torch
 from torch import nn
-from torchvision import transforms, datasets
 
 import ttnn
-from models.utility_functions import (
+from models.common.utility_functions import (
     tilize_to_list,
     untilize,
     comp_allclose_and_pcc,
@@ -32,7 +31,7 @@ def tt_batch_norm(
 ):
     H = 32
     W = bn_size
-    batch_size = x.shape.with_tile_padding()[0]
+    batch_size = x.padded_shape[0]
     print("batch_size:", batch_size)
     epsilon_torch = torch.tensor([[[W * [eps]]]])
     epsilon_padded = pad_activation(epsilon_torch)

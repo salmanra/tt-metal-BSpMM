@@ -9,7 +9,7 @@ import random
 import ttnn
 
 from tests.ttnn.utils_for_testing import check_with_pcc, start_measuring_time, stop_measuring_time
-from models.utility_functions import torch_random
+from models.common.utility_functions import torch_random
 
 TIMEOUT = 10
 # seed for random
@@ -93,8 +93,6 @@ def run(
     *,
     device,
 ):
-    device.enable_async(False)
-
     # Extract the shape and new size (target shape) from view_specs
     shape = view_specs["shape"]
     size = view_specs["size"]  # New shape for the view/reshape operation

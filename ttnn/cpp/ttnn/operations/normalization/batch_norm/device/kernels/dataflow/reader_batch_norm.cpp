@@ -1,12 +1,12 @@
-// SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 //
 // SPDX-License-Identifier: Apache-2.0
 
 #include <stdint.h>
 
 #include "dataflow_api.h"
-#include "cpp/ttnn/deprecated/tt_dnn/kernels/dataflow/moreh_common.hpp"
-#include "cpp/ttnn/operations/eltwise/binary_ng/device/kernels/dataflow/fill_tile_utils.hpp"
+#include "ttnn/deprecated/tt_dnn/kernels/dataflow/moreh_common.hpp"
+#include "ttnn/operations/eltwise/binary_ng/device/kernels/dataflow/fill_tile_utils.hpp"
 
 void kernel_main() {
     const auto eps = get_arg_val<uint32_t>(0);
@@ -19,15 +19,14 @@ void kernel_main() {
     uint32_t N = get_arg_val<uint32_t>(7);
     uint32_t C = get_arg_val<uint32_t>(8);
 
-    constexpr bool src_is_dram = get_compile_time_arg_val(0) == 1;
+    constexpr auto cb_id_src = get_compile_time_arg_val(0);
+    constexpr auto cb_id_eps = get_compile_time_arg_val(1);
+    constexpr auto src_args = TensorAccessorArgs<2>();
 
-    constexpr auto cb_id_src = tt::CBIndex::c_0;
     constexpr uint32_t onetile = 1;
 
     const uint32_t src_tile_bytes = get_tile_size(cb_id_src);
-    const DataFormat src_data_format = get_dataformat(cb_id_src);
-    const InterleavedAddrGenFast<src_is_dram> src = {
-        .bank_base_address = src_addr, .page_size = src_tile_bytes, .data_format = src_data_format};
+    const auto src = TensorAccessor(src_args, src_addr, src_tile_bytes);
 
     uint32_t tiles_per_batch = HtWt * C;
     uint32_t start_n = start_tile_id / tiles_per_batch;
@@ -35,10 +34,18 @@ void kernel_main() {
     uint32_t start_c = start_remaining / HtWt;
     uint32_t start_t = start_remaining % HtWt;
 
-    constexpr auto cb_id_eps = tt::CBIndex::c_4;
-
+    union {
+        float f;
+        uint32_t u;
+    } scalar;
+    scalar.u = eps;
     cb_reserve_back(cb_id_eps, onetile);
-    fill_with_val_bfloat16(cb_id_eps, eps);
+#ifdef FILL_WITH_VALUE_FLOAT
+    FILL_WITH_VALUE_FLOAT(cb_id_eps, scalar.f);
+#endif
+#ifdef FILL_WITH_VALUE
+    FILL_WITH_VALUE(cb_id_eps, eps);
+#endif
     cb_push_back(cb_id_eps, onetile);
 
     // Input tile offset

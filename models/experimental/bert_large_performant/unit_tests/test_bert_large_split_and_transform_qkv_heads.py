@@ -6,9 +6,7 @@
 from loguru import logger
 
 
-import numpy as np
-
-from models.utility_functions import comp_pcc, skip_for_grayskull
+from models.common.utility_functions import comp_pcc
 import torch
 import ttnn
 
@@ -45,9 +43,9 @@ def run_split_query_key_value_and_split_heads_test(device, batch, dtype, in0_mem
     logger.debug(f"k: {k.memory_config().buffer_type} and {k.get_dtype()}")
     logger.debug(f"v: {v.memory_config().buffer_type} and {v.get_dtype()}")
 
-    assert q.shape.with_tile_padding() == [batch, 16, 384, 64]
-    assert k.shape.with_tile_padding() == [batch, 16, 64, 384]
-    assert v.shape.with_tile_padding() == [batch, 16, 384, 64]
+    assert q.padded_shape == [batch, 16, 384, 64]
+    assert k.padded_shape == [batch, 16, 64, 384]
+    assert v.padded_shape == [batch, 16, 384, 64]
 
     pyt_got_back_rm_q = ttnn.to_torch(q)
     pyt_got_back_rm_k = ttnn.to_torch(k)
@@ -110,8 +108,7 @@ def test_split_query_key_value_and_split_heads_test(device, batch, dtype, in0_me
     run_split_query_key_value_and_split_heads_test(device, batch, dtype, in0_mem_config, out_mem_config)
 
 
-@skip_for_grayskull("watcher error, see issue #6487")
-def test_split_query_key_value_and_split_heads_with_program_cache(device, use_program_cache):
+def test_split_query_key_value_and_split_heads_with_program_cache(device):
     dtype = ttnn.bfloat8_b
     mem_config = ttnn.DRAM_MEMORY_CONFIG
     for _ in range(2):

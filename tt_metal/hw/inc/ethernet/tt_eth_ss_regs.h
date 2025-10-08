@@ -9,7 +9,17 @@
 // ETH Params
 
 #define NUM_ECC_SOURCES (5 + 4 * 3 + 2)
+#ifdef ARCH_BLACKHOLE
+#define NUM_ETH_QUEUES 3
+#else
 #define NUM_ETH_QUEUES 2
+#endif
+
+#define ETH_CTRL_REGS_START 0xFFB94000
+// Write to start ERISC IRAM load.
+// Write value: word address for the start of binary in L1.
+// Read value:  bit 0 = status (1=ongoing, 0=complete), bits [17:1] = currend read address.
+#define ETH_CORE_IRAM_LOAD ((0x30 + NUM_ECC_SOURCES * 4) + 0x1C)
 
 //////////////////
 // RISC debug regs
@@ -25,6 +35,10 @@
 #define ETH_TXQ0_REGS_START 0xFFB90000
 #define ETH_TXQ_REGS_SIZE 0x1000
 #define ETH_TXQ_REGS_SIZE_BIT 12
+
+//////////////////////////////
+// RX queue controllers
+#define ETH_RXQ_REGS_SIZE 0x1000
 
 // TXQ_CTRL[0]: set to enable packet resend mode (must be set on both sides)
 // TXQ_CTRL[1]: reserved, should be 0
@@ -48,6 +62,9 @@
 #define ETH_TXQ_CMD_FLUSH (0x1 << 3)
 
 #define ETH_TXQ_STATUS 0x8              // IMPROVE: document (misc. internal bits for debug)
+#define ETH_TXQ_STATUS_CMD_ONGOING_BIT \
+    0x10  // On Blackhole bit 16 of the ETH_TXQ_STATUS register indicates whether a packer transfer (raw/data/reg write)
+          // is ongoing
 #define ETH_TXQ_MAX_PKT_SIZE_BYTES 0xC  // Max ethernet payload size (default = 1500 bytes)
 #define ETH_TXQ_BURST_LEN 0x10          // Value to drive on ati_q#_pbl output (default = 8)
 #define ETH_TXQ_TRANSFER_START_ADDR \

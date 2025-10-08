@@ -201,6 +201,15 @@ void bsr_spmm_multicore_sparse_mcast(
         // Create two semaphores. 
         // Split into 2 reader kernels. 
         // everything else is identical. 
+
+        // get core grid. Is the CoreRangeSet we create in the previous examples guaranteed to be 
+        // a rectangle? Let's assume it is. 
+
+        // Define all cores, left column, and all but left column
+        // Compile CK, WK to all cores
+        // Compile custom RK to left column, all but left column
+
+
     }
 
 void bsr_spmm_multicore_reuse_iteration(

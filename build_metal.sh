@@ -2,6 +2,9 @@
 
 set -eo pipefail
 
+# Use LLVM linker (lld) for build compatibility with clang
+export LDFLAGS="-fuse-ld=lld-17"
+
 # Function to display help
 show_help() {
     echo "Usage: $0 [options]..."

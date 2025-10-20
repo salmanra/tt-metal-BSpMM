@@ -44,6 +44,7 @@ void kernel_main() {
 
     uint32_t out_tensor_start_tile_id = get_arg_val<uint32_t>(0);
     uint32_t num_iters_y = get_arg_val<uint32_t>(1); //
+    uint32_t num_cores_y = get_arg_val<uint32_t>(2); //
 
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
@@ -90,8 +91,8 @@ void kernel_main() {
             }
             out_tensor_x_coord_offset += out_tensor_stride_w;
         }
-        // go to next output row and reset output column offset
-        out_tensor_start_tile_id += RtNt;
+        // hop to next output row and reset output column offset
+        out_tensor_start_tile_id += RtNt * num_cores_y;
         out_tensor_x_coord_offset = 0;
     }
 }

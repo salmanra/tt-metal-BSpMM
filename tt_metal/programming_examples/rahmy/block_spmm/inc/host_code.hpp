@@ -619,37 +619,48 @@ void bsr_spmm_multicore_load_balanced(
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity,
                                        .compile_args = compute_kernel_compile_time_args});
     // Runtime arguments
-    // auto core_coords_vec = corerange_to_cores(all_cores);
     uint32_t work_region = 0;
-    for (uint32_t core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
-        for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
+    for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
+        // okay.
+        // we should be able to determine all the output-idx-ys right here.
+        //
+        // Try #1: hopping
+        //      give each core row its identical folded row
+        //      for each iter past 1
+        //          up to num_iters_y_remaining,
+        //          give core row folded row #(core-id-y * num_cores-y * iter-count - 1)
+        ///
+        // how to determine num iters y remaining
+        //      only the last core row cares
+        //      num_blocks_y % num_iters_y == 0 ? num_iters_y : num_blocks_y % num_iters_y
+        for (uint32_t core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
             CoreCoord core(core_idx_x, core_idx_y);
             if (verbose)
               log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
                 
             int output_idx_x_start = (core_idx_x * num_iters_x) % num_blocks_x;
-            int folded_output_idx_y_start = (core_idx_y * num_iters_y) % num_blocks_y;
+            int folded_output_idx_y_start = core_idx_y;
             work_region++;
 
             std::vector<uint32_t> reader_runtime_args;
             std::vector<uint32_t> compute_runtime_args;
             std::vector<uint32_t> writer_runtime_args;
 
-            uint32_t num_iters_y_remaining = num_blocks_y - folded_output_idx_y_start;
-            uint32_t num_iters_y_this_core = std::min(num_iters_y, num_iters_y_remaining);
+            uint32_t num_iters_y_this_core = num_blocks_y % num_iters_y == 0 ? num_iters_y : num_blocks_y % num_iters_y;
             uint32_t num_iters_x_this_core = std::min(num_iters_x, num_blocks_x - output_idx_x_start + 1);
             reader_runtime_args.push_back(num_iters_x_this_core);
             reader_runtime_args.push_back(num_iters_y_this_core);
             compute_runtime_args.push_back(num_iters_y_this_core);
             reader_runtime_args.push_back(output_idx_x_start);
             for (int iter_y = 0; iter_y < num_iters_y_this_core; iter_y++) {
-                uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y_start + iter_y];
+                uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y_start + (iter_y * num_cores_r)];
                 reader_runtime_args.push_back(output_idx_y);
                 compute_runtime_args.push_back(a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
             }
 
             writer_runtime_args.push_back((folded_output_idx_y_start * Rt * Nt) + (output_idx_x_start * in1_block_w));
             writer_runtime_args.push_back(num_iters_y_this_core);
+            writer_runtime_args.push_back(num_cores_r);
 
             tt_metal::SetRuntimeArgs(program, reader_id, core, reader_runtime_args);
             tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_runtime_args);
@@ -668,23 +679,21 @@ void bsr_spmm_multicore_load_balanced(
                 log_info(tt::LogVerif, " -- Writer Args --");
                 const char* writer_arg_names[] = {
                     "out_tensor_start_tile_id",
-                    "num_iters_y_this_core"
+                    "num_iters_y_this_core",
+                    "num_cores_y"
                 };
                 for (size_t i = 0; i < writer_runtime_args.size(); ++i) {
                     log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_runtime_args[i]);
                 }
                 log_info(tt::LogVerif, " -- Compute Args --");
-                for (size_t i = 0; i < num_iters_y_this_core; ++i) {
+                log_info(tt::LogVerif, "compute_arg[0] (num_iters_y) = {}", compute_runtime_args[0]);
+
+                for (size_t i = 1; i < num_iters_y_this_core + 1; ++i) {
                     log_info(tt::LogVerif, "compute_arg[{}] (row_size) = {}", i, compute_runtime_args[i]);
                 }
             }
         }
     } 
-    // for (auto & core : core_coords_vec){
-    //     uint32_t core_idx_x = core.x;
-    //     uint32_t core_idx_y = core.y;
-        
-    // }
 
     // EnqueueWriteBuffers
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);

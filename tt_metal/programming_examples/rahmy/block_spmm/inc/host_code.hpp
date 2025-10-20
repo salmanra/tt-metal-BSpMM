@@ -323,8 +323,8 @@ void bsr_spmm_multicore_load_balanced(
     CoreCoord core_range(0, 0);
     if ( (num_blocks_y / num_iters_y) <= num_cores_y &&
         (num_blocks_x / num_iters_x) <= num_cores_x) {
-        core_range.x = num_blocks_x / num_iters_x;
-        core_range.y = num_blocks_y / num_iters_y;
+        core_range.x = (num_blocks_x + num_iters_x - 1) / num_iters_x;
+        core_range.y = (num_blocks_y + num_iters_y - 1) / num_iters_y;
     }
     uint32_t start_core_x = start_core.x;
     uint32_t start_core_y = start_core.y;
@@ -604,7 +604,7 @@ void bsr_spmm_multicore_load_balanced(
 
     auto writer_id = tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/writer_block_iter.cpp",
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/writer_block_load_balanced.cpp",
         all_cores,
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_1,
@@ -646,7 +646,15 @@ void bsr_spmm_multicore_load_balanced(
             std::vector<uint32_t> compute_runtime_args;
             std::vector<uint32_t> writer_runtime_args;
 
-            uint32_t num_iters_y_this_core = num_blocks_y % num_iters_y == 0 ? num_iters_y : num_blocks_y % num_iters_y;
+            // TODO: fix this calc. very stupid.
+            // better but there's still something wrong somewhere. 
+            uint32_t num_iters_y_this_core;
+            if (core_idx_y == (num_cores_r - 1)){
+                num_iters_y_this_core = num_blocks_y % num_iters_y == 0 ? num_iters_y : num_blocks_y % num_iters_y;
+            }
+            else {
+                num_iters_y_this_core = num_iters_y;
+            }
             uint32_t num_iters_x_this_core = std::min(num_iters_x, num_blocks_x - output_idx_x_start + 1);
             reader_runtime_args.push_back(num_iters_x_this_core);
             reader_runtime_args.push_back(num_iters_y_this_core);

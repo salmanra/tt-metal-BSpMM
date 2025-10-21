@@ -259,6 +259,28 @@ namespace bsr_test_suite {
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_mid_diag");
     }
 
+            std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_iter_2_2() {
+
+        // matmul params setup
+        uint32_t M = 512;
+        uint32_t N = 512;
+        uint32_t K = 512;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t block_matrix_height = M / R;
+        uint32_t nblocks = block_matrix_height;
+
+        // nz blocks fill the diagonal
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_DIAG, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_iter_2_2");
+    }
+
+
     // this case should expose the performance difference between the naive and new versions
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_empty_rows() {
         // matmul params setup

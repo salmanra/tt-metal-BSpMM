@@ -617,7 +617,8 @@ void bsr_spmm_multicore_load_balanced(
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm_iter.cpp",
         all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity,
-                                       .compile_args = compute_kernel_compile_time_args});
+                                        // .fp32_dest_acc_en = true,
+                                        .compile_args = compute_kernel_compile_time_args});
     // Runtime arguments
     uint32_t work_region = 0;
     for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
@@ -646,8 +647,6 @@ void bsr_spmm_multicore_load_balanced(
             std::vector<uint32_t> compute_runtime_args;
             std::vector<uint32_t> writer_runtime_args;
 
-            // TODO: fix this calc. very stupid.
-            // better but there's still something wrong somewhere. 
             uint32_t num_iters_y_this_core;
             if (core_idx_y == (num_cores_r - 1)){
                 num_iters_y_this_core = num_blocks_y % num_iters_y == 0 ? num_iters_y : num_blocks_y % num_iters_y;
@@ -1178,8 +1177,9 @@ void bsr_spmm_multicore_reuse_iteration(
         if (verbose)
             log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
             
+        // TODO: this looks so deeply wrong...
         int output_idx_x_start = (work_region * num_iters_x) % num_blocks_x;
-        int folded_output_idx_y_start = (work_region * num_iters_y) % num_blocks_y;
+        int folded_output_idx_y_start = (((work_region * num_iters_x) / num_blocks_x) * num_iters_y) % num_blocks_y;
         work_region++;
 
         std::vector<uint32_t> reader_runtime_args;

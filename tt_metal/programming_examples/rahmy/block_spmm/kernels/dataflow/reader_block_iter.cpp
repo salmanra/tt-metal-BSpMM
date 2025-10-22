@@ -129,7 +129,7 @@ void kernel_main(){
 
         uint32_t in0_tensor_start_tile_id = block_row_start * in0_block_num_tiles;
         for (uint32_t iter_x = 0; iter_x < num_iters_x; iter_x++){
-            output_idx_x = iter_x;
+            output_idx_x = output_idx_x_start + iter_x;
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x; 
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
 

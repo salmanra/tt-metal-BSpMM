@@ -698,7 +698,7 @@ void bsr_spmm_multicore_load_balanced(
                 }
             }
 
-            if (verbose && core_idx_x == 0 && core_idx_y == 0) {
+            if (verbose && core_idx_x == 1 && core_idx_y == 0) {
                 a.pretty_print();
                 log_info(tt::LogVerif, " -- Reader Args --");
                 log_info(tt::LogVerif, "reader_arg[0] (num_iters_x) = {}", reader_runtime_args[0]);

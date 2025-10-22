@@ -71,6 +71,9 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_large_K();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_random_hang();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_random_hang_v2();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_large_Kv2();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_large_Kv3();
+
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
@@ -134,6 +137,9 @@ namespace bsr_test_suite {
         test_big_dense_large_K, // 56
         test_random_hang, // 57
         test_random_hang_v2, // 58
+        test_big_dense_large_Kv2, // 59
+        test_big_dense_large_Kv3, // 60
+
     };
 
     static std::uniform_real_distribution<> dis(-1000.0, 1000.0);
@@ -677,14 +683,55 @@ namespace bsr_test_suite {
         uint32_t nblocks = 32;
         uint32_t block_matrix_height = M / R;
         
-        bsr_matrix<float> bsr(M, K, R, C, nblocks, NO_RAND);
-        dense_matrix<float> dense(K, N, NO_RAND);
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> dense(K, N, RAND);
 
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
 
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_big_dense_large_K");
+    }
+        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_large_Kv2() {
+        // matmul params setup
+        uint32_t M = 32;
+        uint32_t N = 32;
+        uint32_t K = 2048;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t nblocks = 32;
+        uint32_t block_matrix_height = M / R;
+        
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_big_dense_large_Kv2");
+    }
+
+        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_large_Kv3() {
+        // matmul params setup
+        uint32_t M = 32;
+        uint32_t N = 32;
+        uint32_t K = 4096;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t nblocks = 32;
+        uint32_t block_matrix_height = M / R;
+        
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_big_dense_large_Kv3");
     }
 
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_dense_2_blocks_per_core() {

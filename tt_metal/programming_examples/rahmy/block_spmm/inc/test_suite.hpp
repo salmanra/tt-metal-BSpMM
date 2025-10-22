@@ -636,7 +636,7 @@ namespace bsr_test_suite {
         uint32_t M = 4096;
         uint32_t N = 4096;
         uint32_t K = 512;
-        
+        // block size become 512x64, with 64 input blocks 
         dense_matrix<float> tmp(M, K, RAND);
         bsr_matrix<float> bsr(tmp, N);
         dense_matrix<float> dense(K, N, RAND);
@@ -711,9 +711,6 @@ namespace bsr_test_suite {
     }
 
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_dense() {
-        // One output block per core!
-        uint32_t num_cores = 64; // given our wormhole arch, this is how many Tensix tiles we have
-
         uint32_t M = 1024;
         uint32_t N = 256;
         uint32_t K = 64;

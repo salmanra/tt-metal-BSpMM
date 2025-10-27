@@ -121,16 +121,16 @@ public:
         return result;
     }
 
-    dense_matrix<bfloat16> gemm_bfloat16(const dense_matrix<bfloat16> &other) {
+    dense_matrix<T> gemm_bfloat16(const dense_matrix<T> &other) {
         assert(W == other.H);
-        dense_matrix<bfloat16> result(H, other.W);
+        dense_matrix<T> result(H, other.W);
         for (size_t i = 0; i < H; ++i) {
             for (size_t j = 0; j < other.W; ++j) {
                 float sum = 0;
                 for (size_t k = 0; k < W; ++k) {
                     sum += data[i * W + k].to_float() * other.data[k * other.W + j].to_float();
                 }
-                result.data[i * other.W + j] = bfloat16(sum);
+                result.data[i * other.W + j] = T(sum);
             }
         }
         return result;
@@ -161,6 +161,10 @@ public:
     }
 };
 
+// Is there a world where this class can handle TT host code H2D/D2H? And does that look at all like Policies? 
+// It's a fun idea but not really what this needs. 
+// The actual lesson is that partial instantiation enables the bfloat16/native c++ float type split 
+//      to happen within a single class instead of the weirdness I have right now.
 template <typename T>
 class bsr_matrix {
 public: // everything is public for now
@@ -495,49 +499,51 @@ public:
         return bsr_matrix<bfloat16>(bfloat16_data, indptr, indices, H, W, R, C, nblocks);
     }
 
-        dense_matrix<bfloat16> spmm_bfloat16(dense_matrix<bfloat16> &B) {
-            assert(W == B.H);
-            dense_matrix<bfloat16> output(H, B.W);
+    // partial instantiation: this function will get compiled only on instances of dense matrices 
+    //  on which it is called, at which point it will fail if the type T does not have a member to_float()
+    dense_matrix<T> spmm_bfloat16(dense_matrix<T> &B) {
+        assert(W == B.H);
+        dense_matrix<T> output(H, B.W);
 
-            // FORALL parallelism on the block rows
-            for (size_t i = 0; i < indptr.size() - 1; i++) {                        // runtime args
-                for (size_t r = 0; r < R; r += TILE_SIZE) {                         // comptime args
-                    for (size_t p = 0; p < B.W; p += TILE_SIZE) {                   // comptime args
-                        std::vector<float> output_tile(TILE_SIZE * TILE_SIZE, 0);   // DST register
-                        for (size_t idx = indptr[i]; idx < indptr[i + 1]; idx++) {  // reading raw data from a CB
-                            size_t j = indices[idx];                                // reading raw data from a CB
-                            auto iter_start = data.begin() + idx * R * C;           // src0_addr, determined from args
-                            auto iter_B_start = B.data.begin() + j * C * B.W;       // src1_addr, determined from args
-                            for (size_t c = 0; c < C; c += TILE_SIZE) {             // comptime args
-                                // begin matmul_tiles API call
-                                for (size_t rr = r; rr < std::min(r + TILE_SIZE, R); rr++) {
-                                    for (size_t pp = p; pp < std::min(p + TILE_SIZE, B.W); pp++) {
-                                        float sum = 0;
-                                        for (size_t cc = c; cc < std::min(C, c + TILE_SIZE); cc++) {
-                                            bfloat16 a_val = *(iter_start + rr * C + cc);
-                                            bfloat16 b_val = *(iter_B_start + cc * B.W + pp);
-                                            sum += a_val.to_float() * b_val.to_float();
-                                        }
-                                        output_tile[(rr - r) * TILE_SIZE + pp - p] += sum;
+        // FORALL parallelism on the block rows
+        for (size_t i = 0; i < indptr.size() - 1; i++) {                        // runtime args
+            for (size_t r = 0; r < R; r += TILE_SIZE) {                         // comptime args
+                for (size_t p = 0; p < B.W; p += TILE_SIZE) {                   // comptime args
+                    std::vector<float> output_tile(TILE_SIZE * TILE_SIZE, 0);   // DST register
+                    for (size_t idx = indptr[i]; idx < indptr[i + 1]; idx++) {  // reading raw data from a CB
+                        size_t j = indices[idx];                                // reading raw data from a CB
+                        auto iter_start = data.begin() + idx * R * C;           // src0_addr, determined from args
+                        auto iter_B_start = B.data.begin() + j * C * B.W;       // src1_addr, determined from args
+                        for (size_t c = 0; c < C; c += TILE_SIZE) {             // comptime args
+                            // begin matmul_tiles API call
+                            for (size_t rr = r; rr < std::min(r + TILE_SIZE, R); rr++) {
+                                for (size_t pp = p; pp < std::min(p + TILE_SIZE, B.W); pp++) {
+                                    float sum = 0;
+                                    for (size_t cc = c; cc < std::min(C, c + TILE_SIZE); cc++) {
+                                        T a_val = *(iter_start + rr * C + cc);
+                                        T b_val = *(iter_B_start + cc * B.W + pp);
+                                        sum += a_val.to_float() * b_val.to_float();
                                     }
+                                    output_tile[(rr - r) * TILE_SIZE + pp - p] += sum;
                                 }
-                                // end matmul_tiles API call
                             }
+                            // end matmul_tiles API call
                         }
-                        // write tile to DRAM starting at tile i*R + r, p (output is dense, no more blocks)
-                        // On TT:
-                        // 1. pack DST reg to output CB
-                        // 2. writer kernel pops from output CB
-                        // 3. writer kernel NoC's to DRAM
-                        for (size_t rr = r; rr < std::min(R, r + TILE_SIZE); rr++) {
-                            for (size_t pp = p; pp < std::min(B.W, p + TILE_SIZE); pp++) {
-                                *(output.data.begin() + (i * R + rr) * output.W + pp) =
-                                    bfloat16(output_tile[(rr - r) * TILE_SIZE + pp - p]);
-                            }
+                    }
+                    // write tile to DRAM starting at tile i*R + r, p (output is dense, no more blocks)
+                    // On TT:
+                    // 1. pack DST reg to output CB
+                    // 2. writer kernel pops from output CB
+                    // 3. writer kernel NoC's to DRAM
+                    for (size_t rr = r; rr < std::min(R, r + TILE_SIZE); rr++) {
+                        for (size_t pp = p; pp < std::min(B.W, p + TILE_SIZE); pp++) {
+                            *(output.data.begin() + (i * R + rr) * output.W + pp) =
+                                T(output_tile[(rr - r) * TILE_SIZE + pp - p]);
                         }
                     }
                 }
             }
+        }
         return output;
     }
 

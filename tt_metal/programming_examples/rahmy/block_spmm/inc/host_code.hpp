@@ -216,6 +216,18 @@ uint32_t get_Npc_from_BSR_block_size(uint32_t Nt, uint32_t Mpc, uint32_t in0_blo
     return Npc;
 }
 
+template<class Vals>
+void sortingPermutation(const Vals& values, std::vector<int>& v){
+    int size = values.size(); 
+    v.clear(); v.reserve(size);
+    for(int i=0; i < size; ++i)
+        v.push_back(i);
+
+    std::sort(v.begin(), v.end(), [&values](int a, int b) -> bool { 
+        return values[a] < values[b];
+    });
+}
+
 void bsr_spmm_multicore_sparse_mcast(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -638,6 +650,25 @@ void bsr_spmm_multicore_load_balanced(
                                         .compile_args = compute_kernel_compile_time_args});
     // Runtime arguments
     uint32_t work_region = 0;
+
+    // Scanning for load-balancing
+    // 0. Sort block rows by number of nonzero blocks, get perm vector
+    uint32_t num_empty_rows = (M / R) - nnz_rows;
+    std::vector<int> row_diffs;
+    for (int i = 0; i < a.indptr.size(); i++){
+        row_diffs.push_back(a.indptr[i+1] - a.indptr[i]);
+    }
+    std::vector<int> perm(row_diffs.size());
+    sortingPermutation(row_diffs, perm);
+
+    // 1. initialize a vector for each row of cores
+    // TODO: make this the right sizes
+    std::vector<std::vector<uint32_t>> output_y_indices;
+    // 2. While count is less than num output blocks 
+    //    a. for idx in range 
+    uint32_t count = 0;
+
+
     for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
         // okay.
         // we should be able to determine all the output-idx-ys right here.
@@ -698,7 +729,7 @@ void bsr_spmm_multicore_load_balanced(
                 }
             }
 
-            if (verbose && core_idx_x == 1 && core_idx_y == 0) {
+            if (verbose && core_idx_x == 0 && core_idx_y == 0) {
                 a.pretty_print();
                 log_info(tt::LogVerif, " -- Reader Args --");
                 log_info(tt::LogVerif, "reader_arg[0] (num_iters_x) = {}", reader_runtime_args[0]);
@@ -1202,7 +1233,6 @@ void bsr_spmm_multicore_reuse_iteration(
         if (verbose)
             log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
             
-        // TODO: this looks so deeply wrong...
         int output_idx_x_start = (work_region * num_iters_x) % num_blocks_x;
         int folded_output_idx_y_start = (((work_region * num_iters_x) / num_blocks_x) * num_iters_y) % num_blocks_y;
         work_region++;

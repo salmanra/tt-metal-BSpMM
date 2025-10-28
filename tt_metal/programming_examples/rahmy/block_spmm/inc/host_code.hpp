@@ -332,9 +332,10 @@ void bsr_spmm_multicore_load_balanced(
     uint32_t num_iters_y = (num_blocks_y + num_cores_y - 1) / num_cores_y;
 
 
+    uint32_t num_work_regions = (num_blocks_total + num_iters_x * num_iters_y - 1)/ (num_iters_x * num_iters_y);
     uint32_t target_num_cores;
-    if (num_blocks_total < num_cores_total)
-        target_num_cores = num_blocks_total;
+    if (num_work_regions < num_cores_total)
+        target_num_cores = num_work_regions;
     else 
         target_num_cores = num_cores_total;
 
@@ -729,7 +730,7 @@ void bsr_spmm_multicore_load_balanced(
                 }
             }
 
-            if (verbose && core_idx_x == 0 && core_idx_y == 0) {
+            if (verbose && core_idx_x == 7 && core_idx_y == 0) {
                 a.pretty_print();
                 log_info(tt::LogVerif, " -- Reader Args --");
                 log_info(tt::LogVerif, "reader_arg[0] (num_iters_x) = {}", reader_runtime_args[0]);
@@ -918,10 +919,10 @@ void bsr_spmm_multicore_reuse_iteration(
     uint32_t num_iters_x = (num_blocks_x + num_cores_x - 1) / num_cores_x;
     uint32_t num_iters_y = (num_blocks_y + num_cores_y - 1) / num_cores_y;
 
-
+    uint32_t num_work_regions = (num_blocks_total + num_iters_x * num_iters_y - 1)/ (num_iters_x * num_iters_y);
     uint32_t target_num_cores;
-    if (num_blocks_total < num_cores_total)
-        target_num_cores = num_blocks_total;
+    if (num_work_regions < num_cores_total)
+        target_num_cores = num_work_regions;
     else 
         target_num_cores = num_cores_total;
 
@@ -1280,8 +1281,9 @@ void bsr_spmm_multicore_reuse_iteration(
                 log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_runtime_args[i]);
             }
             log_info(tt::LogVerif, " -- Compute Args --");
+            log_info(tt::LogVerif, "compute_arg[{}] (num_iters_y) = {}", 0, compute_runtime_args[0]);
             for (size_t i = 0; i < num_iters_y_this_core; ++i) {
-                log_info(tt::LogVerif, "compute_arg[{}] (row_size) = {}", i, compute_runtime_args[i]);
+                log_info(tt::LogVerif, "compute_arg[{}] (row_size) = {}", i+1, compute_runtime_args[i+1]);
             }
         }
     }

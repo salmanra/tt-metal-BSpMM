@@ -9,7 +9,9 @@ runtime
 
 # rahmy was here
 # exclude matrix data
+# exclude test output
 *.mtx
+/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm/test_*
 
 /tt-perf*
 test_hlk_args_init_gen
@@ -141,3 +143,12 @@ Testing
 output.txt
 golden.txt
 bsr.txt
+tt_metal/programming_examples/rahmy/block_spmm/test_big_dense_large_Rv3/ANALYSIS_SUMMARY.md
+tt_metal/programming_examples/rahmy/block_spmm/test_big_dense_large_Rv3/analyze_differences.py
+tt_metal/programming_examples/rahmy/block_spmm/test_big_dense_large_Rv3/analyze_tiles.py
+tt_metal/programming_examples/rahmy/block_spmm/test_big_dense_large_Rv3/compare_files.py
+tt_metal/programming_examples/rahmy/block_spmm/test_big_dense_large_Rv3/find_good_regions.py
+tt_metal/programming_examples/rahmy/block_spmm/test_big_dense_large_Rv3/PATTERN_ANALYSIS.md
+tt_metal/programming_examples/rahmy/block_spmm/test_big_dense_large_Rv3/row_pattern_visualization.png
+tt_metal/programming_examples/rahmy/block_spmm/test_big_dense_large_Rv3/tile_error_plot.png
+tt_metal/programming_examples/rahmy/block_spmm/test_big_dense_large_Rv3/tile_quality_heatmap.png

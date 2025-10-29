@@ -224,7 +224,7 @@ void sortingPermutation(const Vals& values, std::vector<int>& v){
         v.push_back(i);
 
     std::sort(v.begin(), v.end(), [&values](int a, int b) -> bool { 
-        return values[a] < values[b];
+        return values[a] > values[b];
     });
 }
 
@@ -662,27 +662,38 @@ void bsr_spmm_multicore_load_balanced(
     std::vector<int> perm(row_diffs.size());
     sortingPermutation(row_diffs, perm);
 
+    // remove last num_empty_rows elements from perm
+    perm.resize(nnz_rows);
+
     // 1. initialize a vector for each row of cores
-    // TODO: make this the right sizes
-    std::vector<std::vector<uint32_t>> output_y_indices;
+    std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
     // 2. While count is less than num output blocks 
-    //    a. for idx in range 
-    uint32_t count = 0;
+    uint32_t num_rows_unassigned = nnz_rows;
+    uint32_t num_rows_assigned = 0;
+    uint32_t iter_count = 1;
+    while (num_rows_assigned < nnz_rows) {
+        uint32_t num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
+        for (uint32_t core_row = 0; core_row < num_rows_to_assign; core_row++){
+            if (num_rows_assigned == nnz_rows)
+                break;
+            output_y_indices[core_row].push_back(perm[num_rows_assigned++]);
+        }
+        num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
+        uint32_t subarray_iter = 0;
+        for (uint32_t core_row = num_cores_r; core_row > num_cores_r - num_rows_to_assign; core_row--){
+            if (num_rows_assigned++ == nnz_rows)
+                break;
+            output_y_indices[core_row - 1].push_back(perm[nnz_rows - 1 - num_cores_r * iter_count + subarray_iter]);
+            subarray_iter++;
+        }
+        iter_count++;
+    }
+    // yeah pretty much as above. What is this supposed to look like now? 
+    // 
+
 
 
     for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
-        // okay.
-        // we should be able to determine all the output-idx-ys right here.
-        //
-        // Try #1: hopping
-        //      give each core row its identical folded row
-        //      for each iter past 1
-        //          up to num_iters_y_remaining,
-        //          give core row folded row #(core-id-y * num_cores-y * iter-count - 1)
-        ///
-        // how to determine num iters y remaining
-        //      only the last core row cares
-        //      num_blocks_y % num_iters_y == 0 ? num_iters_y : num_blocks_y % num_iters_y
         for (uint32_t core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
             CoreCoord core(core_idx_x, core_idx_y);
             if (verbose)

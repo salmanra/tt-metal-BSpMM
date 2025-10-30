@@ -41,10 +41,14 @@ void kernel_main() {
     ///////////////////////////////////////////////////////////////////////
     /// RUNTIME ARGS //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
-
-    uint32_t out_tensor_start_tile_id = get_arg_val<uint32_t>(0);
-    uint32_t num_iters_y = get_arg_val<uint32_t>(1); //
-    uint32_t num_cores_y = get_arg_val<uint32_t>(2); //
+    uint32_t arg_index = 0;
+    uint32_t out_tensor_start_tile_id = get_arg_val<uint32_t>(arg_index++);
+    const uint32_t num_iters_y = get_arg_val<uint32_t>(arg_index++); //
+    const uint32_t num_cores_y = get_arg_val<uint32_t>(arg_index++); //
+    uint32_t y_coords[num_iters_y];
+    for (uint32_t i = 0; i < num_iters_y; i++){
+        y_coords[i] = get_arg_val<uint32_t>(arg_index++);
+    }
 
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
@@ -62,8 +66,9 @@ void kernel_main() {
 
     uint32_t out_tensor_x_coord_offset = 0;
     for (uint32_t y = 0; y < num_iters_y; y++){
+        uint32_t out_tensor_y_coord_offset = RtNt * y_coords[y];
         for (uint32_t x = 0; x < num_iters_x; x++){
-            uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_x_coord_offset;
+            uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
             for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
                 uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
                 for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
@@ -91,8 +96,7 @@ void kernel_main() {
             }
             out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
         }
-        // hop to next output row and reset output column offset
-        out_tensor_start_tile_id += RtNt * num_cores_y;
+        // reset output column offset
         out_tensor_x_coord_offset = 0;
     }
 }

@@ -322,6 +322,7 @@ void bsr_spmm_multicore_load_balanced(
         }
         folded_index++;
     }
+    folded_bsr_matrix_indices.push_back(folded_index);
     uint32_t height_of_folded_matrix = Rt * nnz_rows;
 
     uint32_t num_blocks_x = Nt / in1_block_w;
@@ -654,10 +655,20 @@ void bsr_spmm_multicore_load_balanced(
 
     // Scanning for load-balancing
     // 0. Sort block rows by number of nonzero blocks, get perm vector
+    // TODO: get folded indices first, then sort and perm
     uint32_t num_empty_rows = (M / R) - nnz_rows;
     std::vector<int> row_diffs;
-    for (int i = 0; i < a.indptr.size(); i++){
-        row_diffs.push_back(a.indptr[i+1] - a.indptr[i]);
+    // for (int i = 0; i < a.indptr.size() - 1; i++){
+    //     row_diffs.push_back(a.indptr[i+1] - a.indptr[i]);
+    // }
+    // std::vector<int> perm(row_diffs.size());
+    // sortingPermutation(row_diffs, perm);
+
+    // // remove last num_empty_rows elements from perm
+    // perm.resize(nnz_rows);
+
+    for (int i = 0; i < folded_bsr_matrix_indices.size() - 1; i++){
+        row_diffs.push_back(folded_bsr_matrix_indices[i+1] - folded_bsr_matrix_indices[i]);
     }
     std::vector<int> perm(row_diffs.size());
     sortingPermutation(row_diffs, perm);
@@ -665,33 +676,43 @@ void bsr_spmm_multicore_load_balanced(
     // remove last num_empty_rows elements from perm
     perm.resize(nnz_rows);
 
+    if (verbose){
+        std::cout << "row diffs: ";
+        for (int i = 0; i < row_diffs.size(); i++){
+            std::cout << row_diffs[i] << ' ';
+        }
+        std::cout << std::endl;
+        std::cout << std::endl;
+        std::cout << "perm: ";
+        for (int i = 0; i < perm.size(); i++){
+            std::cout << perm[i] << ' ';
+        }
+    }
     // 1. initialize a vector for each row of cores
     std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
     // 2. While count is less than num output blocks 
-    uint32_t num_rows_unassigned = nnz_rows;
     uint32_t num_rows_assigned = 0;
     uint32_t iter_count = 1;
+    uint32_t subarray_iter = 0;
     while (num_rows_assigned < nnz_rows) {
         uint32_t num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
+        subarray_iter = 0;
         for (uint32_t core_row = 0; core_row < num_rows_to_assign; core_row++){
-            if (num_rows_assigned == nnz_rows)
+            if (num_rows_assigned++ >= nnz_rows)
                 break;
-            output_y_indices[core_row].push_back(perm[num_rows_assigned++]);
+            output_y_indices[core_row].push_back(perm[num_cores_r * (iter_count - 1) + subarray_iter]);
+            subarray_iter++;
         }
         num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
-        uint32_t subarray_iter = 0;
+        subarray_iter = num_cores_r - num_rows_to_assign;
         for (uint32_t core_row = num_cores_r; core_row > num_cores_r - num_rows_to_assign; core_row--){
-            if (num_rows_assigned++ == nnz_rows)
+            if (num_rows_assigned++ >= nnz_rows)
                 break;
-            output_y_indices[core_row - 1].push_back(perm[nnz_rows - 1 - num_cores_r * iter_count + subarray_iter]);
+            output_y_indices[core_row - 1].push_back(perm[nnz_rows - num_cores_r * iter_count + subarray_iter]);
             subarray_iter++;
         }
         iter_count++;
     }
-    // yeah pretty much as above. What is this supposed to look like now? 
-    // 
-
-
 
     for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
         for (uint32_t core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
@@ -700,34 +721,29 @@ void bsr_spmm_multicore_load_balanced(
               log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
                 
             int output_idx_x_start = (core_idx_x * num_iters_x) % num_blocks_x;
-            int folded_output_idx_y_start = core_idx_y;
             work_region++;
 
             std::vector<uint32_t> reader_runtime_args;
             std::vector<uint32_t> compute_runtime_args;
             std::vector<uint32_t> writer_runtime_args;
 
-            uint32_t num_iters_y_this_core;
-            if (core_idx_y == (num_cores_r - 1)){
-                num_iters_y_this_core = num_blocks_y % num_iters_y == 0 ? num_iters_y : num_blocks_y % num_iters_y;
-            }
-            else {
-                num_iters_y_this_core = num_iters_y;
-            }
+            uint32_t num_iters_y_this_core = output_y_indices[core_idx_y].size();
             uint32_t num_iters_x_this_core = std::min(num_iters_x, num_blocks_x - output_idx_x_start + 1);
             reader_runtime_args.push_back(num_iters_x_this_core);
             reader_runtime_args.push_back(num_iters_y_this_core);
             compute_runtime_args.push_back(num_iters_y_this_core);
             reader_runtime_args.push_back(output_idx_x_start);
+            writer_runtime_args.push_back(output_idx_x_start * in1_block_w);
+            writer_runtime_args.push_back(num_iters_y_this_core);
+            writer_runtime_args.push_back(num_cores_r);
             for (int iter_y = 0; iter_y < num_iters_y_this_core; iter_y++) {
-                uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y_start + (iter_y * num_cores_r)];
+                uint32_t folded_output_idx_y = output_y_indices[core_idx_y][iter_y];
+                uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y];
                 reader_runtime_args.push_back(output_idx_y);
+                writer_runtime_args.push_back(folded_output_idx_y);
                 compute_runtime_args.push_back(a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
             }
 
-            writer_runtime_args.push_back((folded_output_idx_y_start * Rt * Nt) + (output_idx_x_start * in1_block_w));
-            writer_runtime_args.push_back(num_iters_y_this_core);
-            writer_runtime_args.push_back(num_cores_r);
 
             tt_metal::SetRuntimeArgs(program, reader_id, core, reader_runtime_args);
             tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_runtime_args);
@@ -741,7 +757,7 @@ void bsr_spmm_multicore_load_balanced(
                 }
             }
 
-            if (verbose && core_idx_x == 7 && core_idx_y == 0) {
+            if (verbose && core_idx_x == 0 && core_idx_y == 7) {
                 a.pretty_print();
                 log_info(tt::LogVerif, " -- Reader Args --");
                 log_info(tt::LogVerif, "reader_arg[0] (num_iters_x) = {}", reader_runtime_args[0]);
@@ -757,13 +773,16 @@ void bsr_spmm_multicore_load_balanced(
                     "num_iters_y_this_core",
                     "num_cores_y"
                 };
-                for (size_t i = 0; i < writer_runtime_args.size(); ++i) {
+                for (size_t i = 0; i < 3; ++i) {
                     log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_runtime_args[i]);
+                }
+                for (size_t i = 3; i < writer_runtime_args.size(); ++i) {
+                    log_info(tt::LogVerif, "writer_arg[{}] (output_idx_y) = {}", i, writer_runtime_args[i]);
                 }
                 log_info(tt::LogVerif, " -- Compute Args --");
                 log_info(tt::LogVerif, "compute_arg[0] (num_iters_y) = {}", compute_runtime_args[0]);
 
-                for (size_t i = 1; i < num_iters_y_this_core + 1; ++i) {
+                for (size_t i = 1; i < compute_runtime_args.size(); ++i) {
                     log_info(tt::LogVerif, "compute_arg[{}] (row_size) = {}", i, compute_runtime_args[i]);
                 }
             }

@@ -790,13 +790,12 @@ void bsr_spmm_multicore_load_balanced(
     } 
 
     // EnqueueWriteBuffers
-    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
-    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
-    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), true);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), true);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
     EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
-    // EnqueueProgram
-    log_info(tt::LogVerif, " -- enqueueing program --");
-
+    
+    // TODO: is there a macro for build_Tracy we can invoke here to wrap in a loop and get cooking?
     EnqueueProgram(cq, program, true);
 
     if (verbose)
@@ -1319,13 +1318,11 @@ void bsr_spmm_multicore_reuse_iteration(
     }
 
     // EnqueueWriteBuffers
-    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
-    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
-    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), true);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), true);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
     EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
     // EnqueueProgram
-    log_info(tt::LogVerif, " -- enqueueing program --");
-
     EnqueueProgram(cq, program, true);
 
     if (verbose)
@@ -1785,9 +1782,9 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     }
 
 
-    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
-    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
-    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), true);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), true);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
     EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
 
     if (verbose)
@@ -2232,15 +2229,15 @@ void bsr_spmm_multicore_host_reuse_device_iter(
             nnz_output_blocks_read);
     }
 
-    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
-    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
-    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), true);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), true);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
     EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
 
     if (verbose)
         log_info(tt::LogVerif, " -- All data moved to DRAM --");
 
-    EnqueueProgram(cq, program, false);
+    EnqueueProgram(cq, program, true);
 
     if (verbose)
         log_info(tt::LogVerif, " -- Program enqueued --");
@@ -2663,14 +2660,14 @@ void bsr_spmm_multicore_reuse(
     }
 
 
-    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
-    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), true);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), true);
     EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
 
     if (verbose)
         log_info(tt::LogVerif, " -- All data moved to DRAM --");
 
-    EnqueueProgram(cq, program, false);
+    EnqueueProgram(cq, program, true);
 
     if (verbose)
         log_info(tt::LogVerif, " -- Program enqueued --");
@@ -2678,7 +2675,7 @@ void bsr_spmm_multicore_reuse(
     for (auto & pair : dst_dram_buffers){
         uintptr_t row_index = pair.first;
         std::shared_ptr<Buffer> buffer = pair.second;
-        EnqueueReadBuffer(cq, buffer, output.data.data() + (row_index * R * N), false);
+        EnqueueReadBuffer(cq, buffer, output.data.data() + (row_index * R * N), true);
     }
 
     Finish(cq);
@@ -3103,14 +3100,14 @@ void bsr_spmm_multicore_reuse_naive(
     }
 
 
-    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
-    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), true);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), true);
     EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
 
     if (verbose)
         log_info(tt::LogVerif, " -- All data moved to DRAM --");
 
-    EnqueueProgram(cq, program, false);
+    EnqueueProgram(cq, program, true);
 
     if (verbose)
         log_info(tt::LogVerif, " -- Program enqueued --");
@@ -3489,10 +3486,10 @@ static std::pair<DenseHostCodeFunctionPtr, std::string> DenseHostCodeRegistry[] 
         // for learning how the code operates, let's  make all these calls block.
         {
             ZoneScopedNC("Data Movement and Device code.", tracy::Color::Brown4);
-            EnqueueWriteBuffer(cq, src0_dram_buffer, a.data(), false);
-            EnqueueWriteBuffer(cq, src1_dram_buffer, b.data(), false);
+            EnqueueWriteBuffer(cq, src0_dram_buffer, a.data(), true);
+            EnqueueWriteBuffer(cq, src1_dram_buffer, b.data(), true);
             EnqueueProgram(cq, program, true);
-            EnqueueReadBuffer(cq, dst_dram_buffer, output.data(), false);
+            EnqueueReadBuffer(cq, dst_dram_buffer, output.data(), true);
         }
     }
 

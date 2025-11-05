@@ -78,6 +78,8 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_large_R();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_large_Rv2();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_large_Rv3();
+    template <uint32_t, uint32_t>
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_profile_case_sparse_fill_column();
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
@@ -147,9 +149,36 @@ namespace bsr_test_suite {
         test_big_dense_large_R, // 62
         test_big_dense_large_Rv2, // 63
         test_big_dense_large_Rv3, // 64
+        test_profile_case_sparse_fill_column<32, 32>, // 65
+        test_profile_case_sparse_fill_column<64, 64>, // 66
+        test_profile_case_sparse_fill_column<128, 128>, // 65
     };
 
     static std::uniform_real_distribution<> dis(-1000.0, 1000.0);
+
+    template <uint32_t R = 32, uint32_t C = 32>
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_profile_case_sparse_fill_column() {
+        // matmul params setup
+        uint32_t M = 1024;
+        uint32_t N = 1024;
+        uint32_t K = 1024;
+        // block params setup
+        uint32_t block_matrix_height = M / R;
+        uint32_t nblocks = block_matrix_height;
+
+        // nz blocks fill the first column
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        
+        char buf[50];
+        size_t n = sprintf(buf, "test_profile_case_sparse_fill_column_R%i_C%d", R, C);
+        std::string test_name(buf, n);
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name);
+    }
     
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_row_v2() {
 

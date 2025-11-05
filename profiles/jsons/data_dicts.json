@@ -1,42 +1,77 @@
 [
     {
         "diagonal_R32_C32\n(NNZ Blocks = 32)": {
-            "Program Loop total ns": 20414750
+            "Program Loop total ns": 17912499
         },
         "diagonal_R64_C64\n(NNZ Blocks = 16)": {
-            "Program Loop total ns": 15138642
+            "Program Loop total ns": 15843918
         },
         "diagonal_R128_C128\n(NNZ Blocks = 8)": {
-            "Program Loop total ns": 13918646
+            "Program Loop total ns": 14446405
         },
         "column_R32_C32\n(NNZ Blocks = 32)": {
-            "Program Loop total ns": 20080400
+            "Program Loop total ns": 19042093
         },
         "column_R64_C64\n(NNZ Blocks = 16)": {
-            "Program Loop total ns": 16028487
+            "Program Loop total ns": 15969418
         },
         "column_R128_C128\n(NNZ Blocks = 8)": {
-            "Program Loop total ns": 13209110
+            "Program Loop total ns": 14131396
         },
         "row_R32_C32\n(NNZ Blocks = 32)": {
-            "Program Loop total ns": 8819840
+            "Program Loop total ns": 9134051
         },
         "row_R64_C64\n(NNZ Blocks = 16)": {
-            "Program Loop total ns": 8921110
+            "Program Loop total ns": 9925195
         },
         "row_R128_C128\n(NNZ Blocks = 8)": {
-            "Program Loop total ns": 9727417
+            "Program Loop total ns": 10316813
         },
         "random_R32_C32\n(NNZ Blocks = 32)": {
-            "Program Loop total ns": 16691254
+            "Program Loop total ns": 15629238
         },
         "random_R64_C64\n(NNZ Blocks = 16)": {
-            "Program Loop total ns": 13120490
+            "Program Loop total ns": 14181455
         }
     },
     {
         "diagonal_R32_C32\n(NNZ Blocks = 32)": {
-            "Program Loop total ns": 19511278
+            "Program Loop total ns": 18401946
+        },
+        "diagonal_R64_C64\n(NNZ Blocks = 16)": {
+            "Program Loop total ns": 15148501
+        },
+        "diagonal_R128_C128\n(NNZ Blocks = 8)": {
+            "Program Loop total ns": 13875077
+        },
+        "column_R32_C32\n(NNZ Blocks = 32)": {
+            "Program Loop total ns": 17357282
+        },
+        "column_R64_C64\n(NNZ Blocks = 16)": {
+            "Program Loop total ns": 14845984
+        },
+        "column_R128_C128\n(NNZ Blocks = 8)": {
+            "Program Loop total ns": 13811658
+        },
+        "row_R32_C32\n(NNZ Blocks = 32)": {
+            "Program Loop total ns": 9340388
+        },
+        "row_R64_C64\n(NNZ Blocks = 16)": {
+            "Program Loop total ns": 10074914
+        },
+        "row_R128_C128\n(NNZ Blocks = 8)": {
+            "Program Loop total ns": 9622077
+        },
+        "random_R32_C32\n(NNZ Blocks = 32)": {
+            "Program Loop total ns": 14322545
+        },
+        "random_R64_C64\n(NNZ Blocks = 16)": {
+            "Program Loop total ns": 14031607
+        }
+    },
+    {
+        "diagonal_R32_C32\n(NNZ Blocks = 32)": {
+            "Program Loop total ns": NaN
         },
         "diagonal_R64_C64\n(NNZ Blocks = 16)": {
             "Program Loop total ns": 14068493

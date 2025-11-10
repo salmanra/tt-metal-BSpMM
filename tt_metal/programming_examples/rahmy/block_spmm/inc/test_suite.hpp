@@ -151,7 +151,7 @@ namespace bsr_test_suite {
         test_big_dense_large_Rv3, // 64
         test_profile_case_sparse_fill_column<32, 32>, // 65
         test_profile_case_sparse_fill_column<64, 64>, // 66
-        test_profile_case_sparse_fill_column<128, 128>, // 65
+        test_profile_case_sparse_fill_column<128, 128>, // 67
     };
 
     static std::uniform_real_distribution<> dis(-1000.0, 1000.0);

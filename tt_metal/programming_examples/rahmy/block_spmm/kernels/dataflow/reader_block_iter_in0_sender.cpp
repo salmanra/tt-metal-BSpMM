@@ -162,10 +162,8 @@ void kernel_main(){
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
 
                 cb_reserve_back(cb_id_in0, in0_block_num_tiles);
-                cb_reserve_back(cb_id_in1, in1_block_num_tiles);
 
                 l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-                l1_write_addr_in1 = get_write_ptr(cb_id_in1);
 
                 uint32_t in0_start_address = l1_write_addr_in0;  // copy start address of block, to be used for mcasting
 
@@ -202,6 +200,10 @@ void kernel_main(){
                     in0_start_address, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_dests);
 
                 // Read in1 block
+                
+                cb_reserve_back(cb_id_in1, in1_block_num_tiles);
+                l1_write_addr_in1 = get_write_ptr(cb_id_in1);
+                
                 uint32_t bsr_col_index = col_indices[reduction_iter];
                 uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
                 uint32_t in1_tensor_row_start_tile_id = in1_tensor_start_tile_id + bsr_col_index * in1_block_stride;

@@ -722,41 +722,63 @@ void bsr_spmm_multicore_sparse_mcast(
             tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_runtime_args);
             tt_metal::SetRuntimeArgs(program, writer_id, core, writer_runtime_args);
 
-            if (verbose){
-                if (num_iters_x_this_core < num_iters_x || num_iters_y_this_core < num_iters_y){
-                    log_info(tt::LogVerif, " -- Num iters diverged! --");
-                    log_info(tt::LogVerif, "(num_iters_x_this_core) = {}", num_iters_x_this_core);
-                    log_info(tt::LogVerif, "(num_iters_y_this_core) = {}", num_iters_y_this_core);
-                }
-            }
-
             if (verbose && core_idx_x == 0 && core_idx_y == 0) {
                 a.pretty_print();
+                // Reader args
                 log_info(tt::LogVerif, " -- Reader Args --");
-                log_info(tt::LogVerif, "reader_arg[0] (num_iters_x) = {}", reader_runtime_args[0]);
-                log_info(tt::LogVerif, "reader_arg[1] (num_iters_y) = {}",  reader_runtime_args[1]);
-                log_info(tt::LogVerif, "reader_arg[2] (output_idx_x_start) = {}",  reader_runtime_args[2]);
-                for (size_t i = 0; i < num_iters_y_this_core; ++i) {
-                    log_info(tt::LogVerif, "reader_arg[{}] (y_coord) = {}", i + 3, reader_runtime_args[i+3]);
+                const char* reader_arg_names[] = {
+                    "in0_mcast_dest_noc_start_x",  // [0]
+                    "in0_mcast_dest_noc_start_y",  // [1]
+                    "in0_mcast_dest_noc_end_x",    // [2]
+                    "in0_mcast_dest_noc_end_y",    // [3]
+                    "in0_mcast_num_dests",         // [4]
+                    "in0_mcast_sender_noc_x",      // [5]
+                    "in0_mcast_sender_noc_y",      // [6]
+                    "in0_mcast_sender_semaphore",  // [7]
+                    "in0_mcast_receiver_semaphore" // [8]
+                    // [9].. dynamic: num_iters_x, num_iters_y, output_idx_x_start, then output y coords
+                };
+                for (size_t i = 0; i < reader_runtime_args.size(); ++i) {
+                    if (i < std::size(reader_arg_names)) {
+                        log_info(tt::LogVerif, "reader_arg[{}] ({}) = {}", i, reader_arg_names[i], reader_runtime_args[i]);
+                    } else {
+                        // dynamic region: provide semantic names depending on position
+                        if (i == 9)
+                            log_info(tt::LogVerif, "reader_arg[{}] (num_iters_x) = {}", i, reader_runtime_args[i]);
+                        else if (i == 10)
+                            log_info(tt::LogVerif, "reader_arg[{}] (num_iters_y) = {}", i, reader_runtime_args[i]);
+                        else if (i == 11)
+                            log_info(tt::LogVerif, "reader_arg[{}] (output_idx_x_start) = {}", i, reader_runtime_args[i]);
+                        else
+                            log_info(tt::LogVerif, "reader_arg[{}] (output_idx_y[{}]) = {}", i, i - 12, reader_runtime_args[i]);
+                    }
                 }
 
+                // Writer args
                 log_info(tt::LogVerif, " -- Writer Args --");
                 const char* writer_arg_names[] = {
-                    "out_tensor_start_tile_id",
-                    "num_iters_y_this_core",
-                    "num_cores_y"
+                    "out_tensor_start_tile_id", // [0]
+                    "num_iters_y_this_core",    // [1]
+                    "num_cores_y"               // [2]
+                    // [3].. folded_output_idx_y entries
                 };
-                for (size_t i = 0; i < 3; ++i) {
-                    log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_runtime_args[i]);
+                for (size_t i = 0; i < writer_runtime_args.size(); ++i) {
+                    if (i < std::size(writer_arg_names)) {
+                        log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_runtime_args[i]);
+                    } else {
+                        log_info(tt::LogVerif, "writer_arg[{}] (folded_output_idx_y[{}]) = {}", i, i - 3, writer_runtime_args[i]);
+                    }
                 }
-                for (size_t i = 3; i < writer_runtime_args.size(); ++i) {
-                    log_info(tt::LogVerif, "writer_arg[{}] (output_idx_y) = {}", i, writer_runtime_args[i]);
-                }
-                log_info(tt::LogVerif, " -- Compute Args --");
-                log_info(tt::LogVerif, "compute_arg[0] (num_iters_y) = {}", compute_runtime_args[0]);
 
-                for (size_t i = 1; i < compute_runtime_args.size(); ++i) {
-                    log_info(tt::LogVerif, "compute_arg[{}] (row_size) = {}", i, compute_runtime_args[i]);
+                // Compute args
+                log_info(tt::LogVerif, " -- Compute Args --");
+                if (!compute_runtime_args.empty()) {
+                    log_info(tt::LogVerif, "compute_arg[0] (num_iters_y) = {}", compute_runtime_args[0]);
+                    for (size_t i = 1; i < compute_runtime_args.size(); ++i) {
+                        log_info(tt::LogVerif, "compute_arg[{}] (row_size[{}]) = {}", i, i - 1, compute_runtime_args[i]);
+                    }
+                } else {
+                    log_info(tt::LogVerif, "compute_args empty");
                 }
             }
         }

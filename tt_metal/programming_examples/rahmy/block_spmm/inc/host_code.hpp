@@ -555,6 +555,73 @@ void bsr_spmm_multicore_sparse_mcast(
         (std::uint32_t)num_iters_x,
     };
 
+
+        if (verbose) {
+        auto print_args = [](const std::string& name, const std::vector<uint32_t>& args, const std::vector<std::string>& arg_names) {
+            std::cout << "==== " << name << " ====" << std::endl;
+            for (size_t i = 0; i < args.size(); ++i) {
+                if (i < arg_names.size())
+                    std::cout << "  [" << i << "] " << arg_names[i] << " = " << args[i] << std::endl;
+                else
+                    std::cout << "  [" << i << "] = " << args[i] << std::endl;
+            }
+            std::cout << std::endl;
+        };
+
+        print_args("reader_compile_time_args", reader_compile_time_args, {
+            "src0_is_dram",
+            "src1_is_dram",
+            "col_indices_is_dram",
+            "indptr_is_dram",
+            "src0_dram_buffer->address()",
+            "in0_tensor_stride_w",
+            "in0_tensor_stride_h",
+            "in0_block_w",
+            "in0_block_h",
+            "in0_block_num_tiles",
+            "src1_dram_buffer->address()",
+            "in1_tensor_stride_w",
+            "in1_tensor_stride_h",
+            "in1_block_w",
+            "in1_block_h",
+            "in1_block_num_tiles",
+            "column_indices_dram_buffer->address()",
+            "indptr_dram_buffer->address()",
+            "num_tiles_for_col_indices",
+            "num_tiles_for_indptr"
+        });
+
+        print_args("compute_kernel_compile_time_args", compute_kernel_compile_time_args, {
+            "in0_block_w",
+            "in0_num_subblocks",
+            "in0_block_num_tiles",
+            "in0_subblock_num_tiles",
+            "in1_num_subblocks",
+            "in1_block_num_tiles",
+            "in1_per_core_w",
+            "out_subblock_h",
+            "out_subblock_w",
+            "out_subblock_num_tiles",
+            "num_iters_x",
+        });
+
+        print_args("writer_compile_time_args", writer_compile_time_args, {
+            "out_is_dram",
+            "dst_dram_buffer->address()",
+            "out_tensor_stride_w",
+            "out_tensor_stride_h",
+            "out_tensor_next_subblock_stride_w",
+            "out_tensor_next_subblock_stride_h",
+            "out_subblock_w",
+            "out_subblock_h",
+            "out_subblock_w * out_subblock_h",
+            "out_num_subblocks_w",
+            "out_num_subblocks_h",
+            "Rt * Nt",
+            "num_iters_x",
+        });
+    }
+
     // Create Kernels
     // Two unique reader kernels, one compute kernel, one unique writer kernel with 2 compile configs
     // 

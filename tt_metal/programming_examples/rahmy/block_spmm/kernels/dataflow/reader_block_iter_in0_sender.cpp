@@ -86,18 +86,6 @@ void kernel_main(){
     const uint32_t indptr_single_tile_size_bytes = get_tile_size(cb_id_indptr);
     const DataFormat indptr_data_format = get_dataformat(cb_id_indptr);
 
-    // MCAST SETUP ////////////////////////////////////////////////////////////////////////////////////////////////
-    // Set ur local VALID value, to be mcasted to destinations flag address after the data has been mcasted
-    volatile tt_l1_ptr uint32_t* in0_mcast_receiver_semaphore_addr_ptr =
-        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_mcast_receiver_semaphore_addr);
-    *(in0_mcast_receiver_semaphore_addr_ptr) = VALID;
-
-
-    // local address that will be atomically incremented by mcast receivers, to know when all receivers are ready
-    // to receive the mcast
-    volatile tt_l1_ptr uint32_t* in0_mcast_sender_semaphore_addr_ptr =
-        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_mcast_sender_semaphore_addr);
-
     uint32_t in0_block_size_bytes = in0_single_tile_size_bytes * in0_block_num_tiles;              
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -119,6 +107,7 @@ void kernel_main(){
         .page_size = indptr_single_tile_size_bytes,
         .data_format = indptr_data_format};
 
+    // DPRINT_DATA0(DPRINT << "Reserving " << col_indices_num_tiles <<  " tiles for col indices" << ENDL());
     cb_reserve_back(cb_id_col_indices, col_indices_num_tiles);
     l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
     uint32_t col_indices_dram_start_id = 0;
@@ -131,6 +120,7 @@ void kernel_main(){
     noc_async_read_barrier();
     cb_push_back(cb_id_col_indices, col_indices_num_tiles);
 
+    // DPRINT_DATA0(DPRINT << "Reserving " << indptr_num_tiles <<  " tiles for indptr" << ENDL());
     cb_reserve_back(cb_id_indptr, indptr_num_tiles);
     l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
     uint32_t indptr_dram_start_id = 0;
@@ -145,6 +135,20 @@ void kernel_main(){
     
     uint32_t* col_indices = (uint32_t*) l1_write_addr_col_indices;
     uint32_t* indptr = (uint32_t*) l1_write_addr_indptr;
+
+    // DPRINT_DATA0(DPRINT << "Setting up mcasting" << ENDL());
+
+    // MCAST SETUP ////////////////////////////////////////////////////////////////////////////////////////////////
+    // Set ur local VALID value, to be mcasted to destinations flag address after the data has been mcasted
+    volatile tt_l1_ptr uint32_t* in0_mcast_receiver_semaphore_addr_ptr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_mcast_receiver_semaphore_addr);
+    *(in0_mcast_receiver_semaphore_addr_ptr) = VALID;
+
+    // local address that will be atomically incremented by mcast receivers, to know when all receivers are ready
+    // to receive the mcast
+    volatile tt_l1_ptr uint32_t* in0_mcast_sender_semaphore_addr_ptr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_mcast_sender_semaphore_addr);
+
     ///////////////////////////////////////////////////////////////////////
     /// PROGRAM BODY //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
@@ -199,8 +203,11 @@ void kernel_main(){
                 noc_async_write_multicast(
                     in0_start_address, in0_multicast_data_addr, in0_block_size_bytes, in0_mcast_num_dests);
 
-                // Read in1 block
-                
+                cb_push_back(cb_id_in0, in0_block_num_tiles);
+
+                // DPRINT_DATA0(DPRINT << "Mcasted block " << ENDL());
+
+                // Read in1 block                
                 cb_reserve_back(cb_id_in1, in1_block_num_tiles);
                 l1_write_addr_in1 = get_write_ptr(cb_id_in1);
                 
@@ -219,9 +226,8 @@ void kernel_main(){
 
                 noc_async_read_barrier();
 
-
-                cb_push_back(cb_id_in0, in0_block_num_tiles);
                 cb_push_back(cb_id_in1, in1_block_num_tiles);
+                // DPRINT_DATA0(DPRINT << "Read src1 block" << ENDL());
             }
         }
     }

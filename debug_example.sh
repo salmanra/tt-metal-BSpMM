@@ -4,7 +4,7 @@ fi
 
 if [ "$2" = "watcher" ]; then
 
-    export TT_METAL_WATCHER=120        # the number of seconds between Watcher updates (longer is less invasive)
+    export TT_METAL_WATCHER=30        # the number of seconds between Watcher updates (longer is less invasive)
     export TT_METAL_WATCHER_APPEND=1   # optional: append to the end of the existing log file (vs creating a new file)
     export TT_METAL_WATCHER_DUMP_ALL=0 # optional: dump all state including unsafe state
 

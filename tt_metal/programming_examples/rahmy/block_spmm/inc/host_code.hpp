@@ -11,6 +11,7 @@
 #include "tt-metalium/circular_buffer_types.hpp"
 #include "tt-metalium/core_coord.hpp"
 #include "tt-metalium/host_api.hpp"
+#include "ttnn/compute_kernel_config.hpp"
 
 using namespace tt;
 
@@ -663,7 +664,8 @@ void bsr_spmm_multicore_sparse_mcast(
         all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity,
                                         // .fp32_dest_acc_en = true,
-                                        .compile_args = compute_kernel_compile_time_args});
+                                        .compile_args = compute_kernel_compile_time_args,
+                                        });
 
     auto in0_mcast_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in0_mcast_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);

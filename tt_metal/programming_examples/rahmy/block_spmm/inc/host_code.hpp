@@ -11,7 +11,6 @@
 #include "tt-metalium/circular_buffer_types.hpp"
 #include "tt-metalium/core_coord.hpp"
 #include "tt-metalium/host_api.hpp"
-#include "ttnn/compute_kernel_config.hpp"
 
 using namespace tt;
 

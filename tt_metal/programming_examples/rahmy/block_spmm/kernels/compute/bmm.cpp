@@ -45,7 +45,7 @@ void MAIN {
     //DPRINT_MATH(DPRINT << "Math core waiting on " << num_blocks << " blocks." << ENDL());
 
     bool zero_output = num_blocks == 0;
-    
+
     // DRAM initialization technique:
     // If this core is handling a zero output block,
     // 1. Compute kernel packs zeros (fill_tile) and pushes to output buffer

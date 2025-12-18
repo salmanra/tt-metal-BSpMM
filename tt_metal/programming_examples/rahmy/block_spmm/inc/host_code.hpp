@@ -145,7 +145,7 @@ using HostCodeFunctionPtr = void (*)(
 
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
-    {bsr_spmm_multicore_sparse_mcast, "bsr_spmm_multicore_sparse_mcast"}, 
+    {bsr_spmm_multicore_sparse_mcast, "bsr_spmm_multicore_sparse_mcast"},
     // {bsr_spmm_multicore_load_balanced, "bsr_spmm_multicore_load_balanced"},
     // {bsr_spmm_multicore_reuse_iteration, "bsr_spmm_multicore_reuse_iteration"},
     // {bsr_spmm_multicore_reuse_many_blocks_per_core, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
@@ -220,12 +220,12 @@ uint32_t get_Npc_from_BSR_block_size(uint32_t Nt, uint32_t Mpc, uint32_t in0_blo
 
 template<class Vals>
 void sortingPermutation(const Vals& values, std::vector<int>& v){
-    int size = values.size(); 
+    int size = values.size();
     v.clear(); v.reserve(size);
     for(int i=0; i < size; ++i)
         v.push_back(i);
 
-    std::sort(v.begin(), v.end(), [&values](int a, int b) -> bool { 
+    std::sort(v.begin(), v.end(), [&values](int a, int b) -> bool {
         return values[a] > values[b];
     });
 }
@@ -246,19 +246,19 @@ void bsr_spmm_multicore_sparse_mcast(
     bool verbose)
     {
     // nothing really changes from iteration version.
-    // Create two semaphores. 
-    // Split into 2 reader kernels. 
-    // everything else is identical. 
+    // Create two semaphores.
+    // Split into 2 reader kernels.
+    // everything else is identical.
 
-    // get core grid. Is the CoreRangeSet we create in the previous examples guaranteed to be 
-    // a rectangle? Let's assume it is. 
+    // get core grid. Is the CoreRangeSet we create in the previous examples guaranteed to be
+    // a rectangle? Let's assume it is.
 
     // Define all cores, left column, and all but left column
     // Compile CK, WK to all cores
     // Compile custom RK to left column, all but left column
 
     // Create two semaphores (in0_mcast_sender/receiver) on all cores
-    
+
     // TT-Metal CommandQueue and Program setup
     CommandQueue& cq = device->command_queue();
     Program program{};
@@ -324,7 +324,7 @@ void bsr_spmm_multicore_sparse_mcast(
     uint32_t target_num_cores;
     if (num_work_regions < num_cores_total)
         target_num_cores = num_work_regions;
-    else 
+    else
         target_num_cores = num_cores_total;
 
     uint32_t out_subblock_h = 0, out_subblock_w = 0;
@@ -349,7 +349,7 @@ void bsr_spmm_multicore_sparse_mcast(
     uint32_t num_cores_c = core_range.x;
     uint32_t num_cores_r = core_range.y;
 
-    // TODO: when only using one core, all_except_left_column is bad and throws a runtime error. 
+    // TODO: when only using one core, all_except_left_column is bad and throws a runtime error.
     CoreRange all_cores(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
@@ -364,7 +364,7 @@ void bsr_spmm_multicore_sparse_mcast(
     CoreRange all_except_left_column(
         {(std::size_t)start_core_x + 1, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + column_offset - 1, (std::size_t)start_core_y + num_cores_r - 1});
-   
+
 
     // Circural Buffer sizing
     uint32_t in0_CB_num_tiles = in0_block_h * in0_block_w * 2; // double buffer
@@ -382,7 +382,7 @@ void bsr_spmm_multicore_sparse_mcast(
     uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w * in1_num_subblocks;
     uint32_t in1_per_core_w = out_subblock_w * in1_num_subblocks;
 
-    uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;  
+    uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
 
 
     // DRAM buffers initialiation
@@ -395,17 +395,17 @@ void bsr_spmm_multicore_sparse_mcast(
         single_tile_size * Rt * Ct * nnz_blocks;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
     uint32_t dram_buffer_B_size =
         single_tile_size * Nt * Kt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
-    
-    uint32_t dram_buffer_col_indices_size = 
+
+    uint32_t dram_buffer_col_indices_size =
         sizeof(indexing_data_format) * nnz_blocks;
     // Round up to tile size
     dram_buffer_col_indices_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_col_indices_size) / (indexing_data_single_tile_size));
 
-    uint32_t dram_buffer_indptr_size = 
+    uint32_t dram_buffer_indptr_size =
         sizeof(indexing_data_format) * (M / R + 1);
     // Round up to tile size
     dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
-    
+
     auto dst_dram_buffer = MakeBuffer(device, dram_buffer_dst_total_size, single_tile_size);
     auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
     auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
@@ -433,7 +433,7 @@ void bsr_spmm_multicore_sparse_mcast(
             num_cores_y,
             num_cores_x,
             num_iters_y,
-            num_iters_x, 
+            num_iters_x,
             nnz_rows);
     }
 
@@ -514,7 +514,7 @@ void bsr_spmm_multicore_sparse_mcast(
         (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
         (std::uint32_t)indptr_dram_buffer->address(), // NoC args, indptr
 
-        (std::uint32_t)num_tiles_for_col_indices, 
+        (std::uint32_t)num_tiles_for_col_indices,
         (std::uint32_t)num_tiles_for_indptr,
 
         // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
@@ -625,7 +625,7 @@ void bsr_spmm_multicore_sparse_mcast(
 
     // Create Kernels
     // Two unique reader kernels, one compute kernel, one unique writer kernel with 2 compile configs
-    // 
+    //
     auto reader_in0_sender_id = tt_metal::CreateKernel(
         program,
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_block_iter_in0_sender.cpp",
@@ -635,7 +635,7 @@ void bsr_spmm_multicore_sparse_mcast(
             .noc = NOC::RISCV_0_default,
             .compile_args = reader_compile_time_args});
 
-    
+
     KernelHandle reader_in0_receiver_id = 0;
     if (num_cores_c > 1) {
         reader_in0_receiver_id = tt_metal::CreateKernel(
@@ -702,7 +702,7 @@ void bsr_spmm_multicore_sparse_mcast(
     }
     // 1. initialize a vector for each row of cores
     std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
-    // 2. While count is less than num output blocks 
+    // 2. While count is less than num output blocks
     uint32_t num_rows_assigned = 0;
     uint32_t iter_count = 1;
     uint32_t subarray_iter = 0;
@@ -746,7 +746,7 @@ void bsr_spmm_multicore_sparse_mcast(
             auto top_core_plus_one_physical = device->worker_core_from_logical_core(top_core_plus_one);
             auto bottom_core_physical = device->worker_core_from_logical_core(bottom_core);
 
-                
+
             int output_idx_x_start = (core_idx_x * num_iters_x) % num_blocks_x;
             work_region++;
 
@@ -850,14 +850,14 @@ void bsr_spmm_multicore_sparse_mcast(
                 }
             }
         }
-    } 
+    }
 
     // EnqueueWriteBuffers
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), true);
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), true);
     EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
     EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
-    
+
     // TODO: is there a macro for build_Tracy we can invoke here to wrap in a loop and get cooking?
     EnqueueProgram(cq, program, true);
 
@@ -877,7 +877,7 @@ void bsr_spmm_multicore_sparse_mcast(
         log_info(tt::LogVerif, " -- Finished reading output --");
     Finish(cq);
 }
- 
+
 // void bsr_spmm_multicore_load_balanced(
 //     bsr_matrix<bfloat16>& a,
 //     dense_matrix<bfloat16>& b,
@@ -957,7 +957,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //     uint32_t target_num_cores;
 //     if (num_work_regions < num_cores_total)
 //         target_num_cores = num_work_regions;
-//     else 
+//     else
 //         target_num_cores = num_cores_total;
 
 //     uint32_t out_subblock_h, out_subblock_w;
@@ -985,7 +985,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //     CoreRange all_cores(
 //         {(std::size_t)start_core_x, (std::size_t)start_core_y},
 //         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
-    
+
 
 //     // Circural Buffer sizing
 //     uint32_t in0_CB_num_tiles = in0_block_h * in0_block_w * 2; // double buffer
@@ -1003,7 +1003,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //     uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w * in1_num_subblocks;
 //     uint32_t in1_per_core_w = out_subblock_w * in1_num_subblocks;
 
-//     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;  
+//     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
 
 
 //     // DRAM buffers initialiation
@@ -1016,17 +1016,17 @@ void bsr_spmm_multicore_sparse_mcast(
 //         single_tile_size * Rt * Ct * nnz_blocks;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 //     uint32_t dram_buffer_B_size =
 //         single_tile_size * Nt * Kt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
-    
-//     uint32_t dram_buffer_col_indices_size = 
+
+//     uint32_t dram_buffer_col_indices_size =
 //         sizeof(indexing_data_format) * nnz_blocks;
 //     // Round up to tile size
 //     dram_buffer_col_indices_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_col_indices_size) / (indexing_data_single_tile_size));
 
-//     uint32_t dram_buffer_indptr_size = 
+//     uint32_t dram_buffer_indptr_size =
 //         sizeof(indexing_data_format) * (M / R + 1);
 //     // Round up to tile size
 //     dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
-    
+
 //     auto dst_dram_buffer = MakeBuffer(device, dram_buffer_dst_total_size, single_tile_size);
 //     auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
 //     auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
@@ -1054,7 +1054,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //             num_cores_y,
 //             num_cores_x,
 //             num_iters_y,
-//             num_iters_x, 
+//             num_iters_x,
 //             nnz_rows);
 //     }
 
@@ -1135,7 +1135,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //         (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
 //         (std::uint32_t)indptr_dram_buffer->address(), // NoC args, indptr
 
-//         (std::uint32_t)num_tiles_for_col_indices, 
+//         (std::uint32_t)num_tiles_for_col_indices,
 //         (std::uint32_t)num_tiles_for_indptr,
 
 //         // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
@@ -1310,7 +1310,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //     }
 //     // 1. initialize a vector for each row of cores
 //     std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
-//     // 2. While count is less than num output blocks 
+//     // 2. While count is less than num output blocks
 //     uint32_t num_rows_assigned = 0;
 //     uint32_t iter_count = 1;
 //     uint32_t subarray_iter = 0;
@@ -1339,7 +1339,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //             CoreCoord core(core_idx_x, core_idx_y);
 //             if (verbose)
 //               log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
-                
+
 //             int output_idx_x_start = (core_idx_x * num_iters_x) % num_blocks_x;
 //             work_region++;
 
@@ -1407,14 +1407,14 @@ void bsr_spmm_multicore_sparse_mcast(
 //                 }
 //             }
 //         }
-//     } 
+//     }
 
 //     // EnqueueWriteBuffers
 //     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), true);
 //     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), true);
 //     EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
 //     EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
-    
+
 //     // TODO: is there a macro for build_Tracy we can invoke here to wrap in a loop and get cooking?
 //     EnqueueProgram(cq, program, true);
 
@@ -1456,48 +1456,48 @@ void bsr_spmm_multicore_sparse_mcast(
 //         - Mpc = Rt
 //         - BSR Block size informs maximum Npc
 //         - Mt, Nt, Mpc, max Npc inform Npc, num_iters_y, num_iters_x
-//             - Ah! the num_iters_y/x split kinda informs which dimension 
+//             - Ah! the num_iters_y/x split kinda informs which dimension
 //                 we should be biased on...
-//                 If we only iter on y, one core gets many rows, each with 
+//                 If we only iter on y, one core gets many rows, each with
 //                 a sparsity pattern. IDEA: "Mcast sharing"
 //                     - Which means we could let some other core concurrently
 //                         get the same row and mcast share.
 //                 If we only iter on x, one core gets one input row, with
-//                 only one sparsity pattern. And is guaranteed to reuse 
+//                 only one sparsity pattern. And is guaranteed to reuse
 //                 all the blocks in that row. IDEA: "self-circulation"
-//             - So we bias on num_iters_y (ie, bias for large Npc). 
+//             - So we bias on num_iters_y (ie, bias for large Npc).
 //             - Generally let's say num_iters_y and num_iters_x are gt 1.
 //                 - Like in test 41 with core grid {2, 2}
 //                 - IDEA: can analyze pattern ahead of time to see which of the two above ideas is optimal
-//         - RK -> 
+//         - RK ->
 //              -> for each num_iter_y, needs brs&bre into indptr, indices
 //              -> for each num_iter_x, just needs the count num_iter_x
 //              -> needs num_tiles for col_indices, indptr
-//         - CK -> 
+//         - CK ->
 //              -> for each num_iter_y, needs num_blocks (bre-brs)
 //              -> for each num_iter_x, just needs the count num_iter_x
-//         - WK -> 
+//         - WK ->
 //              -> just needs start tile of output region and iter counts
 
 //         RK -> (brs&bre)*num_iter_y - runtime_args
 //            -> num_iter_x - compiletime
-        
+
 //         CK -> nblocks - runtime
 //            -> num_iter_x - compiletime
 
 //         WK -> both compile_time
-        
+
 
 //     */
 //     /*
 //     some unstructured thoughts
 
 //     The set up all woked great actually. The folded matrix, the runtime args, the compiletime args, the work distribution.
-//     It's just the set up had some incorretct assumptions. 
+//     It's just the set up had some incorretct assumptions.
 
 //     Under the new, more relaxed assumptions, we need a few more things
 //         - num_iter_x as a common compiletime arg (unlike ycoords, we can rely on xcoords being a range)
-//         - that's it? 
+//         - that's it?
 
 //     It is being pointed out to me in 510 that I should be testing each "thing"
 //         I've already decided it's too hard to test each kernel specifcally
@@ -1572,13 +1572,13 @@ void bsr_spmm_multicore_sparse_mcast(
 //     uint32_t target_num_cores;
 //     if (num_work_regions < num_cores_total)
 //         target_num_cores = num_work_regions;
-//     else 
+//     else
 //         target_num_cores = num_cores_total;
 
-    
+
 //     CoreRangeSet all_cores(
 //         tt::tt_metal::num_cores_to_corerangeset(target_num_cores, compute_with_storage_grid_size, true));
-    
+
 //     // CoreCoord all_cores(0, 0);
 //     // all_cores.x = std::min(num_blocks_x, num_cores_x);
 //     // all_cores.y = std::min(num_blocks_y, num_cores_y);
@@ -1607,7 +1607,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //     uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w * in1_num_subblocks;
 //     uint32_t in1_per_core_w = out_subblock_w * in1_num_subblocks;
 
-//     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;  
+//     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
 
 
 //     // DRAM buffers initialiation
@@ -1620,17 +1620,17 @@ void bsr_spmm_multicore_sparse_mcast(
 //         single_tile_size * Rt * Ct * nnz_blocks;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 //     uint32_t dram_buffer_B_size =
 //         single_tile_size * Nt * Kt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
-    
-//     uint32_t dram_buffer_col_indices_size = 
+
+//     uint32_t dram_buffer_col_indices_size =
 //         sizeof(indexing_data_format) * nnz_blocks;
 //     // Round up to tile size
 //     dram_buffer_col_indices_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_col_indices_size) / (indexing_data_single_tile_size));
 
-//     uint32_t dram_buffer_indptr_size = 
+//     uint32_t dram_buffer_indptr_size =
 //         sizeof(indexing_data_format) * (M / R + 1);
 //     // Round up to tile size
 //     dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
-    
+
 //     auto dst_dram_buffer = MakeBuffer(device, dram_buffer_dst_total_size, single_tile_size);
 //     auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
 //     auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
@@ -1658,7 +1658,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //             num_cores_y,
 //             num_cores_x,
 //             num_iters_y,
-//             num_iters_x, 
+//             num_iters_x,
 //             nnz_rows);
 //     }
 
@@ -1739,7 +1739,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //         (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
 //         (std::uint32_t)indptr_dram_buffer->address(), // NoC args, indptr
 
-//         (std::uint32_t)num_tiles_for_col_indices, 
+//         (std::uint32_t)num_tiles_for_col_indices,
 //         (std::uint32_t)num_tiles_for_indptr,
 
 //         // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
@@ -1879,10 +1879,10 @@ void bsr_spmm_multicore_sparse_mcast(
 //     for (auto & core : core_coords_vec){
 //         uint32_t core_idx_x = core.x;
 //         uint32_t core_idx_y = core.y;
-        
+
 //         if (verbose)
 //             log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
-            
+
 //         int output_idx_x_start = (work_region * num_iters_x) % num_blocks_x;
 //         int folded_output_idx_y_start = (((work_region * num_iters_x) / num_blocks_x) * num_iters_y) % num_blocks_y;
 //         work_region++;
@@ -2208,7 +2208,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //         (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
 //         (std::uint32_t)indptr_dram_buffer->address(), // NoC args, indptr
 
-//         (std::uint32_t)num_tiles_for_col_indices, 
+//         (std::uint32_t)num_tiles_for_col_indices,
 //         (std::uint32_t)1,
 
 //         // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
@@ -2472,7 +2472,7 @@ void bsr_spmm_multicore_sparse_mcast(
 
 //     int32_t num_tiles_for_col_indices = (col_indices_single_tile_size - 1 + sizeof(int) * nnz_blocks) / col_indices_single_tile_size;
 //     uint32_t per_core_N = get_Npc_from_BSR_block_size(Nt, per_core_M, in0_block_w, num_cores_x, num_tiles_for_col_indices);
-    
+
 //     // pick the largest subblock size that fits within the block size
 //     uint32_t out_subblock_h, out_subblock_w;
 //     for (auto& subblock_hw : bmm_op_utils::SUBBLOCK_HW_CHOICES) {
@@ -2652,7 +2652,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //         (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
 //         (std::uint32_t)indptr_dram_buffer->address(), // NoC args, indptr
 
-//         (std::uint32_t)num_tiles_for_col_indices, 
+//         (std::uint32_t)num_tiles_for_col_indices,
 //         (std::uint32_t)1,
 
 //         // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
@@ -2933,7 +2933,7 @@ void bsr_spmm_multicore_sparse_mcast(
 //     // uint32_t per_core_N = _get_maximum_block_dim_with_NoC_args(per_core_M, in0_block_w, num_tiles_for_col_indices);
 //     // per_core_N = std::min({per_core_N, Ct, Nt});
 //     uint32_t per_core_N = get_Npc_from_BSR_block_size(Nt, per_core_M, in0_block_w, num_cores_x, num_tiles_for_col_indices);
-    
+
 //     // pick the largest subblock size that fits within the block size
 //     uint32_t out_subblock_h, out_subblock_w;
 //     for (auto& subblock_hw : bmm_op_utils::SUBBLOCK_HW_CHOICES) {

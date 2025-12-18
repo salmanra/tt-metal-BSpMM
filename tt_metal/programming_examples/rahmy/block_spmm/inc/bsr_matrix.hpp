@@ -32,7 +32,7 @@ template <typename T>
 class dense_matrix {
 public:
 
-    
+
     std::vector<T> data;
     size_t H;
     size_t W;
@@ -47,7 +47,7 @@ public:
             // std::fill(data.begin(), data.end(), 1);
             uint32_t k = 0;
             for (auto it = data.begin(); it != data.end(); it++){
-                *it = static_cast<T>(k++); 
+                *it = static_cast<T>(k++);
             }
         }
     }
@@ -161,9 +161,9 @@ public:
     }
 };
 
-// Is there a world where this class can handle TT host code H2D/D2H? And does that look at all like Policies? 
-// It's a fun idea but not really what this needs. 
-// The actual lesson is that partial instantiation enables the bfloat16/native c++ float type split 
+// Is there a world where this class can handle TT host code H2D/D2H? And does that look at all like Policies?
+// It's a fun idea but not really what this needs.
+// The actual lesson is that partial instantiation enables the bfloat16/native c++ float type split
 //      to happen within a single class instead of the weirdness I have right now.
 template <typename T>
 class bsr_matrix {
@@ -310,14 +310,14 @@ public:
     // REQUIRES: other has been tilized by the TT utils
     bsr_matrix(dense_matrix<T>& other, uint32_t right_outer_dim = 0) :
         H(other.H),
-        W(other.W) 
+        W(other.W)
         {
         // how do we choose block sizes?
         // largest square multiple of 32 that tilizes the dense matrix?
         // 32x32 for everything?
-        // 128x128 for everything, falling back to smaller sizes if that doesn't fit? 
+        // 128x128 for everything, falling back to smaller sizes if that doesn't fit?
         // 64x64 for everything, falling back to smaller sizes. That's it because in0_block_w = 2.
-        // TODO: change this to choose block sizes equal to whatever TT would pick for its dense block sizes, 
+        // TODO: change this to choose block sizes equal to whatever TT would pick for its dense block sizes,
         //          using the sparse fit-in-SRAM function.
         //          maybe we maintain our own version of bmm_op.hpp after all...
         // TODO: the way we are sizing right now is a bit of a cheat, but it's good for now.
@@ -331,7 +331,7 @@ public:
         uint32_t out_subblock_h = std::get<2>(matmul_params);
         uint32_t out_subblock_w = std::get<3>(matmul_params);
 
-        
+
         // try to let Ct = 2, but accept it otherwise
         R = per_core_M * TILE_HEIGHT;
         C = std::min(per_core_N * TILE_WIDTH, 2 * TILE_WIDTH);
@@ -412,7 +412,7 @@ public:
         data = std::move(tilized_input);
     }
 
-    // construct from custom data members. Most flexible constructor. 
+    // construct from custom data members. Most flexible constructor.
     bsr_matrix(
         std::vector<T> data,
         std::vector<int> indptr,
@@ -499,7 +499,7 @@ public:
         return bsr_matrix<bfloat16>(bfloat16_data, indptr, indices, H, W, R, C, nblocks);
     }
 
-    // partial instantiation: this function will get compiled only on instances of dense matrices 
+    // partial instantiation: this function will get compiled only on instances of dense matrices
     //  on which it is called, at which point it will fail if the type T does not have a member to_float()
     dense_matrix<T> spmm_bfloat16(dense_matrix<T> &B) {
         assert(W == B.H);

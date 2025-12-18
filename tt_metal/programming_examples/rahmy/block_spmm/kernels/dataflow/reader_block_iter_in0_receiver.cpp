@@ -61,12 +61,12 @@ void kernel_main(){
         y_coords[i] = get_arg_val<uint32_t>(arg_index++);
     }
 
-    
+
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
 
-    
+
     const uint32_t cb_id_in0 = tt::CBIndex::c_0;
     const uint32_t cb_id_in1 = tt::CBIndex::c_1;
     const uint32_t cb_id_col_indices = tt::CBIndex::c_2;
@@ -127,12 +127,12 @@ void kernel_main(){
     l1_write_addr_indptr -= indptr_single_tile_size_bytes * indptr_num_tiles;
     noc_async_read_barrier();
     cb_push_back(cb_id_indptr, indptr_num_tiles);
-    
+
     uint32_t* col_indices = (uint32_t*) l1_write_addr_col_indices;
     uint32_t* indptr = (uint32_t*) l1_write_addr_indptr;
 
     // DPRINT_DATA0(DPRINT << "Setting up mcasting" << ENDL());
-    
+
     volatile tt_l1_ptr uint32_t* in0_mcast_receiver_semaphore_addr_ptr =
     reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_mcast_receiver_semaphore_addr);
     ///////////////////////////////////////////////////////////////////////
@@ -148,7 +148,7 @@ void kernel_main(){
         uint32_t in0_tensor_start_tile_id = block_row_start * in0_block_num_tiles;
         for (uint32_t iter_x = 0; iter_x < num_iters_x; iter_x++){
             output_idx_x = output_idx_x_start + iter_x;
-            uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x; 
+            uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
 
                 cb_reserve_back(cb_id_in0, in0_block_num_tiles);

@@ -91,7 +91,7 @@ void kernel_main(){
     //    1. NoC the entire col indices array to each core, and then read the blocks indexing with the indptr values
     //    2. NoC just the col indices for each core's block row, and then read zero indexed
     // I choose 1. because it's simpler for now!
-    // TODO: wrap this in a for loop over the number of output blocks being processed by this core, 
+    // TODO: wrap this in a for loop over the number of output blocks being processed by this core,
     //        accessing/indexing the sparse indexing DSes
     for (uint32_t block = block_row_start; block < block_row_end; block++) {
         cb_reserve_back(cb_id_in0, in0_block_num_tiles);
@@ -107,7 +107,7 @@ void kernel_main(){
         uint32_t num_blocks_in = block - block_row_start;
         uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles;
         for (uint32_t h = 0; h < in0_block_h; h++) {
-            uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id; 
+            uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id;
             for (uint32_t w = 0; w < in0_block_w; w++) {
                 noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
                 l1_write_addr_in0 += in0_single_tile_size_bytes;

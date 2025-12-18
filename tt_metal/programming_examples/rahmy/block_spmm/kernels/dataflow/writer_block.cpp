@@ -45,12 +45,12 @@ void kernel_main() {
         .bank_base_address = out_tensor_addr, .page_size = single_tile_size_bytes, .data_format = data_format};
 
 
-    if (zero_output) 
+    if (zero_output)
         cb_wait_front(cb_id_out0, 1);
 
     bool one_time_profile = true;
     for (uint32_t b = 0; b < batch; b++) {
-        // TODO: relate this variable to indexing DSes, 
+        // TODO: relate this variable to indexing DSes,
         uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id;
         for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
             uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
@@ -70,7 +70,7 @@ void kernel_main() {
 
                         out_tensor_tile_id += out_tensor_stride_w;
 
-                        const char * zero = zero_output ? "zero " : ""; 
+                        const char * zero = zero_output ? "zero " : "";
                         DPRINT_DATA1(DPRINT << "Wrote a " << zero << "tile: " << out_tensor_tile_id << ENDL());
 
                     }

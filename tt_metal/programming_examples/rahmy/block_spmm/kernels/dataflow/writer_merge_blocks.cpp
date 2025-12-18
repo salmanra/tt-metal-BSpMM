@@ -27,7 +27,7 @@ void kernel_main() {
     uint32_t out_num_subblocks_h = get_arg_val<uint32_t>(10);
 
     // Mpc/Mpb args
-    uint32_t RtNt = get_arg_val<uint32_t>(11);  // 
+    uint32_t RtNt = get_arg_val<uint32_t>(11);  //
     uint32_t num_output_blocks = get_arg_val<uint32_t>(12); //
 
 
@@ -83,8 +83,8 @@ void kernel_main() {
                                             // have to use noc_async_write_barrier() at
                                             // least once at the end of data movement kernel
                                             // to make sure all writes are done.
-                // TODO: 
-                // DPRINT the entire tile from the CB.... 
+                // TODO:
+                // DPRINT the entire tile from the CB....
                 // we need to make a char buffer and just start pushing...
                 // uint32_t* CB_values = (uint32_t*)l1_read_addr;
                 // for (size_t idx = 0; idx < single_tile_size_bytes / 4; idx+=32){

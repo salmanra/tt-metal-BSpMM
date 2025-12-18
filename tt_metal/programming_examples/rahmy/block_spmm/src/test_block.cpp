@@ -156,7 +156,7 @@ TestResult run_test(
 
     // this is useless when matrices are not tiny with tiny elements. I get it now.
     // PCC is faulty and gives false positives for say, equality up to scaling, but
-    // all_close is simply not suitable for bfloat16. 
+    // all_close is simply not suitable for bfloat16.
     // surely there is a version of all_close which bases its tolerance on the norm of the input matrices?
     bool all_close = golden.all_close_bfloat16(output);
 
@@ -243,7 +243,7 @@ void test_suite(uint32_t host_code_function_index = 0){
     auto [host_function_ptr, host_function_name] = HostCodeRegistry[host_code_function_index];
     size_t num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
     // 1. Print Header
-    // 
+    //
     console_printf("---------------------------------------------------------------------------------\n");
     console_printf("--- Test results ----------------------------------------------------------------\n");
     console_printf("---------------------------------------------------------------------------------\n");
@@ -254,7 +254,7 @@ void test_suite(uint32_t host_code_function_index = 0){
     console_printf("Testing ");
     console_printf(std::to_string(num_tests).c_str());
     console_printf(" tests\n");
-    
+
     std::vector<TestResult> test_results;
     std::string spacing = "  ";
     char buf[12];
@@ -274,7 +274,7 @@ void test_suite(uint32_t host_code_function_index = 0){
         }
         // std::string result = pass ? "\033[0;118m PASS \033[m" : "\033[0;196m FAIL \033[m";
         std::string result = pass ? "✅ PASS " : "❌ FAIL ";
-        
+
         sprintf(buf, "w/ PCC=%.2f", res.pearson);
         result += std::string(buf);
         result += res.pearson > 0.99 ? " ✅ ": " ❌ ";
@@ -351,10 +351,10 @@ int main(int argc, char** argv) {
     }
 
     if (test_all) {
-        // 
+        //
         // Redirect TT-Metal output to some file.
         // Let only our print statements go to stdout
-        // 
+        //
         // 1) Save the original stdout (the real console)
         int saved_stdout = ::dup(STDOUT_FILENO);
         if (saved_stdout == -1) {
@@ -373,7 +373,7 @@ int main(int argc, char** argv) {
             return 1;
         }
         ::close(log_fd); // not needed after dup2
-        // 
+        //
         //
         test_suite(host_code_index);
     }

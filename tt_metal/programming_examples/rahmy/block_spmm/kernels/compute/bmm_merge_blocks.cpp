@@ -28,7 +28,7 @@ void MAIN {
     uint32_t out_subblock_w = get_compile_time_arg_val(8);           // inner column block size in tiles
     uint32_t out_subblock_num_tiles = get_compile_time_arg_val(9);  // out_subblock_h * out_subblock_w;
     const uint32_t num_output_blocks = get_compile_time_arg_val(10);                   // num output blocks
-    uint32_t bytes_for_sync = get_compile_time_arg_val(11);           // size of synchronization CB 
+    uint32_t bytes_for_sync = get_compile_time_arg_val(11);           // size of synchronization CB
 
 
     // uint32_t in0_block_w = get_arg_val<uint32_t>(0);              // inner block size in tiles
@@ -60,9 +60,9 @@ void MAIN {
 
     // cb_wait_front(cb_id_NoC_Args, 1);
     // l1_write_addr_NoC_Args = get_read_ptr(cb_id_NoC_Args);
-    
+
     // LocalCBInterface interface = get_local_cb_interface(cb_id_NoC_Args);
-    
+
     // DPRINT_MATH(DPRINT << "Math core CB Interface read ptr " << interface.fifo_rd_ptr << ENDL());
     // DPRINT_MATH(DPRINT << "tt l1 ptr:" << tt_l1_ptr << ENDL());
 
@@ -80,8 +80,8 @@ void MAIN {
     uint32_t num_blocks = max_row_size;
 
     //DPRINT_MATH(DPRINT << "Math core waiting on a max of " << num_blocks << " blocks." << ENDL());
-    // output CB is MpcxNpc, which means we aren't batching. 
-    // The outermost loop now has a different interpretation. 
+    // output CB is MpcxNpc, which means we aren't batching.
+    // The outermost loop now has a different interpretation.
     bool enable_reload = false;
     bool spill = num_blocks > 1;
     for (uint32_t reduction_block = 0; reduction_block < max_row_size; reduction_block++){
@@ -89,12 +89,12 @@ void MAIN {
         for (uint32_t output_block = 0; output_block < num_output_blocks; output_block++){
             if (reduction_block > row_sizes[output_block]){
                 // this row is dropped
-                // 1. index into next output block 
+                // 1. index into next output block
                 // 2. continue
                 //DPRINT_MATH(DPRINT << "Math core SKIPPING" << ENDL());
 
                 // QUESTION: What breaks if there's no special indexing into output blocks?
-                //             Test 6. Test 6 breaks. 
+                //             Test 6. Test 6 breaks.
                 continue;
             }
             bool last_out = reduction_block == (row_sizes[output_block] - 1);
@@ -115,7 +115,7 @@ void MAIN {
                     if (enable_reload) {
                         copy_tile_to_dst_init_short(tt::CBIndex::c_24);
                         //DPRINT_MATH(DPRINT << "Reload begins: " << output_block << " " << reduction_block << ENDL());
-                        // The last iter (1, 1) fails here, it deadlocks here. 
+                        // The last iter (1, 1) fails here, it deadlocks here.
                         cb_wait_front(tt::CBIndex::c_24, out_subblock_num_tiles);
                         for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
                             copy_tile(tt::CBIndex::c_24, i, i);

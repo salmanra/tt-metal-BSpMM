@@ -121,7 +121,7 @@ void kernel_main(){
     // POTENTIAL: memory save
     // we can NoC bytes from DRAM for indexing as needed (once for each output block, not too bad?)
     // saves us memory in SRAM.
-    // 
+    //
     uint32_t *column_indices, *indptr;
     // NoC Args are read first, so that we can use them to read the in0 and in1 blocks.
     // The reader kernel is both the producer and consumer of the NoC Args!
@@ -143,7 +143,7 @@ void kernel_main(){
     // This ordering (output_block indexing in the inner loop) lends itself to data sharing later
     for (uint32_t reduction_block = 0; reduction_block < max_row_size; reduction_block++){
         for (uint32_t output_block = 0; output_block < num_output_blocks; output_block++){
-            uint32_t output_idx_y = y_coords[output_block]; 
+            uint32_t output_idx_y = y_coords[output_block];
             uint32_t block_row_start = indptr[output_idx_y];
             uint32_t block_row_end = indptr[output_idx_y + 1];
 
@@ -154,7 +154,7 @@ void kernel_main(){
             }
 
             uint32_t in0_tensor_start_tile_id = block_row_start * in0_block_num_tiles;
-            uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x; 
+            uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
 
             cb_reserve_back(cb_id_in0, in0_block_num_tiles);
             cb_reserve_back(cb_id_in1, in1_block_num_tiles);
@@ -166,7 +166,7 @@ void kernel_main(){
             uint32_t num_blocks_in = reduction_block;
             uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles;
             for (uint32_t h = 0; h < in0_block_h; h++) {
-                uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id; 
+                uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id;
                 for (uint32_t w = 0; w < in0_block_w; w++) {
                     DPRINT_DATA0(DPRINT << "TILE ID: " <<in0_tensor_tile_id<< ENDL());
                     noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);

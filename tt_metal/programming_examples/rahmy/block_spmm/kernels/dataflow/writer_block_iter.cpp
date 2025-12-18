@@ -32,7 +32,7 @@ void kernel_main() {
     uint32_t out_num_subblocks_h = get_compile_time_arg_val(10);
 
     // Mpc/Mpb args
-    uint32_t RtNt = get_compile_time_arg_val(11);  // 
+    uint32_t RtNt = get_compile_time_arg_val(11);  //
     uint32_t num_iters_x = get_compile_time_arg_val(12); //
     ///////////////////////////////////////////////////////////////////////
     /// END COMPILETIME ARGS //////////////////////////////////////////////
@@ -81,7 +81,7 @@ void kernel_main() {
                         out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
                     }
 
-                    noc_async_write_barrier(); 
+                    noc_async_write_barrier();
 
                     cb_pop_front(cb_id_out0, out_subblock_tile_count);
                     out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;

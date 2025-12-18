@@ -90,7 +90,7 @@ namespace bsr_test_suite {
         test_2_blocks_col_simplified, // 3
         test_2_blocks_row_simplified, // 4
         test_2_blocks_nonsquare, // 5
-        test_many_nonsquare, // 6 FAIL 
+        test_many_nonsquare, // 6 FAIL
         test_nonsquare_diag_blocks, // 7 FAIL
         test_nonsquare_tall, // 8
         test_2_blocks_nonsquare_tall, // 9
@@ -170,16 +170,16 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
-        
+
         char buf[50];
         size_t n = sprintf(buf, "test_profile_case_sparse_fill_column_R%i_C%d", R, C);
         std::string test_name(buf, n);
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name);
     }
-    
+
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_huge_row_v2() {
 
         // matmul params setup
@@ -339,12 +339,12 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_many_empty_rows");
-    }    
+    }
 
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_zero_rows_more() {
         // matmul params setup
@@ -369,7 +369,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -391,7 +391,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -413,7 +413,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_DIAG, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -435,7 +435,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -457,7 +457,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -479,7 +479,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -501,7 +501,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -523,7 +523,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -540,7 +540,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 8;
         uint32_t block_matrix_height = M / R;
-        
+
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
@@ -553,7 +553,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -570,7 +570,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 32;
         uint32_t block_matrix_height = M / R;
-        
+
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
@@ -582,7 +582,7 @@ namespace bsr_test_suite {
 
         // all nz on one row
         bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
-        
+
         dense_matrix<float> dense(K, N, RAND);
 
 
@@ -601,7 +601,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 32;
         uint32_t block_matrix_height = M / R;
-        
+
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
@@ -613,7 +613,7 @@ namespace bsr_test_suite {
 
         // all nz on one row
         bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
-        
+
         dense_matrix<float> dense(K, N, RAND);
 
 
@@ -632,7 +632,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 8;
         uint32_t block_matrix_height = M / R;
-        
+
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
@@ -644,7 +644,7 @@ namespace bsr_test_suite {
 
         // all nz on one row
         bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
-        
+
         dense_matrix<float> dense(K, N, RAND);
 
 
@@ -663,7 +663,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 32;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -678,7 +678,7 @@ namespace bsr_test_suite {
         uint32_t M = 4096;
         uint32_t N = 4096;
         uint32_t K = 512;
-        // block size become 512x64, with 64 input blocks 
+        // block size become 512x64, with 64 input blocks
         dense_matrix<float> tmp(M, K, RAND);
         bsr_matrix<float> bsr(tmp, N);
         dense_matrix<float> dense(K, N, RAND);
@@ -698,7 +698,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 512;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -717,7 +717,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 32;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -737,7 +737,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 8;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -757,7 +757,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 8;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -777,7 +777,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 32;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -797,7 +797,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 128;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -817,7 +817,7 @@ namespace bsr_test_suite {
         uint32_t C = 32;
         uint32_t nblocks = 32;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -837,7 +837,7 @@ namespace bsr_test_suite {
         uint32_t C = 32;
         uint32_t nblocks = 32;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -858,7 +858,7 @@ namespace bsr_test_suite {
         uint32_t C = 32;
         uint32_t nblocks = 32;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -882,7 +882,7 @@ namespace bsr_test_suite {
         uint32_t C = 32;
         uint32_t nblocks = 128;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -899,9 +899,9 @@ namespace bsr_test_suite {
         // block params setup
         uint32_t R = 32;
         uint32_t C = 32;
-        uint32_t nblocks = 64; 
+        uint32_t nblocks = 64;
         uint32_t block_matrix_height = M / R;
-        
+
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
@@ -968,7 +968,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_DIAG, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -990,7 +990,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_DIAG, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -1012,7 +1012,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -1029,7 +1029,7 @@ namespace bsr_test_suite {
         uint32_t C = 64;
         uint32_t nblocks = 1;
         uint32_t block_matrix_height = M / R;
-        
+
         std::vector<float> data(R*C*nblocks);
         for (int k = 0; k < nblocks; k++){
             for (int i = 0; i < R*C; i++){
@@ -1042,7 +1042,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(data, indptr, indices, M, K, R, C, nblocks);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -1064,7 +1064,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -1086,7 +1086,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -1123,7 +1123,7 @@ namespace bsr_test_suite {
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_simplified_tall_times_wide_v2");
     }
 
-    
+
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_bottom_row_square() {
         // matmul params setup
         uint32_t M = 64;
@@ -1238,7 +1238,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -1260,7 +1260,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -1282,7 +1282,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -1304,7 +1304,7 @@ namespace bsr_test_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
 
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
@@ -1756,7 +1756,7 @@ namespace dense_test_suite {
         dense_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
         dense_matrix<bfloat16> src1_bfloat16 = src1.bfloat16_cast();
         return std::make_tuple(src0_bfoat16, src1_bfloat16, "dense_test_0");
-    }    
+    }
 
         std::tuple<dense_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> dense_test_large() {
         // matmul params setup
@@ -1771,7 +1771,7 @@ namespace dense_test_suite {
         dense_matrix<bfloat16> src0_bfoat16 = src0.bfloat16_cast();
         dense_matrix<bfloat16> src1_bfloat16 = src1.bfloat16_cast();
         return std::make_tuple(src0_bfoat16, src1_bfloat16, "dense_test_large");
-    }    
+    }
 
 } // namespace dense_test_suite
 
@@ -1800,10 +1800,10 @@ namespace profiling_suite {
         //         // NOTE: Maximum number of tiles in output is 120 * 16^2 = 30,720 (eg. [1, 1, 5120, 6144])
         //                                                          < 2^15 = 32,768
         // --> M=N=2^7=4096 is the largest s quare output which is power of 2
-        // I tried M=8192 N=4096 K=512 and, after a bunch of time, got an error (floating point exception) which is apparently a divide by 0 error 
-        //      where does the matmul kernel divide by 0? curious but not important. 
-        // 
-        // 
+        // I tried M=8192 N=4096 K=512 and, after a bunch of time, got an error (floating point exception) which is apparently a divide by 0 error
+        //      where does the matmul kernel divide by 0? curious but not important.
+        //
+        //
 
 
     ////////////////////////////////////////////////////////////////////////////
@@ -1820,7 +1820,7 @@ namespace profiling_suite {
 
     ProfileCaseReturnType profile_case_dense_tall();
     ProfileCaseReturnType profile_case_dense_wide();
-    
+
     // template on block sizes R and C.
     // we could template on fill_type, but too late :P
     template <uint32_t, uint32_t>
@@ -1868,7 +1868,7 @@ namespace profiling_suite {
         profile_case_dense_square<2048>, // 1
         profile_case_dense_square<4096>, // 1
     };
-    
+
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
@@ -1951,7 +1951,7 @@ namespace profiling_suite {
     ///////// p < 0.1 //////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
-    
+
 
     template <uint32_t R = 32, uint32_t C = 32>
     inline ProfileCaseReturnType profile_case_sparse_single_input_block() {
@@ -1967,14 +1967,14 @@ namespace profiling_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
-        
+
         char buf[50];
         size_t n = sprintf(buf, "profile_case_sparse_single_block_R%i_C%d", R, C);
         std::string test_name(buf, n);
-        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name); 
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name);
     }
 
     template <uint32_t R = 32, uint32_t C = 32>
@@ -1991,14 +1991,14 @@ namespace profiling_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_DIAG, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
 
         char buf[50];
         size_t n = sprintf(buf, "profile_case_sparse_diagonal_R%i_C%d", R, C);
         std::string test_name(buf, n);
-        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name);   
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name);
     }
 
     template <uint32_t R = 32, uint32_t C = 32>
@@ -2015,10 +2015,10 @@ namespace profiling_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
-        
+
         char buf[50];
         size_t n = sprintf(buf, "profile_case_sparse_fill_column_R%i_C%d", R, C);
         std::string test_name(buf, n);
@@ -2039,7 +2039,7 @@ namespace profiling_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
 
@@ -2063,7 +2063,7 @@ namespace profiling_suite {
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
         dense_matrix<float> dense(K, N, RAND);
 
-        
+
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
 

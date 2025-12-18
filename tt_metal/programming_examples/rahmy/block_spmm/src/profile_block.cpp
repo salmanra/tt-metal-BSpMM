@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
 
     n = sprintf(buf, "mkdir -p %s", trace_directory.c_str());
     std::string mkdir_command(buf, n);
-    
+
     n = sprintf(buf, "./capture-release -f -o %s &", trace_file_location.c_str());
     std::string capture_trace_command(buf, n);
 
@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
     std::cout << "--- Output file: " << trace_file_location << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
-    // run ./capture-release to allow the profiler to listen for the program 
+    // run ./capture-release to allow the profiler to listen for the program
     std::system(mkdir_command.c_str());
     std::system(capture_trace_command.c_str());
 

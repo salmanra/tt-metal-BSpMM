@@ -320,7 +320,7 @@ void run_verbose_test(int host_code_num, int test_num){
         pass = false;
     }
 
-    char buf[12];
+    char buf[13];
     std::string result = pass ? "✅ PASS " : "❌ FAIL ";
     sprintf(buf, "w/ PCC=%.2f", res.pearson);
     result += std::string(buf);
@@ -386,5 +386,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         run_verbose_test(host_code_index, test_num);
+        console_printf("Leaving the test program\n");
+
     }
 }

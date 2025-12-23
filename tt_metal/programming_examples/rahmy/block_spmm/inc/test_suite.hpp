@@ -80,6 +80,8 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_large_Rv3();
     template <uint32_t, uint32_t>
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_profile_case_sparse_fill_column();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_1_block_simplified();
+    
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
 
@@ -152,6 +154,7 @@ namespace bsr_test_suite {
         test_profile_case_sparse_fill_column<32, 32>, // 65
         test_profile_case_sparse_fill_column<64, 64>, // 66
         test_profile_case_sparse_fill_column<128, 128>, // 67
+        test_1_block_simplified, // 68
     };
 
     static std::uniform_real_distribution<> dis(-1000.0, 1000.0);
@@ -1727,6 +1730,28 @@ namespace bsr_test_suite {
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
 
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_2_blocks_col_simplified");
+    }
+
+
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_1_block_simplified() {
+        // matmul params setup
+        uint32_t M = 32;
+        uint32_t N = 32;
+        uint32_t K = 32;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t nblocks = 1;
+        uint32_t block_matrix_height = M / R;
+
+        // all nz on one col
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_1_block_simplified");
     }
 
 } // namespace bsr_test_suite

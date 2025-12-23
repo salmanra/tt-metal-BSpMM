@@ -49,7 +49,8 @@ void MAIN {
     ///////////////////////////////////////////////////////////////////////
     /// PROGRAM BODY //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
-    mm_init();
+    mm_init(tt::CBIndex::c_0, tt::CBIndex::c_1, tt::CBIndex::c_16);
+
 
     for (uint32_t iter_y = 0; iter_y < num_iters_y; iter_y++){
         uint32_t num_blocks = row_sizes[iter_y];
@@ -65,7 +66,8 @@ void MAIN {
                 cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
                 cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
 
-                // DPRINT_MATH(DPRINT << "in " << ENDL());
+                DPRINT_MATH(DPRINT << "in0 block num tiles:  " << in0_block_num_tiles << ENDL());
+                DPRINT_MATH(DPRINT << "in1 block num tiles:  " <<  in1_block_num_tiles << ENDL());
 
 
                 int in0_index_subblock_offset = 0;
@@ -73,7 +75,8 @@ void MAIN {
                     int in1_index_subblock_offset = 0;
                     for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; in1_subblock++) {
                         acquire_dst();
-                        // DPRINT_MATH(DPRINT << "acquired" << ENDL());
+                        // ckernel::tile_regs_acquire();
+                        DPRINT_MATH(DPRINT << "acquired" << ENDL());
 
                         if (enable_reload) {
                             copy_tile_to_dst_init_short(tt::CBIndex::c_24);
@@ -82,7 +85,7 @@ void MAIN {
                                 copy_tile(tt::CBIndex::c_24, i, i);
                             }
                             cb_pop_front(tt::CBIndex::c_24, out_subblock_num_tiles);
-                            mm_init_short();
+                            mm_init_short(tt::CBIndex::c_0, tt::CBIndex::c_1);
                         }
 
                         // Compute output sub-block from in0_subblock x in1_subblock
@@ -94,16 +97,16 @@ void MAIN {
                                 for (uint32_t inner_dim = 0; inner_dim < in0_block_w; inner_dim++) {
                                     int in0_index = in0_index_subblock_offset + in0_index_h_offset + inner_dim;
                                     int in1_index = in1_index_subblock_offset + in1_index_inner_dim_offset + w;
-                                    DPRINT_MATH(DPRINT << "pre matmul tiles" << ENDL());
+                                    // DPRINT_MATH(DPRINT << "pre matmul tiles" << ENDL());
 
                                     matmul_tiles(
                                         tt::CBIndex::c_0,
                                         tt::CBIndex::c_1,
                                         in0_index,
-                                        in0_index,
+                                        in1_index,
                                         dst_index, // DST register
                                         false /* transpose */);
-                                    DPRINT_MATH(DPRINT << "post matmul tiles" << ENDL());
+                                    // DPRINT_MATH(DPRINT << "post matmul tiles" << ENDL());
 
                                     in1_index_inner_dim_offset += in1_per_core_w;
                                 }
@@ -112,8 +115,9 @@ void MAIN {
                             in0_index_h_offset += in0_block_w;
                         }
                         // DPRINT_MATH(DPRINT << "mulled" << ENDL());
+                        // ckernel::tile_regs_commit();
 
-
+                        // ckernel::tile_regs_wait();
                         if (last_out) {
                             // Pack out to output buffer
                             cb_reserve_back(tt::CBIndex::c_16, out_subblock_num_tiles);
@@ -121,7 +125,7 @@ void MAIN {
                                 pack_tile(i, tt::CBIndex::c_16);
                             }
                             cb_push_back(tt::CBIndex::c_16, out_subblock_num_tiles);
-                            DPRINT_MATH(DPRINT << "pushed to 16 " << ENDL());
+                            DPRINT_MATH(DPRINT << "pushed " << out_subblock_num_tiles <<  " tiles to 16 " << ENDL());
 
                         } else {
                             // Wait for tiles in output buffer to be written out since interm and output share memory
@@ -140,9 +144,9 @@ void MAIN {
                             // DPRINT_MATH(DPRINT << "pushed to 24 " << ENDL());
 
                         }
-
+                        // ckernel::tile_regs_release();
                         release_dst();
-                        // DPRINT_MATH(DPRINT << "released" << ENDL());
+                        DPRINT_MATH(DPRINT << "released" << ENDL());
 
                         in1_index_subblock_offset += out_subblock_w;
                     }
@@ -156,10 +160,11 @@ void MAIN {
                 cb_pop_front(tt::CBIndex::c_0, in0_block_num_tiles);
                 cb_pop_front(tt::CBIndex::c_1, in1_block_num_tiles);
 
-                // DPRINT_MATH(DPRINT << "out " << ENDL());
+                DPRINT_MATH(DPRINT << "out " << ENDL());
 
             }
         }
     }
+    DPRINT_MATH(DPRINT << "CK complete" << ENDL());
 };
 }

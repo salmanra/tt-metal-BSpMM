@@ -1,3 +1,8 @@
+# Rahmy's ignore files
+tt_metal/programming_examples/rahmy/block_spmm/*.zip
+tt_metal/programming_examples/rahmy/block_spmm/test_*/*
+
+
 .cache
 .clangd
 .devcontainer/

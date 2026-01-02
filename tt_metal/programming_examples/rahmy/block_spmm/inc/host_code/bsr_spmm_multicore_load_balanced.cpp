@@ -1,9 +1,9 @@
 #include "../host_code.hpp"
 
-namespace bsr_host_code {
+namespace bsr_host_code{
 
 
-void bsr_spmm_multicore_sparse_mcast(
+void bsr_spmm_multicore_load_balanced(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
     dense_matrix<bfloat16>& output,
@@ -16,22 +16,7 @@ void bsr_spmm_multicore_sparse_mcast(
     uint32_t C,
     uint32_t B,
     IDevice* device,
-    bool verbose)
-    {
-    // nothing really changes from iteration version.
-    // Create two semaphores.
-    // Split into 2 reader kernels.
-    // everything else is identical.
-
-    // get core grid. Is the CoreRangeSet we create in the previous examples guaranteed to be
-    // a rectangle? Let's assume it is.
-
-    // Define all cores, left column, and all but left column
-    // Compile CK, WK to all cores
-    // Compile custom RK to left column, all but left column
-
-    // Create two semaphores (in0_mcast_sender/receiver) on all cores
-
+    bool verbose){
     // TT-Metal CommandQueue and Program setup
     CommandQueue& cq = device->command_queue();
     Program program{};
@@ -122,21 +107,9 @@ void bsr_spmm_multicore_sparse_mcast(
     uint32_t num_cores_c = core_range.x;
     uint32_t num_cores_r = core_range.y;
 
-    // TODO: when only using one core, all_except_left_column is bad and throws a runtime error.
     CoreRange all_cores(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
-
-    CoreRange left_column(
-        {(std::size_t)start_core_x, (std::size_t)start_core_y},
-        {(std::size_t)start_core_x, (std::size_t)start_core_y + num_cores_r - 1});
-
-
-    // this variable exists purely to allow the constructor to CoreRange to not fail when we only use one column of the core grid
-    uint32_t column_offset = num_cores_c > 1 ? num_cores_c : num_cores_c + 1;
-    CoreRange all_except_left_column(
-        {(std::size_t)start_core_x + 1, (std::size_t)start_core_y},
-        {(std::size_t)start_core_x + column_offset - 1, (std::size_t)start_core_y + num_cores_r - 1});
 
 
     // Circural Buffer sizing
@@ -329,8 +302,7 @@ void bsr_spmm_multicore_sparse_mcast(
         (std::uint32_t)num_iters_x,
     };
 
-
-        if (verbose) {
+    if (verbose) {
         auto print_args = [](const std::string& name, const std::vector<uint32_t>& args, const std::vector<std::string>& arg_names) {
             std::cout << "==== " << name << " ====" << std::endl;
             for (size_t i = 0; i < args.size(); ++i) {
@@ -397,29 +369,14 @@ void bsr_spmm_multicore_sparse_mcast(
     }
 
     // Create Kernels
-    // Two unique reader kernels, one compute kernel, one unique writer kernel with 2 compile configs
-    //
-    auto reader_in0_sender_id = tt_metal::CreateKernel(
+    auto reader_id = tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_block_iter_in0_sender.cpp",
-        left_column,
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_block_iter.cpp",
+        all_cores,
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_0,
             .noc = NOC::RISCV_0_default,
             .compile_args = reader_compile_time_args});
-
-
-    KernelHandle reader_in0_receiver_id = 0;
-    if (num_cores_c > 1) {
-        reader_in0_receiver_id = tt_metal::CreateKernel(
-            program,
-            "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_block_iter_in0_receiver.cpp",
-            all_except_left_column,
-            tt_metal::DataMovementConfig{
-                .processor = DataMovementProcessor::RISCV_0,
-                .noc = NOC::RISCV_0_default,
-                .compile_args = reader_compile_time_args});
-    }
 
     auto writer_id = tt_metal::CreateKernel(
         program,
@@ -431,39 +388,29 @@ void bsr_spmm_multicore_sparse_mcast(
             .compile_args = writer_compile_time_args});
 
     // Create compute kernel
-
     auto mm_kernel_id = tt_metal::CreateKernel(
         program,
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm_iter.cpp",
         all_cores,
-        tt_metal::ComputeConfig{
-            .math_fidelity = MathFidelity::HiFi4,
-            .fp32_dest_acc_en = false,
-            .dst_full_sync_en = false,
-            .math_approx_mode = false,
-            .compile_args = compute_kernel_compile_time_args
-        }
-    );
-    // auto mm_kernel_id = tt_metal::CreateKernel(
-    //     program,
-    //     "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm_iter.cpp",
-    //     all_cores,
-    //     tt_metal::ComputeConfig{.math_fidelity = math_fidelity,
-    //                                     // .fp32_dest_acc_en = true,
-    //                                     .compile_args = compute_kernel_compile_time_args});
-
-    auto in0_mcast_sender_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
-    auto in0_mcast_receiver_semaphore_id = tt_metal::CreateSemaphore(program, all_cores, INVALID);
-
-
+        tt_metal::ComputeConfig{.math_fidelity = math_fidelity,
+                                        // .fp32_dest_acc_en = true,
+                                        .compile_args = compute_kernel_compile_time_args});
     // Runtime arguments
     uint32_t work_region = 0;
 
     // Scanning for load-balancing
     // 0. Sort block rows by number of nonzero blocks, get perm vector
-    //  get folded indices first, then sort and perm
+    // TODO: get folded indices first, then sort and perm
     uint32_t num_empty_rows = (M / R) - nnz_rows;
     std::vector<int> row_diffs;
+    // for (int i = 0; i < a.indptr.size() - 1; i++){
+    //     row_diffs.push_back(a.indptr[i+1] - a.indptr[i]);
+    // }
+    // std::vector<int> perm(row_diffs.size());
+    // sortingPermutation(row_diffs, perm);
+
+    // // remove last num_empty_rows elements from perm
+    // perm.resize(nnz_rows);
 
     for (int i = 0; i < folded_bsr_matrix_indices.size() - 1; i++){
         row_diffs.push_back(folded_bsr_matrix_indices[i+1] - folded_bsr_matrix_indices[i]);
@@ -518,35 +465,10 @@ void bsr_spmm_multicore_sparse_mcast(
             if (verbose)
               log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
 
-            CoreCoord left_core = {(std::size_t)start_core_x, (std::size_t)core.y};
-            CoreCoord left_core_plus_one = {(std::size_t)start_core_x + 1, (std::size_t)core.y};
-            CoreCoord right_core = {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)core.y};
-            CoreCoord top_core = {(std::size_t)core.x, (std::size_t)start_core_y};
-            CoreCoord top_core_plus_one = {(std::size_t)core.x, (std::size_t)start_core_y + 1};
-            CoreCoord bottom_core = {(std::size_t)core.x, (std::size_t)start_core_y + num_cores_r - 1};
-
-            auto left_core_physical = device->worker_core_from_logical_core(left_core);
-            auto left_core_plus_one_physical = device->worker_core_from_logical_core(left_core_plus_one);
-            auto right_core_physical = device->worker_core_from_logical_core(right_core);
-            auto top_core_physical = device->worker_core_from_logical_core(top_core);
-            auto top_core_plus_one_physical = device->worker_core_from_logical_core(top_core_plus_one);
-            auto bottom_core_physical = device->worker_core_from_logical_core(bottom_core);
-
-
             int output_idx_x_start = (core_idx_x * num_iters_x) % num_blocks_x;
             work_region++;
 
-            std::vector<uint32_t> reader_runtime_args = {
-                (std::uint32_t)right_core_physical.x,          // in0_mcast_dest_noc_start_x
-                (std::uint32_t)right_core_physical.y,          // in0_mcast_dest_noc_start_y
-                (std::uint32_t)left_core_plus_one_physical.x,  // in0_mcast_dest_noc_end_x
-                (std::uint32_t)left_core_plus_one_physical.y,  // in0_mcast_dest_noc_end_y
-                (std::uint32_t)(num_cores_c - 1),              // in0_mcast_num_dests
-                (std::uint32_t)left_core_physical.x,           // in0_mcast_sender_noc_x
-                (std::uint32_t)left_core_physical.y,           // in0_mcast_sender_noc_y
-                (std::uint32_t)in0_mcast_sender_semaphore_id,
-                (std::uint32_t)in0_mcast_receiver_semaphore_id,
-            };
+            std::vector<uint32_t> reader_runtime_args;
             std::vector<uint32_t> compute_runtime_args;
             std::vector<uint32_t> writer_runtime_args;
 
@@ -567,72 +489,46 @@ void bsr_spmm_multicore_sparse_mcast(
                 compute_runtime_args.push_back(a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
             }
 
-            if (core_idx_x == 0){
-                tt_metal::SetRuntimeArgs(program, reader_in0_sender_id, core, reader_runtime_args);
-            }
-            else {
-                tt_metal::SetRuntimeArgs(program, reader_in0_receiver_id, core, reader_runtime_args);
-            }
+
+            tt_metal::SetRuntimeArgs(program, reader_id, core, reader_runtime_args);
             tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_runtime_args);
             tt_metal::SetRuntimeArgs(program, writer_id, core, writer_runtime_args);
 
-            if (verbose && core_idx_x == 0 && core_idx_y == 0) {
+            if (verbose){
+                if (num_iters_x_this_core < num_iters_x || num_iters_y_this_core < num_iters_y){
+                    log_info(tt::LogVerif, " -- Num iters diverged! --");
+                    log_info(tt::LogVerif, "(num_iters_x_this_core) = {}", num_iters_x_this_core);
+                    log_info(tt::LogVerif, "(num_iters_y_this_core) = {}", num_iters_y_this_core);
+                }
+            }
+
+            if (verbose && core_idx_x == 0 && core_idx_y == 7) {
                 a.pretty_print();
-                // Reader args
                 log_info(tt::LogVerif, " -- Reader Args --");
-                const char* reader_arg_names[] = {
-                    "in0_mcast_dest_noc_start_x",  // [0]
-                    "in0_mcast_dest_noc_start_y",  // [1]
-                    "in0_mcast_dest_noc_end_x",    // [2]
-                    "in0_mcast_dest_noc_end_y",    // [3]
-                    "in0_mcast_num_dests",         // [4]
-                    "in0_mcast_sender_noc_x",      // [5]
-                    "in0_mcast_sender_noc_y",      // [6]
-                    "in0_mcast_sender_semaphore",  // [7]
-                    "in0_mcast_receiver_semaphore" // [8]
-                    // [9].. dynamic: num_iters_x, num_iters_y, output_idx_x_start, then output y coords
-                };
-                for (size_t i = 0; i < reader_runtime_args.size(); ++i) {
-                    if (i < std::size(reader_arg_names)) {
-                        log_info(tt::LogVerif, "reader_arg[{}] ({}) = {}", i, reader_arg_names[i], reader_runtime_args[i]);
-                    } else {
-                        // dynamic region: provide semantic names depending on position
-                        if (i == 9)
-                            log_info(tt::LogVerif, "reader_arg[{}] (num_iters_x) = {}", i, reader_runtime_args[i]);
-                        else if (i == 10)
-                            log_info(tt::LogVerif, "reader_arg[{}] (num_iters_y) = {}", i, reader_runtime_args[i]);
-                        else if (i == 11)
-                            log_info(tt::LogVerif, "reader_arg[{}] (output_idx_x_start) = {}", i, reader_runtime_args[i]);
-                        else
-                            log_info(tt::LogVerif, "reader_arg[{}] (output_idx_y[{}]) = {}", i, i - 12, reader_runtime_args[i]);
-                    }
+                log_info(tt::LogVerif, "reader_arg[0] (num_iters_x) = {}", reader_runtime_args[0]);
+                log_info(tt::LogVerif, "reader_arg[1] (num_iters_y) = {}",  reader_runtime_args[1]);
+                log_info(tt::LogVerif, "reader_arg[2] (output_idx_x_start) = {}",  reader_runtime_args[2]);
+                for (size_t i = 0; i < num_iters_y_this_core; ++i) {
+                    log_info(tt::LogVerif, "reader_arg[{}] (y_coord) = {}", i + 3, reader_runtime_args[i+3]);
                 }
 
-                // Writer args
                 log_info(tt::LogVerif, " -- Writer Args --");
                 const char* writer_arg_names[] = {
-                    "out_tensor_start_tile_id", // [0]
-                    "num_iters_y_this_core",    // [1]
-                    "num_cores_y"               // [2]
-                    // [3].. folded_output_idx_y entries
+                    "out_tensor_start_tile_id",
+                    "num_iters_y_this_core",
+                    "num_cores_y"
                 };
-                for (size_t i = 0; i < writer_runtime_args.size(); ++i) {
-                    if (i < std::size(writer_arg_names)) {
-                        log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_runtime_args[i]);
-                    } else {
-                        log_info(tt::LogVerif, "writer_arg[{}] (folded_output_idx_y[{}]) = {}", i, i - 3, writer_runtime_args[i]);
-                    }
+                for (size_t i = 0; i < 3; ++i) {
+                    log_info(tt::LogVerif, "writer_arg[{}] ({}) = {}", i, writer_arg_names[i], writer_runtime_args[i]);
                 }
-
-                // Compute args
+                for (size_t i = 3; i < writer_runtime_args.size(); ++i) {
+                    log_info(tt::LogVerif, "writer_arg[{}] (output_idx_y) = {}", i, writer_runtime_args[i]);
+                }
                 log_info(tt::LogVerif, " -- Compute Args --");
-                if (!compute_runtime_args.empty()) {
-                    log_info(tt::LogVerif, "compute_arg[0] (num_iters_y) = {}", compute_runtime_args[0]);
-                    for (size_t i = 1; i < compute_runtime_args.size(); ++i) {
-                        log_info(tt::LogVerif, "compute_arg[{}] (row_size[{}]) = {}", i, i - 1, compute_runtime_args[i]);
-                    }
-                } else {
-                    log_info(tt::LogVerif, "compute_args empty");
+                log_info(tt::LogVerif, "compute_arg[0] (num_iters_y) = {}", compute_runtime_args[0]);
+
+                for (size_t i = 1; i < compute_runtime_args.size(); ++i) {
+                    log_info(tt::LogVerif, "compute_arg[{}] (row_size) = {}", i, compute_runtime_args[i]);
                 }
             }
         }
@@ -663,6 +559,5 @@ void bsr_spmm_multicore_sparse_mcast(
         log_info(tt::LogVerif, " -- Finished reading output --");
     Finish(cq);
 }
-
 
 }

@@ -41,7 +41,8 @@ void MAIN {
     uint32_t out_subblock_num_tiles = get_arg_val<uint32_t>(10);  // out_subblock_h * out_subblock_w;
     uint32_t batch = get_arg_val<uint32_t>(11);                   // batch dim
 
-    mm_init();
+    mm_init(tt::CBIndex::c_0, tt::CBIndex::c_1, tt::CBIndex::c_16);
+
     //DPRINT_MATH(DPRINT << "Math core waiting on " << num_blocks << " blocks." << ENDL());
 
     bool zero_output = num_blocks == 0;
@@ -86,7 +87,8 @@ void MAIN {
                             copy_tile(tt::CBIndex::c_24, i, i);
                         }
                         cb_pop_front(tt::CBIndex::c_24, out_subblock_num_tiles);
-                        mm_init_short();
+                        mm_init_short(tt::CBIndex::c_0, tt::CBIndex::c_1);
+
                     }
 
                     // Compute output sub-block from in0_subblock x in1_subblock

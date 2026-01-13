@@ -66,8 +66,8 @@ void MAIN {
                 cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
                 cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
 
-                DPRINT_MATH(DPRINT << "in0 block num tiles:  " << in0_block_num_tiles << ENDL());
-                DPRINT_MATH(DPRINT << "in1 block num tiles:  " <<  in1_block_num_tiles << ENDL());
+                // DPRINT_MATH(DPRINT << "in0 block num tiles:  " << in0_block_num_tiles << ENDL());
+                // DPRINT_MATH(DPRINT << "in1 block num tiles:  " <<  in1_block_num_tiles << ENDL());
 
 
                 int in0_index_subblock_offset = 0;
@@ -97,7 +97,7 @@ void MAIN {
                                 for (uint32_t inner_dim = 0; inner_dim < in0_block_w; inner_dim++) {
                                     int in0_index = in0_index_subblock_offset + in0_index_h_offset + inner_dim;
                                     int in1_index = in1_index_subblock_offset + in1_index_inner_dim_offset + w;
-                                    // DPRINT_MATH(DPRINT << "pre matmul tiles" << ENDL());
+                                    DPRINT_MATH(DPRINT << "pre matmul tiles" << ENDL());
 
                                     matmul_tiles(
                                         tt::CBIndex::c_0,
@@ -106,7 +106,7 @@ void MAIN {
                                         in1_index,
                                         dst_index, // DST register
                                         false /* transpose */);
-                                    // DPRINT_MATH(DPRINT << "post matmul tiles" << ENDL());
+                                    DPRINT_MATH(DPRINT << "post matmul tiles" << ENDL());
 
                                     in1_index_inner_dim_offset += in1_per_core_w;
                                 }

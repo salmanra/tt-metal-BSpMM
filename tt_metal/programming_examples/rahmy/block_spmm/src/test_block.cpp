@@ -85,18 +85,19 @@ TestResult run_test(
     dense_matrix<bfloat16> golden = a.spmm_bfloat16(b);
 
     // tilize input data
-    tilize_nfaces(a.data, R, C);
-    tilize_nfaces(b.data, K, N);
+    a.data = tilize_nfaces(a.data, R, C);
+    b.data = tilize_nfaces(b.data, K, N);
 
     // for (int i = 0; i < a.data.size(); i+=32) {
     //     for (int j = 0; j < 32; j++){
-    //         console_printf(a.data[i + j] << ' ';
+    //         console_printf(a.data[i + j]);
+    //         console_printf(' ');
     //     }
-    //     console_printf(std::endl;
+    //     console_printf(std::endl);
     // }
-    // console_printf(std::endl;
-    // console_printf(std::endl;
-    // console_printf(std::endl;
+    // console_printf(std::endl);
+    // console_printf(std::endl);
+    // console_printf(std::endl);
 
     // run bsr_spmm_multicore_reuse
     // console_printf("Do we seg fault before...");
@@ -128,29 +129,41 @@ TestResult run_test(
             TT_THROW("Failed to open golden file: {}", golden_file);
         }
 
-        tilize_nfaces(golden.data, M, N);
+        golden.data = tilize_nfaces(golden.data, M, N);
         for (size_t i = 0; i < golden.data.size(); i++) {
             golden_out << golden.data[i].to_float() << "\n";
         }
-        untilize_nfaces(golden.data, M, N);
+        golden.data = untilize_nfaces(golden.data, M, N);
         golden_out.close();
 
 
-        // // print bsr matrix. should i tilize?
-        // std::string bsr_file = local_path + "/bsr.txt";
-        // std::ofstream bsr_out(bsr_file);
-        // if (!bsr_out.is_open()) {
-        //     TT_THROW("Failed to open bsr file: {}", bsr_file);
-        // }
+        // print bsr matrix. should i tilize?
+        std::string bsr_file = local_path + "/bsr.txt";
+        std::ofstream bsr_out(bsr_file);
+        if (!bsr_out.is_open()) {
+            TT_THROW("Failed to open bsr file: {}", bsr_file);
+        }
         // untilize(a.data, R, C);
-        // for (size_t i = 0; i < a.data.size(); i++) {
-        //     bsr_out << a.data[i].to_float() << "\n";
-        // }
-        // bsr_out.close();
+        for (size_t i = 0; i < a.data.size(); i++) {
+            bsr_out << a.data[i].to_float() << "\n";
+        }
+        bsr_out.close();
+
+        // print dense matrix.
+        std::string dense_file = local_path + "/dense.txt";
+        std::ofstream dense_out(dense_file);
+        if (!dense_out.is_open()) {
+            TT_THROW("Failed to open dense file: {}", dense_file);
+        }
+        // untilize(b.data, K, N);
+        for (size_t i = 0; i < a.data.size(); i++) {
+            dense_out << b.data[i].to_float() << "\n";
+        }
+        dense_out.close();
     }
 
     // untile output data
-    untilize_nfaces(output.data, M, N);
+    output.data = untilize_nfaces(output.data, M, N);
 
     float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
 

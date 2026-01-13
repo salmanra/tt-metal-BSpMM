@@ -14,8 +14,6 @@
 #include "bmm_op.hpp"
 #include "tt-metalium/constants.hpp"
 
-#define RAND true
-#define NO_RAND false
 #define FILL_ROW 1
 #define FILL_COL 2
 #define FILL_DIAG 3 // will require the size to be perfect
@@ -23,6 +21,12 @@
 #define RAND_DENOM 2 << 10 // trying to control the range...
 #define SIGNED_RAND_MAX RAND_MAX / 2
 
+enum content_type{
+    RAND,
+    UNIFORM,
+    ARANGE,
+    ID
+};
 
 // TODO: if we wanted, we could put this in a namespace,
 //        then we could define gemm() and spmm() to be
@@ -39,17 +43,40 @@ public:
 
     dense_matrix() : H(0), W(0) {}
 
-    dense_matrix(int rows, int cols, bool random) : H(rows), W(cols) {
+    dense_matrix(int rows, int cols, content_type content) : H(rows), W(cols) {
+        std::cout << "big basic constructor for dense matrix" << std::endl;
         data.resize(rows * cols);
-        if (random)
-            std::generate(data.begin(), data.end(), []() { return static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM); });
-        else {
-            // std::fill(data.begin(), data.end(), 1);
-            uint32_t k = 0;
-            for (auto it = data.begin(); it != data.end(); it++){
-                *it = static_cast<T>(k++);
-            }
+        uint32_t k = 0;
+        switch (content) {
+            case RAND:
+                std::generate(data.begin(), data.end(), []() { return static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM); });
+                break;
+            case ID:
+                for (auto it = data.begin(); it != data.end(); it++){
+                    *it = static_cast<T>(static_cast<T>(((k / W) == (k % W)) ? 1.0 : 0.0));
+                    k++;
+                }
+                break;
+            case UNIFORM:
+                for (auto it = data.begin(); it != data.end(); it++){
+                    *it = static_cast<T>(1.0);
+                }
+                break;
+            case ARANGE:
+                for (auto it = data.begin(); it != data.end(); it++){
+                    *it = static_cast<T>(k++);
+                }
+                break;
         }
+        // if (random)
+        //     std::generate(data.begin(), data.end(), []() { return static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM); });
+        // else {
+        //     // std::fill(data.begin(), data.end(), 1);
+        //     uint32_t k = 0;
+        //     for (auto it = data.begin(); it != data.end(); it++){
+        //         *it = static_cast<T>(k++);
+        //     }
+        // }
     }
 
     dense_matrix(int rows, int cols) : H(rows), W(cols) {
@@ -180,7 +207,7 @@ public: // everything is public for now
 
 public:
     bsr_matrix() : H(0), W(0), nblocks(0), R(0), C(0) {}
-    bsr_matrix(size_t rows, size_t cols, size_t block_rows, size_t block_cols, size_t num_blocks, int fill_type = FILL_ROW, bool random = RAND) :
+    bsr_matrix(size_t rows, size_t cols, size_t block_rows, size_t block_cols, size_t num_blocks, int fill_type = FILL_ROW, content_type content = RAND) :
         H(rows), W(cols), R(block_rows), C(block_cols), nblocks(num_blocks) {
         assert(H * W >= nblocks * R * C);
         assert(R > 0);
@@ -189,6 +216,8 @@ public:
         assert(W % C == 0);
         assert(H >= R);
         assert(W >= C);
+
+        std::cout << "big basic constructor for bsr matrix" << std::endl;
 
         size_t blocked_matrix_height = H / R;
         size_t blocked_matrix_width = W / C;
@@ -206,10 +235,21 @@ public:
                         indptr[i + 1]++;
                         indices.push_back(j);
                         for (size_t k = 0; k < R * C; k++) {
-                            if (random) {
-                                data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
-                            } else {
-                                data.push_back(k);
+                            float temp = ((k / C) == (k % C)) ? 1.0 : 0.0;
+                            T val = static_cast<T>(temp);
+                            switch (content) {
+                                case RAND: 
+                                    data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
+                                    break;
+                                case UNIFORM:
+                                    data.push_back(static_cast<T>(1.0));
+                                    break;
+                                case ID:
+                                    data.push_back(val);
+                                    break;
+                                case ARANGE:
+                                    data.push_back(static_cast<T>(k));
+                                    break;
                             }
                         }
                     }
@@ -222,10 +262,21 @@ public:
                         indptr[i + 1]++;
                         indices.push_back(j);
                         for (size_t k = 0; k < R * C; k++) {
-                            if (random) {
-                                data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
-                            } else {
-                                data.push_back(k);
+                            float temp = ((k / C) == (k % C)) ? 1.0 : 0.0;
+                            T val = static_cast<T>(temp);
+                            switch (content) {
+                                case RAND: 
+                                    data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
+                                    break;
+                                case UNIFORM:
+                                    data.push_back(static_cast<T>(1.0));
+                                    break;
+                                case ID:
+                                    data.push_back(val);
+                                    break;
+                                case ARANGE:
+                                    data.push_back(static_cast<T>(k));
+                                    break;
                             }
                         }
                     }
@@ -237,10 +288,21 @@ public:
                 indptr[i + 1]++;
                 indices.push_back(i);
                 for (size_t k = 0; k < R * C; k++) {
-                    if (random) {
-                        data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
-                    } else {
-                        data.push_back(k);
+                    float temp = ((k / C) == (k % C)) ? 1.0 : 0.0;
+                    T val = static_cast<T>(temp);
+                    switch (content) {
+                        case RAND: 
+                            data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
+                            break;
+                        case UNIFORM:
+                            data.push_back(static_cast<T>(1.0));
+                            break;
+                        case ID:
+                            data.push_back(val);
+                            break;
+                        case ARANGE:
+                            data.push_back(static_cast<T>(k));
+                            break;
                     }
                 }
             }
@@ -439,7 +501,7 @@ public:
         assert(W >= C);
     }
 
-    bsr_matrix(int rows, int cols, size_t block_rows, size_t block_cols, size_t num_blocks, bool random = false) {
+    bsr_matrix(int rows, int cols, size_t block_rows, size_t block_cols, size_t num_blocks, content_type content) {
         H = rows;
         W = cols;
         R = block_rows;
@@ -475,11 +537,22 @@ public:
                 size_t col = i % blocked_matrix_width;
                 indptr[row + 1]++;
                 indices.push_back(col);
-                for (size_t j = 0; j < R * C; j++) {
-                    if (random) {
-                        data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
-                    } else {
-                        data.push_back(j);
+                for (size_t k = 0; k < R * C; k++) {
+                    float temp = ((k / C) == (k % C)) ? 1.0 : 0.0;
+                    T val = static_cast<T>(temp);
+                    switch (content) {
+                        case RAND: 
+                            data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
+                            break;
+                        case UNIFORM:
+                            data.push_back(static_cast<T>(1.0));
+                            break;
+                        case ID:
+                            data.push_back(val);
+                            break;
+                        case ARANGE:
+                            data.push_back(static_cast<T>(k));
+                            break;
                     }
                 }
             }

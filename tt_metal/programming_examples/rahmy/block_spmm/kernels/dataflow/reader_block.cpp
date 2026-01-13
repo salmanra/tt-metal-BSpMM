@@ -135,6 +135,29 @@ void kernel_main(){
 
         noc_async_read_barrier();
 
+        // DPRINT_DATA0({ DPRINT << (uint)r << " --READ--cin1-- " << TileSlice(0, 0, sr, TSLICE_INPUT_CB, TSLICE_RD_PTR, true, false) << ENDL(); });
+        uint32_t* CB_values = (uint32_t*)l1_write_addr_in0;
+        for (size_t idx = 0; idx < in0_single_tile_size_bytes / 4; idx+=32){
+            for (size_t inner = 0; inner < 32; inner++){
+                uint16_t top_bits = (CB_values[idx + inner] >> 16);
+                float bottom_bits = (CB_values[idx + inner] & 0xFFFF);
+                DPRINT_DATA0(DPRINT << BF16(top_bits) << ' ' << BF16(bottom_bits) << ' ');
+            }
+            DPRINT_DATA0(DPRINT << ENDL());
+        }
+        DPRINT_DATA0(DPRINT << ENDL());
+        DPRINT_DATA0(DPRINT << ENDL());
+        DPRINT_DATA0(DPRINT << ENDL());
+        uint32_t* dense_CB_values = (uint32_t*)l1_write_addr_in1;
+        for (size_t idx = 0; idx < in0_single_tile_size_bytes / 4; idx+=32){
+            for (size_t inner = 0; inner < 32; inner++){
+                uint16_t top_bits = (dense_CB_values[idx + inner] >> 16);
+                uint16_t bottom_bits = (dense_CB_values[idx + inner] & 0xFFFF);
+                DPRINT_DATA0(DPRINT << BF16(top_bits) << ' ' << BF16(bottom_bits) << ' ');
+            }
+            DPRINT_DATA0(DPRINT << ENDL());
+        }
+
         // I want this to print before announcing to the compute kernel
         //DPRINT_DATA0(DPRINT << "block " << block << ", " << column_indices[block] << " read" << ENDL());
 

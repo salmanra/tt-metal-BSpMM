@@ -170,6 +170,10 @@ void bsr_spmm_multicore_snf(
     auto in1_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
     auto in1_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
     auto in1_valid_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, VALID);
+    // need this to let one reader get the indexing data and inform the other reader that the data is ready...
+    // wait why does this not just work on the CB?
+    // auto indexing_data_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, VALID);
+
 
 
     // Circural Buffer sizing
@@ -258,7 +262,7 @@ void bsr_spmm_multicore_snf(
 
         Decision: follow their example, both kernels read, one writes.
         TODO: only one kernel should read the indexing data from DRAM. 
-            - the kernel to read the indexing data should use a semaphore to let the other kernel know it's ready?
+            - the kernel to read the indexing data should use a semaphore to let the other kernel know it's ready
         
 
     */

@@ -33,6 +33,31 @@ void kernel_main(){
 
     constexpr uint32_t col_indices_num_tiles = get_compile_time_arg_val(18);
     constexpr uint32_t indptr_num_tiles = get_compile_time_arg_val(19);
+    
+    // store-and-forward args    
+    uint32_t in0_sender_semaphore_addr = get_semaphore(get_compile_time_arg_val(20));
+    uint32_t in0_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(21));
+
+    constexpr uint32_t is_injector_core = get_compile_time_arg_val(21);
+    constexpr uint32_t is_sink_core = get_compile_time_arg_val(23);
+    constexpr uint32_t is_output_writer = get_compile_time_arg_val(24);
+
+    // writer args
+    // TODO: no more subblocks in the DM kernels!!!!!
+    // out tensor args
+    uint32_t out_tensor_addr = get_compile_time_arg_val(25);
+    uint32_t out_tensor_stride_w = get_compile_time_arg_val(26);
+    uint32_t out_tensor_stride_h = get_compile_time_arg_val(27);
+    uint32_t out_tensor_next_subblock_stride_w = get_compile_time_arg_val(28);
+    uint32_t out_tensor_next_subblock_stride_h = get_compile_time_arg_val(29);
+
+    // out subblock args
+    uint32_t out_subblock_w = get_compile_time_arg_val(30);
+    uint32_t out_subblock_h = get_compile_time_arg_val(31);
+    uint32_t out_subblock_tile_count = get_compile_time_arg_val(32);
+    uint32_t out_num_subblocks_w = get_compile_time_arg_val(33);
+    uint32_t out_num_subblocks_h = get_compile_time_arg_val(34);
+    uint32_t RtNt = get_compile_time_arg_val(35);
 
     ///////////////////////////////////////////////////////////////////////
     /// END COMPILETIME ARGS //////////////////////////////////////////////
@@ -41,6 +66,7 @@ void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
     /// RUNTIME ARGS //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
+
     uint32_t arg_index = 0;
     const uint32_t num_iters_x = get_arg_val<uint32_t>(arg_index++);
     const uint32_t num_iters_y = get_arg_val<uint32_t>(arg_index++);
@@ -50,15 +76,25 @@ void kernel_main(){
         y_coords[i] = get_arg_val<uint32_t>(arg_index++);
     }
 
+    // writer args
+    const uint32_t num_cores_y = get_arg_val<uint32_t>(arg_index++);
+    uint32_t out_tensor_start_tile_id = get_arg_val<uint32_t>(arg_index++);
+
+    // SnF args
+    const uint32_t in0_dest_noc_x = get_arg_val<uint32_t>(argidx++);
+    const uint32_t in0_dest_noc_y = get_arg_val<uint32_t>(argidx++);
+    const uint32_t in0_sender_noc_x = get_arg_val<uint32_t>(argidx++);
+    const uint32_t in0_sender_noc_y = get_arg_val<uint32_t>(argidx++);
+
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
-
 
     const uint32_t cb_id_in0 = tt::CBIndex::c_0;
     const uint32_t cb_id_in1 = tt::CBIndex::c_1;
     const uint32_t cb_id_col_indices = tt::CBIndex::c_2;
     const uint32_t cb_id_indptr = tt::CBIndex::c_3;
+    const uint32_t cb_id_out = tt::CBIndex::c_16;
 
     // input data format will probably by bfloat16
     const uint32_t in0_single_tile_size_bytes = get_tile_size(cb_id_in0);
@@ -73,10 +109,16 @@ void kernel_main(){
     const uint32_t indptr_single_tile_size_bytes = get_tile_size(cb_id_indptr);
     const DataFormat indptr_data_format = get_dataformat(cb_id_indptr);
 
+    const uint32_t output_single_tile_size_bytes = get_tile_size(cb_id_out);
+    const DataFormat output_data_format = get_dataformat(cb_id_out);
+
+
     uint32_t l1_write_addr_in0;
     uint32_t l1_write_addr_in1;
     uint32_t l1_write_addr_col_indices;
     uint32_t l1_write_addr_indptr;
+
+    uint32_t l1_read_addr_out;
 
     const InterleavedAddrGenFast<in0_is_dram> s0 = {
         .bank_base_address = in0_tensor_addr, .page_size = in0_single_tile_size_bytes, .data_format = in0_data_format};
@@ -91,37 +133,68 @@ void kernel_main(){
         .page_size = indptr_single_tile_size_bytes,
         .data_format = indptr_data_format};
 
-    cb_reserve_back(cb_id_col_indices, col_indices_num_tiles);
-    l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
-    uint32_t col_indices_dram_start_id = 0;
-    for (uint32_t i = 0; i < col_indices_num_tiles; i++){
-        noc_async_read_tile(col_indices_dram_start_id, s2, l1_write_addr_col_indices);
-        col_indices_dram_start_id++;
-        l1_write_addr_col_indices += col_indices_single_tile_size_bytes;
-    }
-    l1_write_addr_col_indices -= col_indices_single_tile_size_bytes * col_indices_num_tiles;
-    noc_async_read_barrier();
-    cb_push_back(cb_id_col_indices, col_indices_num_tiles);
+    const InterleavedAddrGenFast<out_is_dram> out_s = {
+        .bank_base_address = out_tensor_addr, .page_size = output_single_tile_size_bytes, .data_format = output_data_format};
 
-    cb_reserve_back(cb_id_indptr, indptr_num_tiles);
-    l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
-    uint32_t indptr_dram_start_id = 0;
-    for (uint32_t i = 0; i < indptr_num_tiles; i++){
-        noc_async_read_tile(indptr_dram_start_id, s3, l1_write_addr_indptr);
-        indptr_dram_start_id++;
-        l1_write_addr_indptr += indptr_single_tile_size_bytes;
+    // TODO: test indexing args getting
+    if (is_output_writer){
+        cb_reserve_back(cb_id_col_indices, col_indices_num_tiles);
+        l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
+        uint32_t col_indices_dram_start_id = 0;
+        for (uint32_t i = 0; i < col_indices_num_tiles; i++){
+            noc_async_read_tile(col_indices_dram_start_id, s2, l1_write_addr_col_indices);
+            col_indices_dram_start_id++;
+            l1_write_addr_col_indices += col_indices_single_tile_size_bytes;
+        }
+        l1_write_addr_col_indices -= col_indices_single_tile_size_bytes * col_indices_num_tiles;
+        noc_async_read_barrier();
+        cb_push_back(cb_id_col_indices, col_indices_num_tiles);
+    
+        cb_reserve_back(cb_id_indptr, indptr_num_tiles);
+        l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
+        uint32_t indptr_dram_start_id = 0;
+        for (uint32_t i = 0; i < indptr_num_tiles; i++){
+            noc_async_read_tile(indptr_dram_start_id, s3, l1_write_addr_indptr);
+            indptr_dram_start_id++;
+            l1_write_addr_indptr += indptr_single_tile_size_bytes;
+        }
+        l1_write_addr_indptr -= indptr_single_tile_size_bytes * indptr_num_tiles;
+        noc_async_read_barrier();
+        cb_push_back(cb_id_indptr, indptr_num_tiles);
     }
-    l1_write_addr_indptr -= indptr_single_tile_size_bytes * indptr_num_tiles;
-    noc_async_read_barrier();
-    cb_push_back(cb_id_indptr, indptr_num_tiles);
+    else {
+        cb_wait_front(cb_id_indptr, indptr_num_tiles);
+        cb_wait_front(cb_id_col_indices, col_indices_num_tiles);
+        l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
+        l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
+    }
 
     uint32_t* col_indices = (uint32_t*) l1_write_addr_col_indices;
     uint32_t* indptr = (uint32_t*) l1_write_addr_indptr;
+
+    // SnF semaphores
+    volatile tt_l1_ptr uint32_t* in0_sender_semaphore_addr_ptr = 
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_sender_semaphore_addr);
+    *(in0_sender_semaphore_addr_ptr) = VALID;
+    const uint64_t in0_sender_semaphore_noc_addr = 
+        get_noc_addr(in0_sender_noc_x, in0_sender_noc_y, in0_sender_semaphore_addr);
+
+    volatile tt_l1_ptr uint32_t* in0_receiver_semaphore_addr_ptr = 
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_receiver_semaphorea_addr);
+    *(in0_receiver_semaphore_addr_ptr) = VALID;
+    const uint64_t in0_receiver_semaphore_noc_addr = 
+        get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, in0_receiver_semaphore_addr);
+
     ///////////////////////////////////////////////////////////////////////
     /// PROGRAM BODY //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
+    uint32_t out_tensor_x_coord_offset = 0;
     uint32_t output_idx_y, output_idx_x;
     for (uint32_t iter_y = 0; iter_y < num_iters_y; iter_y++){
+        uint32_t out_tensor_y_coord_offset = RtNt * y_coords[y];
+
+        // For now, all blocks are the same size. But soon we will want this line to accomodate unaligned blocks
+        uint32_t current_block_bytes = in0_single_tile_size_bytes * in0_block_num_tiles;
         // Get y_coord for this iter
         output_idx_y = y_coords[iter_y];
         uint32_t block_row_start = indptr[output_idx_y];
@@ -140,7 +213,6 @@ void kernel_main(){
                 l1_write_addr_in1 = get_write_ptr(cb_id_in1);
                 
                 // TODO: make this a compiletime arg
-                bool is_injector_core = true;
                 if (is_injector_core){
                     // Read in0 block from DRAM
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
@@ -155,23 +227,40 @@ void kernel_main(){
                         in0_tensor_row_start_tile_id += in0_tensor_stride_h;
                     }
                     noc_async_read_barrier();
-
                 }
                 else {
-                    // TODO: Wait for sender to acknowledge sending of block
-
+                    noc_semaphore_set(in0_receiver_semaphore_addr, 0);
+                    noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
+                    noc_semaphore_wait(in0_receiver_semaphore_addr, 1);
                 }
 
                 cb_push_back(cb_id_in0, in0_block_num_tiles);
 
-                // TODO: if not a sink, noc_async_write to the receiving neighbor
-                if (false) {
+                if (!is_sink_core) {
+                    noc_semaphore_wait(in0_sender_semaphore_addr_ptr, 1);
+                    noc_semaphore_set(in0_sender_semaphore_addr_ptr, 0);
 
+                    uint64_t in0_unicast_data_addr = get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, l1_write_addr_in0);
+                    noc_async_write(l1_write_addr_in0, in0_unicast_data_addr, current_block_bytes);
+                    noc_async_write_barrier(); // TODO: ask jon if this is necessary, it's not in their code
+                    noc_semaphore_inc(in0_receiver_semaphore_noc_addr, 1);
                 }
             }
 
-            // TODO: perform the write if responsible
-            //      - compiletime arg "is_output_writer"
+            // TODO: perform the write if responsible.
+            if constexpr (is_output_writer){
+                uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
+                for (uint32_t m_id = 0; m_id < M_block_tiles; m_id++) {
+                    cb_wait_front(cb_id_out, N_block_tiles);
+                    uint32_t out_read_ptr = get_read_ptr(cb_id_out);
+                    for (uint32_t n_tile_id = d1_start; n_tile_id < d1_end; n_tile_id++) {
+                        uint32_t tile_id = m_tile * shape.logical_d1 + n_tile_id;
+                        noc_async_write_tile(tile_id, tensor_accessor, out_read_ptr);
+                        out_read_ptr += tile_size_bytes;
+                    }
+                    cb_pop_front(cb_id_out, N_block_tiles);
+                }
+            }
         }
     }
     cb_pop_front(cb_id_col_indices, indptr_num_tiles);

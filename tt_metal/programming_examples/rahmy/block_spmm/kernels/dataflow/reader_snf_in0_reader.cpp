@@ -58,6 +58,7 @@ void kernel_main(){
     uint32_t out_num_subblocks_w = get_compile_time_arg_val(33);
     uint32_t out_num_subblocks_h = get_compile_time_arg_val(34);
     uint32_t RtNt = get_compile_time_arg_val(35);
+    uint32_t Nt = get_compile_time_arg_val(36);
 
     ///////////////////////////////////////////////////////////////////////
     /// END COMPILETIME ARGS //////////////////////////////////////////////
@@ -249,19 +250,24 @@ void kernel_main(){
 
             // TODO: perform the write if responsible.
             if constexpr (is_output_writer){
-                uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
+                uint32_t out_tensor_block_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
                 for (uint32_t m_id = 0; m_id < M_block_tiles; m_id++) {
+                    uint32_t out_tensor_tile_id = out_tensor_block_start_tile_id + m_id * Nt;
                     cb_wait_front(cb_id_out, N_block_tiles);
                     uint32_t out_read_ptr = get_read_ptr(cb_id_out);
-                    for (uint32_t n_tile_id = d1_start; n_tile_id < d1_end; n_tile_id++) {
-                        uint32_t tile_id = m_tile * shape.logical_d1 + n_tile_id;
-                        noc_async_write_tile(tile_id, tensor_accessor, out_read_ptr);
-                        out_read_ptr += tile_size_bytes;
+                    for (uint32_t n_id = 0; n_id < N_block_tiles; n_id++) {
+                        uint32_t tile_id;
+                        noc_async_write_tile(tile_id, out_s, out_read_ptr);
+                        out_read_ptr += output_single_tile_size_bytes;
+                        out_tensor_tile_id += 1;
                     }
+                    noc_async_write_barrier();
                     cb_pop_front(cb_id_out, N_block_tiles);
                 }
             }
+            out_tensor_x_coord_offset += N_block_tiles;
         }
+        out_tensor_x_coord_offset = 0;
     }
     cb_pop_front(cb_id_col_indices, indptr_num_tiles);
     cb_pop_front(cb_id_indptr, indptr_num_tiles);

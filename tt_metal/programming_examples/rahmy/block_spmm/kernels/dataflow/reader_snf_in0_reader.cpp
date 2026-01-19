@@ -39,7 +39,6 @@ void kernel_main(){
     uint32_t in0_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(21));
 
     constexpr uint32_t is_injector_core = get_compile_time_arg_val(21);
-    constexpr uint32_t is_sink_core = get_compile_time_arg_val(23);
     constexpr uint32_t is_output_writer = get_compile_time_arg_val(24);
 
     // writer args
@@ -86,6 +85,7 @@ void kernel_main(){
     const uint32_t in0_dest_noc_y = get_arg_val<uint32_t>(argidx++);
     const uint32_t in0_sender_noc_x = get_arg_val<uint32_t>(argidx++);
     const uint32_t in0_sender_noc_y = get_arg_val<uint32_t>(argidx++);
+    const uint32_t is_sink_core = get_arg_val<uint32_t>(argidx++);
 
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
@@ -138,7 +138,7 @@ void kernel_main(){
         .bank_base_address = out_tensor_addr, .page_size = output_single_tile_size_bytes, .data_format = output_data_format};
 
     // TODO: test indexing args getting
-    if (is_output_writer){
+    if constexpr (is_output_writer){
         cb_reserve_back(cb_id_col_indices, col_indices_num_tiles);
         l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
         uint32_t col_indices_dram_start_id = 0;
@@ -208,13 +208,11 @@ void kernel_main(){
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
 
                 cb_reserve_back(cb_id_in0, in0_block_num_tiles);
-                cb_reserve_back(cb_id_in1, in1_block_num_tiles);
 
                 l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-                l1_write_addr_in1 = get_write_ptr(cb_id_in1);
                 
                 // TODO: make this a compiletime arg
-                if (is_injector_core){
+                if constexpr (is_injector_core){
                     // Read in0 block from DRAM
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
                     uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles;

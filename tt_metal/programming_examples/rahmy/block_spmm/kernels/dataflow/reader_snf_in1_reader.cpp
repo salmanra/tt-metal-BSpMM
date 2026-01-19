@@ -91,29 +91,11 @@ void kernel_main(){
         .page_size = indptr_single_tile_size_bytes,
         .data_format = indptr_data_format};
 
-    cb_reserve_back(cb_id_col_indices, col_indices_num_tiles);
+    cb_wait_front(cb_id_indptr, indptr_num_tiles);
+    cb_wait_front(cb_id_col_indices, col_indices_num_tiles);
     l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
-    uint32_t col_indices_dram_start_id = 0;
-    for (uint32_t i = 0; i < col_indices_num_tiles; i++){
-        noc_async_read_tile(col_indices_dram_start_id, s2, l1_write_addr_col_indices);
-        col_indices_dram_start_id++;
-        l1_write_addr_col_indices += col_indices_single_tile_size_bytes;
-    }
-    l1_write_addr_col_indices -= col_indices_single_tile_size_bytes * col_indices_num_tiles;
-    noc_async_read_barrier();
-    cb_push_back(cb_id_col_indices, col_indices_num_tiles);
-
-    cb_reserve_back(cb_id_indptr, indptr_num_tiles);
     l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
-    uint32_t indptr_dram_start_id = 0;
-    for (uint32_t i = 0; i < indptr_num_tiles; i++){
-        noc_async_read_tile(indptr_dram_start_id, s3, l1_write_addr_indptr);
-        indptr_dram_start_id++;
-        l1_write_addr_indptr += indptr_single_tile_size_bytes;
-    }
-    l1_write_addr_indptr -= indptr_single_tile_size_bytes * indptr_num_tiles;
-    noc_async_read_barrier();
-    cb_push_back(cb_id_indptr, indptr_num_tiles);
+    
 
     uint32_t* col_indices = (uint32_t*) l1_write_addr_col_indices;
     uint32_t* indptr = (uint32_t*) l1_write_addr_indptr;
@@ -133,33 +115,10 @@ void kernel_main(){
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
 
-                cb_reserve_back(cb_id_in0, in0_block_num_tiles);
                 cb_reserve_back(cb_id_in1, in1_block_num_tiles);
 
-                l1_write_addr_in0 = get_write_ptr(cb_id_in0);
                 l1_write_addr_in1 = get_write_ptr(cb_id_in1);
                 
-                // TODO: make this a compiletime arg
-                bool is_injector_core = true;
-                if (is_injector_core){
-                    // Read in0 block from DRAM
-                    uint32_t num_blocks_in = reduction_iter - block_row_start;
-                    uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles;
-                    for (uint32_t h = 0; h < in0_block_h; h++) {
-                        uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id;
-                        for (uint32_t w = 0; w < in0_block_w; w++) {
-                            noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
-                            l1_write_addr_in0 += in0_single_tile_size_bytes;
-                            in0_tensor_tile_id += in0_tensor_stride_w;
-                        }
-                        in0_tensor_row_start_tile_id += in0_tensor_stride_h;
-                    }
-                }
-                else {
-                    // Get in0 block from sender
-
-                }
-
                 // Read in1 block
                 uint32_t bsr_col_index = col_indices[reduction_iter];
                 uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
@@ -175,15 +134,8 @@ void kernel_main(){
                 }
 
                 noc_async_read_barrier();
-
-                cb_push_back(cb_id_in0, in0_block_num_tiles);
                 cb_push_back(cb_id_in1, in1_block_num_tiles);
             }
-
-            // TODO: perform the write if responsible
-            //      - compiletime arg "is_output_writer"
         }
     }
-    cb_pop_front(cb_id_col_indices, indptr_num_tiles);
-    cb_pop_front(cb_id_indptr, indptr_num_tiles);
 }

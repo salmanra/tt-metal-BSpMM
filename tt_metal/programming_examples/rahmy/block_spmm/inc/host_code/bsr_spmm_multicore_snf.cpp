@@ -163,17 +163,11 @@ void bsr_spmm_multicore_snf(
         {(std::size_t)start_core_x + column_offset - 1, (std::size_t)start_core_y + num_cores_r - 1});
 
     
-    // TODO: double check the semaphore apis so you know 1. what all the functions do and 2. whether INVALID -- 0 and VALID -- 1.
+    // TODO: double check the semaphore apis so you know 1. what all the functions do a
     auto in0_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
     auto in0_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
-    auto in0_valid_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, VALID);
     auto in1_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
     auto in1_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
-    auto in1_valid_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, VALID);
-    // need this to let one reader get the indexing data and inform the other reader that the data is ready...
-    // wait why does this not just work on the CB?
-    // auto indexing_data_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, VALID);
-
 
 
     // Circural Buffer sizing
@@ -266,5 +260,144 @@ void bsr_spmm_multicore_snf(
         
 
     */
+
+     bool src0_is_dram = src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    bool src1_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    bool col_indices_is_dram = column_indices_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    bool indptr_is_dram = indptr_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    std::vector<uint32_t> in0_injector_compile_time_args = {
+        (std::uint32_t)src0_is_dram,
+        (std::uint32_t)src1_is_dram,
+        (std::uint32_t)col_indices_is_dram,
+        (std::uint32_t)indptr_is_dram,
+
+        (std::uint32_t)src0_dram_buffer->address(),     // in0_tensor_addr
+        (std::uint32_t)1,                               // in0_tensor_stride_w
+        (std::uint32_t)Ct,                              // in0_tensor_stride_h
+
+        (std::uint32_t)in0_block_w,               // in0_block_w
+        (std::uint32_t)Rt,                         // in0_block_h
+        (std::uint32_t)in0_block_w * Rt,  // in0_block_num_tiles
+
+        (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
+        (std::uint32_t)1,                            // in1_tensor_stride_w
+        (std::uint32_t)Nt,                           // in1_tensor_stride_h
+
+        (std::uint32_t)in1_block_w,                // in1_block_w
+        (std::uint32_t)in0_block_w,               // in1_block_h
+        (std::uint32_t)in1_block_w * in0_block_w,  // in1_block_num_tiles
+
+
+        (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
+        (std::uint32_t)indptr_dram_buffer->address(), // NoC args, indptr
+
+        (std::uint32_t)num_tiles_for_col_indices,
+        (std::uint32_t)num_tiles_for_indptr,
+        in0_sender_semaphore_id, 
+        in0_receiver_semaphore_addr,
+        (std::uint32_t)true,
+        (std::uint32_t)true,
+        (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
+        (std::uint32_t)1,                           // out_tensor_stride_w
+        (std::uint32_t)Nt,                         // out_tensor_stride_h
+        (std::uint32_t)out_subblock_w,       // out_tensor_next_subblock_stride_w
+        (std::uint32_t)out_subblock_h * Nt,  // out_tensor_next_subblock_stride_h
+
+        (std::uint32_t)out_subblock_w,                     // out_subblock_w
+        (std::uint32_t)out_subblock_h,                     // out_subblock_h
+        (std::uint32_t)(out_subblock_w * out_subblock_h),  // out_subblocks_w * out_subblocks_h
+        (std::uint32_t)(in1_block_w / out_subblock_w),      // out_num_subblocks_w
+        (std::uint32_t)(in0_block_h / out_subblock_h),      // out_num_subblocks_h
+
+        (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
+        (std::uint32_t)Nt,
+
+        // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
+        // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x
+        // col indices start of row obtained by // a.indptr[output_idx_y],
+        // col indices end of row obtained by //  a.indptr[output_idx_y + 1],
+    };
+
+        std::vector<uint32_t> in0_receiver_compile_time_args = {
+        (std::uint32_t)src0_is_dram,
+        (std::uint32_t)src1_is_dram,
+        (std::uint32_t)col_indices_is_dram,
+        (std::uint32_t)indptr_is_dram,
+
+        (std::uint32_t)src0_dram_buffer->address(),     // in0_tensor_addr
+        (std::uint32_t)1,                               // in0_tensor_stride_w
+        (std::uint32_t)Ct,                              // in0_tensor_stride_h
+
+        (std::uint32_t)in0_block_w,               // in0_block_w
+        (std::uint32_t)Rt,                         // in0_block_h
+        (std::uint32_t)in0_block_w * Rt,  // in0_block_num_tiles
+
+        (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
+        (std::uint32_t)1,                            // in1_tensor_stride_w
+        (std::uint32_t)Nt,                           // in1_tensor_stride_h
+
+        (std::uint32_t)in1_block_w,                // in1_block_w
+        (std::uint32_t)in0_block_w,               // in1_block_h
+        (std::uint32_t)in1_block_w * in0_block_w,  // in1_block_num_tiles
+
+
+        (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
+        (std::uint32_t)indptr_dram_buffer->address(), // NoC args, indptr
+
+        (std::uint32_t)num_tiles_for_col_indices,
+        (std::uint32_t)num_tiles_for_indptr,
+        in0_sender_semaphore_id, 
+        in0_receiver_semaphore_addr,
+        (std::uint32_t)false,                    // is_injector_core
+        (std::uint32_t)true,                    // is_output_writer
+        (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
+        (std::uint32_t)1,                           // out_tensor_stride_w
+        (std::uint32_t)Nt,                         // out_tensor_stride_h
+        (std::uint32_t)out_subblock_w,       // out_tensor_next_subblock_stride_w
+        (std::uint32_t)out_subblock_h * Nt,  // out_tensor_next_subblock_stride_h
+
+        (std::uint32_t)out_subblock_w,                     // out_subblock_w
+        (std::uint32_t)out_subblock_h,                     // out_subblock_h
+        (std::uint32_t)(out_subblock_w * out_subblock_h),  // out_subblocks_w * out_subblocks_h
+        (std::uint32_t)(in1_block_w / out_subblock_w),      // out_num_subblocks_w
+        (std::uint32_t)(in0_block_h / out_subblock_h),      // out_num_subblocks_h
+
+        (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
+        (std::uint32_t)Nt,
+
+        // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
+        // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x
+        // col indices start of row obtained by // a.indptr[output_idx_y],
+        // col indices end of row obtained by //  a.indptr[output_idx_y + 1],
+    };
+
+    std::vector<uint32_t> compute_kernel_compile_time_args = {
+        (std::uint32_t)in0_block_w,
+        (std::uint32_t)in0_num_subblocks,
+        (std::uint32_t)in0_block_num_tiles,
+        (std::uint32_t)in0_subblock_num_tiles,
+        (std::uint32_t)in1_num_subblocks,
+        (std::uint32_t)in1_block_num_tiles,
+        (std::uint32_t)in1_per_core_w,
+        (std::uint32_t)out_subblock_h,
+        (std::uint32_t)out_subblock_w,
+        (std::uint32_t)out_subblock_num_tiles,
+        (std::uint32_t)num_iters_x,
+    };
+
+    bool out_is_dram = dst_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    std::vector<uint32_t> writer_compile_time_args = {
+        (std::uint32_t)out_is_dram,
+        (std::uint32_t)num_iters_x,
+    };
+
+
+    // Create Kernels
+
+    // Find Perms
+
+    // Assign runtime args
+
+    // Enqueue writes, program, reads
 }
 }

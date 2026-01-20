@@ -127,6 +127,21 @@ void bsr_spmm_multicore_sparse_mcast(
     IDevice* device,
     bool verbose);
 
+void bsr_spmm_multicore_snf(
+    bsr_matrix<bfloat16>& a,
+    dense_matrix<bfloat16>& b,
+    dense_matrix<bfloat16>& output,
+    bool bcast_batch,
+    uint32_t nnz_blocks,
+    uint32_t M,
+    uint32_t N,
+    uint32_t K,
+    uint32_t R,
+    uint32_t C,
+    uint32_t B,
+    IDevice* device,
+    bool verbose);
+
 
 using HostCodeFunctionPtr = void (*)(
     bsr_matrix<bfloat16>& a,
@@ -145,7 +160,7 @@ using HostCodeFunctionPtr = void (*)(
 
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
-    {bsr_spmm_multicore_sparse_mcast, "bsr_spmm_multicore_sparse_mcast"},
+    {bsr_spmm_multicore_snf, "bsr_spmm_multicore_snf"},
     {bsr_spmm_multicore_load_balanced, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration, "bsr_spmm_multicore_reuse_iteration"},
     // {bsr_spmm_multicore_reuse_many_blocks_per_core, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!

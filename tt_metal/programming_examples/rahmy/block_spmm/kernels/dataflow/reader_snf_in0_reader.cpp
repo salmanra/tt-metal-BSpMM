@@ -72,8 +72,10 @@ void kernel_main(){
     const uint32_t num_iters_y = get_arg_val<uint32_t>(arg_index++);
     const uint32_t output_idx_x_start = get_arg_val<uint32_t>(arg_index++);
     uint32_t y_coords[num_iters_y];
+    uint32_t folded_y_coords[num_iters_y];
     for (uint32_t i = 0; i < num_iters_y; i++){
         y_coords[i] = get_arg_val<uint32_t>(arg_index++);
+        folded_y_coords[i] = get_arg_val<uint32_t>(arg_index++);
     }
 
     // writer args
@@ -192,7 +194,7 @@ void kernel_main(){
     uint32_t out_tensor_x_coord_offset = 0;
     uint32_t output_idx_y, output_idx_x;
     for (uint32_t iter_y = 0; iter_y < num_iters_y; iter_y++){
-        uint32_t out_tensor_y_coord_offset = RtNt * y_coords[y];
+        uint32_t out_tensor_y_coord_offset = RtNt * folded_y_coords[iter_y];
 
         // For now, all blocks are the same size. But soon we will want this line to accomodate unaligned blocks
         uint32_t current_block_bytes = in0_single_tile_size_bytes * in0_block_num_tiles;

@@ -29,23 +29,23 @@ void bsr_spmm_multicore_snf(
     // load balanced plus store-and-forwarding for sharing blocks of sparse matrix across core rows
 
     /// Transposition step:
-    auto small_input_noc = tt::tt_metal::detail::preferred_noc_for_dram_write(device->arch());
-    auto small_input_risc = tt::tt_metal::DataMovementProcessor::RISCV_1;
-    auto large_input_noc = tt::tt_metal::detail::preferred_noc_for_dram_read(device->arch());
-    auto large_input_risc = tt::tt_metal::DataMovementProcessor::RISCV_0;
+    // auto small_input_noc = tt::tt_metal::detail::preferred_noc_for_dram_write(device->arch());
+    // auto small_input_risc = tt::tt_metal::DataMovementProcessor::RISCV_1;
+    // auto large_input_noc = tt::tt_metal::detail::preferred_noc_for_dram_read(device->arch());
+    // auto large_input_risc = tt::tt_metal::DataMovementProcessor::RISCV_0;
 
     // Transpose core grid if the output is wide (M > N)
     // If transpose core grid, we parallelize M on cores_x and N on cores_y and swap the NOCs and RISCVs
     // TODO: base the transposition off of the block rizes (R, C, K, N) instead of (M, N)
-    bool transpose_core_grid = M > N;
+    // bool transpose_core_grid = M > N;
 
-    auto in0_noc = transpose_core_grid ? large_input_noc : small_input_noc;
-    auto in0_risc = transpose_core_grid ? large_input_risc : small_input_risc;
-    uint32_t in0_parallel_axis_cores = transpose_core_grid ? grid_size.x : grid_size.y;
+    // auto in0_noc = transpose_core_grid ? large_input_noc : small_input_noc;
+    // auto in0_risc = transpose_core_grid ? large_input_risc : small_input_risc;
+    // uint32_t in0_parallel_axis_cores = transpose_core_grid ? grid_size.x : grid_size.y;
 
-    auto in1_noc = transpose_core_grid ? small_input_noc : large_input_noc;
-    auto in1_risc = transpose_core_grid ? small_input_risc : large_input_risc;
-    uint32_t in1_parallel_axis_cores = transpose_core_grid ? grid_size.y : grid_size.x;
+    // auto in1_noc = transpose_core_grid ? small_input_noc : large_input_noc;
+    // auto in1_risc = transpose_core_grid ? small_input_risc : large_input_risc;
+    // uint32_t in1_parallel_axis_cores = transpose_core_grid ? grid_size.y : grid_size.x;
     
 
     CommandQueue& cq = device->command_queue();
@@ -137,7 +137,6 @@ void bsr_spmm_multicore_snf(
     uint32_t num_cores_c = core_range.x;
     uint32_t num_cores_r = core_range.y;
 
-    // TODO: when only using one core, all_except_left_column is bad and throws a runtime error.
     CoreRange all_cores(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
@@ -156,7 +155,7 @@ void bsr_spmm_multicore_snf(
     // may not end up using these
     CoreRange top_row(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
-        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)}start_core_y);
+        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y});
 
     CoreRange all_but_top_row(
         {(std::size_t)start_core_x, (std::size_t)start_core_y + 1},
@@ -164,10 +163,10 @@ void bsr_spmm_multicore_snf(
 
     
     // TODO: double check the semaphore apis so you know 1. what all the functions do a
-    auto in0_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
-    auto in0_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
-    auto in1_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
-    auto in1_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, core_grid, INVALID);
+    auto in0_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in0_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in1_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in1_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
 
 
     // Circural Buffer sizing
@@ -294,7 +293,7 @@ void bsr_spmm_multicore_snf(
         (std::uint32_t)num_tiles_for_col_indices,
         (std::uint32_t)num_tiles_for_indptr,
         in0_sender_semaphore_id, 
-        in0_receiver_semaphore_addr,
+        in0_receiver_semaphore_id,
         (std::uint32_t)true,
         (std::uint32_t)true,
         (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
@@ -318,7 +317,7 @@ void bsr_spmm_multicore_snf(
         // col indices end of row obtained by //  a.indptr[output_idx_y + 1],
     };
 
-        std::vector<uint32_t> in0_receiver_compile_time_args = {
+    std::vector<uint32_t> in0_receiver_compile_time_args = {
         (std::uint32_t)src0_is_dram,
         (std::uint32_t)src1_is_dram,
         (std::uint32_t)col_indices_is_dram,
@@ -347,7 +346,7 @@ void bsr_spmm_multicore_snf(
         (std::uint32_t)num_tiles_for_col_indices,
         (std::uint32_t)num_tiles_for_indptr,
         in0_sender_semaphore_id, 
-        in0_receiver_semaphore_addr,
+        in0_receiver_semaphore_id,
         (std::uint32_t)false,                    // is_injector_core
         (std::uint32_t)true,                    // is_output_writer
         (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
@@ -364,6 +363,41 @@ void bsr_spmm_multicore_snf(
 
         (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
         (std::uint32_t)Nt,
+
+        // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
+        // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x
+        // col indices start of row obtained by // a.indptr[output_idx_y],
+        // col indices end of row obtained by //  a.indptr[output_idx_y + 1],
+    };
+
+    std::vector<uint32_t> in1_reader_compile_time_args = {
+        (std::uint32_t)src0_is_dram,
+        (std::uint32_t)src1_is_dram,
+        (std::uint32_t)col_indices_is_dram,
+        (std::uint32_t)indptr_is_dram,
+
+        (std::uint32_t)src0_dram_buffer->address(),     // in0_tensor_addr
+        (std::uint32_t)1,                               // in0_tensor_stride_w
+        (std::uint32_t)Ct,                              // in0_tensor_stride_h
+
+        (std::uint32_t)in0_block_w,               // in0_block_w
+        (std::uint32_t)Rt,                         // in0_block_h
+        (std::uint32_t)in0_block_w * Rt,  // in0_block_num_tiles
+
+        (std::uint32_t)src1_dram_buffer->address(),  // in1_tensor_addr
+        (std::uint32_t)1,                            // in1_tensor_stride_w
+        (std::uint32_t)Nt,                           // in1_tensor_stride_h
+
+        (std::uint32_t)in1_block_w,                // in1_block_w
+        (std::uint32_t)in0_block_w,               // in1_block_h
+        (std::uint32_t)in1_block_w * in0_block_w,  // in1_block_num_tiles
+
+
+        (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
+        (std::uint32_t)indptr_dram_buffer->address(), // NoC args, indptr
+
+        (std::uint32_t)num_tiles_for_col_indices,
+        (std::uint32_t)num_tiles_for_indptr,
 
         // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
         // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x
@@ -393,11 +427,171 @@ void bsr_spmm_multicore_snf(
 
 
     // Create Kernels
+    /* 1. all cores CK... wait are we using bmm_iter here?
+       2. all cores in1 reader -- identical to load_balanced reader
+       3. in0 injector cores in0 reader w/ injector comp args
+       4. in0 receiver cores in0 reader w/ receiver comp args
+    */
 
-    // Find Perms
+    auto compute_id = tt_metal::CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm_iter.cpp",
+        all_cores,
+        tt_metal::ComputeConfig{
+            .math_fidelity = math_fidelity,
+            // .fp32_dest_acc_en = true,
+            .compile_args = compute_kernel_compile_time_args});
+    
+    auto in1_reader_id = tt_metal::CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_snf_in1_reader.cpp",
+        all_cores,
+        tt_metal::DataMovementConfig{
+            .processor = DataMovementProcessor::RISCV_1,
+            .noc = NOC::RISCV_1_default,
+            .compile_args = in1_reader_compile_time_args});
+
+
+    auto in0_injector_and_writer_id = tt_metal::CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_snf_in0_reader.cpp",
+        in0_injector_cores,
+        tt_metal::DataMovementConfig{
+            .processor = DataMovementProcessor::RISCV_0,
+            .noc = NOC::RISCV_0_default,
+            .compile_args = in0_injector_compile_time_args});
+
+    auto in0_receiver_and_writer_id = tt_metal::CreateKernel(
+        program,
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_snf_in0_reader.cpp",
+        in0_receiver_cores,
+        tt_metal::DataMovementConfig{
+            .processor = DataMovementProcessor::RISCV_0,
+            .noc = NOC::RISCV_0_default,
+            .compile_args = in0_receiver_compile_time_args});
+
+    // Find Perms. No changes from LB?
+    uint32_t num_empty_rows = (M / R) - nnz_rows;
+    std::vector<int> row_diffs;
+
+    for (int i = 0; i < folded_bsr_matrix_indices.size() - 1; i++){
+        row_diffs.push_back(folded_bsr_matrix_indices[i+1] - folded_bsr_matrix_indices[i]);
+    }
+    std::vector<int> perm(row_diffs.size());
+    sortingPermutation(row_diffs, perm);
+
+    // remove last num_empty_rows elements from perm
+    perm.resize(nnz_rows);
+
+    // 1. initialize a vector for each row of cores
+    std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
+    // 2. While count is less than num output blocks, sweep the core grid
+    uint32_t num_rows_assigned = 0;
+    uint32_t iter_count = 1;
+    uint32_t subarray_iter = 0;
+    while (num_rows_assigned < nnz_rows) {
+        uint32_t num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
+        subarray_iter = 0;
+        for (uint32_t core_row = 0; core_row < num_rows_to_assign; core_row++){
+            if (num_rows_assigned++ >= nnz_rows)
+                break;
+            output_y_indices[core_row].push_back(perm[num_cores_r * (iter_count - 1) + subarray_iter]);
+            subarray_iter++;
+        }
+        num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
+        subarray_iter = num_cores_r - num_rows_to_assign;
+        for (uint32_t core_row = num_cores_r; core_row > num_cores_r - num_rows_to_assign; core_row--){
+            if (num_rows_assigned++ >= nnz_rows)
+                break;
+            output_y_indices[core_row - 1].push_back(perm[nnz_rows - num_cores_r * iter_count + subarray_iter]);
+            subarray_iter++;
+        }
+        iter_count++;
+    }
 
     // Assign runtime args
+    /* 1. in1 reader -- LB reader
+       2. compute -- LB compute
+       3. in0 reader -- some semaphore stuff, writer LB
+    */
 
-    // Enqueue writes, program, reads
+    for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
+        for (uint32_t core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
+            CoreCoord core(core_idx_x, core_idx_y);
+            if (verbose)
+              log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
+
+            int output_idx_x_start = (core_idx_x * num_iters_x) % num_blocks_x;
+
+            std::vector<uint32_t> in0_snf_reader_runtime_args;
+            std::vector<uint32_t> compute_runtime_args;
+            std::vector<uint32_t> in1_reader_runtime_args;
+
+            uint32_t num_iters_y_this_core = output_y_indices[core_idx_y].size();
+            uint32_t num_iters_x_this_core = std::min(num_iters_x, num_blocks_x - output_idx_x_start + 1);
+            in0_snf_reader_runtime_args.push_back(num_iters_x_this_core);
+            in0_snf_reader_runtime_args.push_back(num_iters_y_this_core);
+            in0_snf_reader_runtime_args.push_back(output_idx_x_start);
+            in1_reader_runtime_args.push_back(num_iters_x_this_core);
+            in1_reader_runtime_args.push_back(num_iters_y_this_core);
+            in1_reader_runtime_args.push_back(output_idx_x_start);
+            compute_runtime_args.push_back(num_iters_y_this_core);
+            for (int iter_y = 0; iter_y < num_iters_y_this_core; iter_y++) {
+                uint32_t folded_output_idx_y = output_y_indices[core_idx_y][iter_y];
+                uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y];
+                in0_snf_reader_runtime_args.push_back(output_idx_y); // for reading
+                in0_snf_reader_runtime_args.push_back(folded_output_idx_y); // for writing
+                in1_reader_runtime_args.push_back(output_idx_y);
+                compute_runtime_args.push_back(a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
+            }
+
+
+            in0_snf_reader_runtime_args.push_back(output_idx_x_start * in1_block_w);
+            in0_snf_reader_runtime_args.push_back(num_iters_y_this_core);
+            // TODO: 4 more semaphore args
+            // dest_nocx/y and sender_nocx/y
+            //      these are pretty simple?
+            //      Let me check the minimal matmul code to see if there is anything tricky here.
+            bool is_sink_core = core_idx_x == (num_cores_c - 1);
+            in0_snf_reader_runtime_args.push_back(is_sink_core);
+            device->worker_core_from_logical_core(core);
+
+            bool is_injector_core = core_idx_x == 0;
+            if (is_injector_core)
+                tt_metal::SetRuntimeArgs(program, in0_injector_and_writer_id, core, in0_snf_reader_runtime_args);
+            else {
+                tt_metal::SetRuntimeArgs(program, in0_receiver_and_writer_id, core, in0_snf_reader_runtime_args);
+            }
+            tt_metal::SetRuntimeArgs(program, in1_reader_id, core, in1_reader_runtime_args);
+            tt_metal::SetRuntimeArgs(program, compute_id, core, compute_runtime_args);
+        }
+    }
+
+    // Enqueue writes, program, reads. no changes from LB?
+
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), true);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), true);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
+    EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
+
+    // TODO: is there a macro for build_Tracy we can invoke here to wrap in a loop and get cooking?
+    EnqueueProgram(cq, program, true);
+
+    if (verbose)
+        log_info(tt::LogVerif, " -- Program returned --");
+
+    uint32_t nonzero_row_index = 0;
+    for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
+        if (a.indptr[row_index+1] - a.indptr[row_index] == 0)
+            continue;
+        BufferRegion DRAM_row(nonzero_row_index * dram_buffer_dst_row_size, dram_buffer_dst_row_size);
+        EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, true);
+        nonzero_row_index++;
+    }
+
+    if (verbose)
+        log_info(tt::LogVerif, " -- Finished reading output --");
+    Finish(cq);
 }
+
 }

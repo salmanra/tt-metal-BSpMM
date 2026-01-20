@@ -137,6 +137,7 @@ void bsr_spmm_multicore_snf(
     uint32_t num_cores_c = core_range.x;
     uint32_t num_cores_r = core_range.y;
 
+    // this variable exists purely to allow the constructor to CoreRange to not fail when we only use one column of the core grid
     CoreRange all_cores(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
@@ -144,22 +145,21 @@ void bsr_spmm_multicore_snf(
     CoreRange in0_injector_cores(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x, (std::size_t)start_core_y + num_cores_r - 1});
-
-
-    // this variable exists purely to allow the constructor to CoreRange to not fail when we only use one column of the core grid
-    uint32_t column_offset = num_cores_c > 1 ? num_cores_c : num_cores_c + 1;
+    
+    uint32_t column_offset = num_cores_c > 1 ? 1 : 0;
     CoreRange in0_receiver_cores(
-        {(std::size_t)start_core_x + 1, (std::size_t)start_core_y},
-        {(std::size_t)start_core_x + column_offset - 1, (std::size_t)start_core_y + num_cores_r - 1});
+        {(std::size_t)start_core_x + column_offset, (std::size_t)start_core_y},
+        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
     
     // may not end up using these
     CoreRange top_row(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y});
 
+    uint32_t row_offset = num_cores_r > 1 ? 1 : 0;
     CoreRange all_but_top_row(
-        {(std::size_t)start_core_x, (std::size_t)start_core_y + 1},
-        {(std::size_t)start_core_x + column_offset - 1, (std::size_t)start_core_y + num_cores_r - 1});
+        {(std::size_t)start_core_x, (std::size_t)start_core_y + row_offset},
+        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
 
     
     // TODO: double check the semaphore apis so you know 1. what all the functions do a
@@ -215,6 +215,43 @@ void bsr_spmm_multicore_snf(
     auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, dram_buffer_col_indices_size);
     auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, dram_buffer_indptr_size);
 
+
+    if (verbose) {
+        log_info(tt::LogVerif, " -- Metalium Block and subblock sizing --");
+        log_info(
+            tt::LogVerif,
+            " -- per_core_M={} -- per_block_M={} -- per_core_N={} -- out_subblock_h={} -- out_subblock_w={} --",
+            num_iters_y * in0_block_h,
+            in0_block_h,
+            num_iters_x * in1_block_w,
+            out_subblock_h,
+            out_subblock_w);
+    }
+
+    if (verbose) {
+        log_info(tt::LogVerif, " -- Core Grid Allocaiton Information --");
+        log_info(
+            tt::LogVerif,
+            " -- available_cores_y={} -- available_cores_x={} -- num_iters_y={} -- num_iters_x={} -- nnz_rows={} --",
+            num_cores_y,
+            num_cores_x,
+            num_iters_y,
+            num_iters_x,
+            nnz_rows);
+    }
+
+    if (verbose) {
+        log_info(tt::LogVerif, " -- Metalium Core Grid Sizing --");
+        log_info(
+            tt::LogVerif,
+            " -- Mt= {} -- Nt= {} -- num_output_blocks= {} -- cores_used={} -- num_blocks_x={} -- num_blocks_y={} --",
+            Mt,
+            Nt,
+            num_blocks_total,
+            all_cores,
+            num_blocks_x,
+            num_blocks_y);
+    }
     /*
     SRAM Circular Buffers
     */
@@ -260,7 +297,7 @@ void bsr_spmm_multicore_snf(
 
     */
 
-     bool src0_is_dram = src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+    bool src0_is_dram = src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool src1_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool col_indices_is_dram = column_indices_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool indptr_is_dram = indptr_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
@@ -292,21 +329,12 @@ void bsr_spmm_multicore_snf(
 
         (std::uint32_t)num_tiles_for_col_indices,
         (std::uint32_t)num_tiles_for_indptr,
+
         in0_sender_semaphore_id, 
         in0_receiver_semaphore_id,
         (std::uint32_t)true,
         (std::uint32_t)true,
         (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
-        (std::uint32_t)1,                           // out_tensor_stride_w
-        (std::uint32_t)Nt,                         // out_tensor_stride_h
-        (std::uint32_t)out_subblock_w,       // out_tensor_next_subblock_stride_w
-        (std::uint32_t)out_subblock_h * Nt,  // out_tensor_next_subblock_stride_h
-
-        (std::uint32_t)out_subblock_w,                     // out_subblock_w
-        (std::uint32_t)out_subblock_h,                     // out_subblock_h
-        (std::uint32_t)(out_subblock_w * out_subblock_h),  // out_subblocks_w * out_subblocks_h
-        (std::uint32_t)(in1_block_w / out_subblock_w),      // out_num_subblocks_w
-        (std::uint32_t)(in0_block_h / out_subblock_h),      // out_num_subblocks_h
 
         (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
         (std::uint32_t)Nt,
@@ -350,16 +378,6 @@ void bsr_spmm_multicore_snf(
         (std::uint32_t)false,                    // is_injector_core
         (std::uint32_t)true,                    // is_output_writer
         (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
-        (std::uint32_t)1,                           // out_tensor_stride_w
-        (std::uint32_t)Nt,                         // out_tensor_stride_h
-        (std::uint32_t)out_subblock_w,       // out_tensor_next_subblock_stride_w
-        (std::uint32_t)out_subblock_h * Nt,  // out_tensor_next_subblock_stride_h
-
-        (std::uint32_t)out_subblock_w,                     // out_subblock_w
-        (std::uint32_t)out_subblock_h,                     // out_subblock_h
-        (std::uint32_t)(out_subblock_w * out_subblock_h),  // out_subblocks_w * out_subblocks_h
-        (std::uint32_t)(in1_block_w / out_subblock_w),      // out_num_subblocks_w
-        (std::uint32_t)(in0_block_h / out_subblock_h),      // out_num_subblocks_h
 
         (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
         (std::uint32_t)Nt,
@@ -461,6 +479,11 @@ void bsr_spmm_multicore_snf(
             .noc = NOC::RISCV_0_default,
             .compile_args = in0_injector_compile_time_args});
 
+    // if i make this a pointer, can i conditionally create the kernel object on the heap?
+    // I'm gonna need the full power of intellisense for the following:
+    // 1. What is the type returned by tt_metal:;CreateKernel?
+    // 2. make sure I have the pointer semantics right...
+    // 3. yah
     auto in0_receiver_and_writer_id = tt_metal::CreateKernel(
         program,
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_snf_in0_reader.cpp",

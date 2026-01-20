@@ -38,26 +38,16 @@ void kernel_main(){
     uint32_t in0_sender_semaphore_addr = get_semaphore(get_compile_time_arg_val(20));
     uint32_t in0_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(21));
 
-    constexpr uint32_t is_injector_core = get_compile_time_arg_val(21);
-    constexpr uint32_t is_output_writer = get_compile_time_arg_val(24);
+    constexpr uint32_t is_injector_core = get_compile_time_arg_val(22);
+    constexpr uint32_t is_output_writer = get_compile_time_arg_val(23);
 
     // writer args
     // TODO: no more subblocks in the DM kernels!!!!!
     // out tensor args
-    uint32_t out_tensor_addr = get_compile_time_arg_val(25);
-    uint32_t out_tensor_stride_w = get_compile_time_arg_val(26);
-    uint32_t out_tensor_stride_h = get_compile_time_arg_val(27);
-    uint32_t out_tensor_next_subblock_stride_w = get_compile_time_arg_val(28);
-    uint32_t out_tensor_next_subblock_stride_h = get_compile_time_arg_val(29);
+    uint32_t out_tensor_addr = get_compile_time_arg_val(23);
 
-    // out subblock args
-    uint32_t out_subblock_w = get_compile_time_arg_val(30);
-    uint32_t out_subblock_h = get_compile_time_arg_val(31);
-    uint32_t out_subblock_tile_count = get_compile_time_arg_val(32);
-    uint32_t out_num_subblocks_w = get_compile_time_arg_val(33);
-    uint32_t out_num_subblocks_h = get_compile_time_arg_val(34);
-    uint32_t RtNt = get_compile_time_arg_val(35);
-    uint32_t Nt = get_compile_time_arg_val(36);
+    uint32_t RtNt = get_compile_time_arg_val(24);
+    uint32_t Nt = get_compile_time_arg_val(25);
 
     ///////////////////////////////////////////////////////////////////////
     /// END COMPILETIME ARGS //////////////////////////////////////////////
@@ -83,11 +73,11 @@ void kernel_main(){
     uint32_t out_tensor_start_tile_id = get_arg_val<uint32_t>(arg_index++);
 
     // SnF args
-    const uint32_t in0_dest_noc_x = get_arg_val<uint32_t>(argidx++);
-    const uint32_t in0_dest_noc_y = get_arg_val<uint32_t>(argidx++);
-    const uint32_t in0_sender_noc_x = get_arg_val<uint32_t>(argidx++);
-    const uint32_t in0_sender_noc_y = get_arg_val<uint32_t>(argidx++);
-    const uint32_t is_sink_core = get_arg_val<uint32_t>(argidx++);
+    const uint32_t in0_dest_noc_x = get_arg_val<uint32_t>(arg_index++);
+    const uint32_t in0_dest_noc_y = get_arg_val<uint32_t>(arg_index++);
+    const uint32_t in0_sender_noc_x = get_arg_val<uint32_t>(arg_index++);
+    const uint32_t in0_sender_noc_y = get_arg_val<uint32_t>(arg_index++);
+    const uint32_t is_sink_core = get_arg_val<uint32_t>(arg_index++);
 
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
@@ -136,7 +126,7 @@ void kernel_main(){
         .page_size = indptr_single_tile_size_bytes,
         .data_format = indptr_data_format};
 
-    const InterleavedAddrGenFast<out_is_dram> out_s = {
+    const InterleavedAddrGenFast<true> out_s = {
         .bank_base_address = out_tensor_addr, .page_size = output_single_tile_size_bytes, .data_format = output_data_format};
 
     // TODO: test indexing args getting
@@ -183,7 +173,7 @@ void kernel_main(){
         get_noc_addr(in0_sender_noc_x, in0_sender_noc_y, in0_sender_semaphore_addr);
 
     volatile tt_l1_ptr uint32_t* in0_receiver_semaphore_addr_ptr = 
-        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_receiver_semaphorea_addr);
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_receiver_semaphore_addr);
     *(in0_receiver_semaphore_addr_ptr) = VALID;
     const uint64_t in0_receiver_semaphore_noc_addr = 
         get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, in0_receiver_semaphore_addr);
@@ -230,9 +220,9 @@ void kernel_main(){
                     noc_async_read_barrier();
                 }
                 else {
-                    noc_semaphore_set(in0_receiver_semaphore_addr, 0);
+                    noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
                     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
-                    noc_semaphore_wait(in0_receiver_semaphore_addr, 1);
+                    noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
                 }
 
                 cb_push_back(cb_id_in0, in0_block_num_tiles);
@@ -251,21 +241,21 @@ void kernel_main(){
             // TODO: perform the write if responsible.
             if constexpr (is_output_writer){
                 uint32_t out_tensor_block_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
-                for (uint32_t m_id = 0; m_id < M_block_tiles; m_id++) {
+                for (uint32_t m_id = 0; m_id < in0_block_h; m_id++) {
                     uint32_t out_tensor_tile_id = out_tensor_block_start_tile_id + m_id * Nt;
-                    cb_wait_front(cb_id_out, N_block_tiles);
+                    cb_wait_front(cb_id_out, in1_block_w);
                     uint32_t out_read_ptr = get_read_ptr(cb_id_out);
-                    for (uint32_t n_id = 0; n_id < N_block_tiles; n_id++) {
+                    for (uint32_t n_id = 0; n_id < in1_block_w; n_id++) {
                         uint32_t tile_id;
                         noc_async_write_tile(tile_id, out_s, out_read_ptr);
                         out_read_ptr += output_single_tile_size_bytes;
                         out_tensor_tile_id += 1;
                     }
                     noc_async_write_barrier();
-                    cb_pop_front(cb_id_out, N_block_tiles);
+                    cb_pop_front(cb_id_out, in1_block_w);
                 }
             }
-            out_tensor_x_coord_offset += N_block_tiles;
+            out_tensor_x_coord_offset += in1_block_w;
         }
         out_tensor_x_coord_offset = 0;
     }

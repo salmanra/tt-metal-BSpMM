@@ -146,20 +146,27 @@ void bsr_spmm_multicore_snf(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x, (std::size_t)start_core_y + num_cores_r - 1});
     
-    uint32_t column_offset = num_cores_c > 1 ? 1 : 0;
+    uint32_t column_offset = num_cores_c > 1 ? num_cores_c : num_cores_c + 1;
     CoreRange in0_receiver_cores(
-        {(std::size_t)start_core_x + column_offset, (std::size_t)start_core_y},
-        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
+        {(std::size_t)start_core_x + 1, (std::size_t)start_core_y},
+        {(std::size_t)start_core_x + column_offset - 1, (std::size_t)start_core_y + num_cores_r - 1});
     
     // may not end up using these
     CoreRange top_row(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y});
 
-    uint32_t row_offset = num_cores_r > 1 ? 1 : 0;
+    uint32_t row_offset = num_cores_r > 1 ? num_cores_r : num_cores_r + 1;
     CoreRange all_but_top_row(
-        {(std::size_t)start_core_x, (std::size_t)start_core_y + row_offset},
-        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
+        {(std::size_t)start_core_x, (std::size_t)start_core_y + 1},
+        {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + row_offset - 1});
+
+    if (verbose) {
+        log_info(tt::LogVerif, "core_range         {}", core_range);
+        log_info(tt::LogVerif, "all cores          {}", all_cores);
+        log_info(tt::LogVerif, "in0 injector cores {}", in0_injector_cores);
+        log_info(tt::LogVerif, "in0 receiver cores {}, used? {}", in0_receiver_cores, num_cores_c > 1);
+    }
 
     
     // TODO: double check the semaphore apis so you know 1. what all the functions do a
@@ -484,14 +491,22 @@ void bsr_spmm_multicore_snf(
     // 1. What is the type returned by tt_metal:;CreateKernel?
     // 2. make sure I have the pointer semantics right...
     // 3. yah
-    auto in0_receiver_and_writer_id = tt_metal::CreateKernel(
-        program,
-        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_snf_in0_reader.cpp",
-        in0_receiver_cores,
-        tt_metal::DataMovementConfig{
-            .processor = DataMovementProcessor::RISCV_0,
-            .noc = NOC::RISCV_0_default,
-            .compile_args = in0_receiver_compile_time_args});
+    // ... I thought "we could CreateKernel on a garbage set of cores. But that just leads to a hang unless you explicitly program that case."
+    //      it's the single core case, so I'm thinking it won't kill us to cause a little noc congestion for its sake?
+    KernelHandle in0_receiver_and_writer_id = 0;
+    if (num_cores_c > 1){
+        if (verbose) {
+                log_info(tt::LogVerif, "receiver cores {}", in0_receiver_cores);
+        }
+        auto in0_receiver_and_writer_id = tt_metal::CreateKernel(
+            program,
+            "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_snf_in0_reader.cpp",
+            in0_receiver_cores,
+            tt_metal::DataMovementConfig{
+                .processor = DataMovementProcessor::RISCV_0,
+                .noc = NOC::RISCV_0_default,
+                .compile_args = in0_receiver_compile_time_args});
+    }
 
     // Find Perms. No changes from LB?
     uint32_t num_empty_rows = (M / R) - nnz_rows;
@@ -541,8 +556,7 @@ void bsr_spmm_multicore_snf(
     for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
         for (uint32_t core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
             CoreCoord core(core_idx_x, core_idx_y);
-            if (verbose)
-              log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
+
 
             int output_idx_x_start = (core_idx_x * num_iters_x) % num_blocks_x;
 
@@ -575,15 +589,33 @@ void bsr_spmm_multicore_snf(
             // dest_nocx/y and sender_nocx/y
             //      these are pretty simple?
             //      Let me check the minimal matmul code to see if there is anything tricky here.
-            bool is_sink_core = core_idx_x == (num_cores_c - 1);
-            in0_snf_reader_runtime_args.push_back(is_sink_core);
-            device->worker_core_from_logical_core(core);
-
             bool is_injector_core = core_idx_x == 0;
-            if (is_injector_core)
+            bool is_sink_core = core_idx_x == (num_cores_c - 1);
+
+            auto in0_prev_core = CoreCoord(is_injector_core ? 0 : core_idx_x - 1, core_idx_y);
+            auto in0_next_core = CoreCoord(is_sink_core ? core_idx_x : core_idx_x + 1, core_idx_y);
+
+            auto in0_prev_core_physical = device->worker_core_from_logical_core(in0_prev_core);
+            auto in0_next_core_physical = device->worker_core_from_logical_core(in0_next_core);
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core_physical.x);
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core_physical.y);
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core_physical.x);
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core_physical.y);
+            
+            in0_snf_reader_runtime_args.push_back(is_sink_core);
+
+            if (is_injector_core){
                 tt_metal::SetRuntimeArgs(program, in0_injector_and_writer_id, core, in0_snf_reader_runtime_args);
+                if (verbose)
+                    log_info(tt::LogVerif, "Core x {} y {} injector", core_idx_x, core_idx_y);
+                    log_info(tt::LogVerif, "sink? {}", is_sink_core);
+                    log_info(tt::LogVerif, "num runtime args: {}", in0_snf_reader_runtime_args.size());
+
+            }
             else {
                 tt_metal::SetRuntimeArgs(program, in0_receiver_and_writer_id, core, in0_snf_reader_runtime_args);
+                log_info(tt::LogVerif, "Core x {} y {} receiver", core_idx_x, core_idx_y);
+
             }
             tt_metal::SetRuntimeArgs(program, in1_reader_id, core, in1_reader_runtime_args);
             tt_metal::SetRuntimeArgs(program, compute_id, core, compute_runtime_args);

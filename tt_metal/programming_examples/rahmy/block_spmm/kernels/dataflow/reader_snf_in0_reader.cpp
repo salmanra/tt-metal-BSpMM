@@ -79,6 +79,9 @@ void kernel_main(){
     const uint32_t in0_sender_noc_y = get_arg_val<uint32_t>(arg_index++);
     const uint32_t is_sink_core = get_arg_val<uint32_t>(arg_index++);
 
+    DPRINT_DATA0(DPRINT << "num runtime args " << arg_index << ENDL());
+
+
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
@@ -205,6 +208,8 @@ void kernel_main(){
                 
                 // TODO: make this a compiletime arg
                 if constexpr (is_injector_core){
+                    DPRINT_DATA0(DPRINT << "injecting in0 block!" << ENDL());
+
                     // Read in0 block from DRAM
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
                     uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles;
@@ -220,6 +225,7 @@ void kernel_main(){
                     noc_async_read_barrier();
                 }
                 else {
+                    DPRINT_DATA0(DPRINT << "receiving in0 block!" << ENDL());
                     noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
                     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
                     noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
@@ -228,6 +234,8 @@ void kernel_main(){
                 cb_push_back(cb_id_in0, in0_block_num_tiles);
 
                 if (!is_sink_core) {
+                    DPRINT_DATA0(DPRINT << "forwarding in0 block!" << ENDL());
+
                     noc_semaphore_wait(in0_sender_semaphore_addr_ptr, 1);
                     noc_semaphore_set(in0_sender_semaphore_addr_ptr, 0);
 
@@ -243,6 +251,7 @@ void kernel_main(){
                 uint32_t out_tensor_block_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
                 for (uint32_t m_id = 0; m_id < in0_block_h; m_id++) {
                     uint32_t out_tensor_tile_id = out_tensor_block_start_tile_id + m_id * Nt;
+                    DPRINT_DATA0(DPRINT << "waiting on ck!" << ENDL());
                     cb_wait_front(cb_id_out, in1_block_w);
                     uint32_t out_read_ptr = get_read_ptr(cb_id_out);
                     for (uint32_t n_id = 0; n_id < in1_block_w; n_id++) {
@@ -259,6 +268,8 @@ void kernel_main(){
         }
         out_tensor_x_coord_offset = 0;
     }
-    cb_pop_front(cb_id_col_indices, indptr_num_tiles);
+    cb_pop_front(cb_id_col_indices, col_indices_num_tiles);
     cb_pop_front(cb_id_indptr, indptr_num_tiles);
+    DPRINT_DATA0(DPRINT << "in0 kernel complete" << ENDL());
+
 }

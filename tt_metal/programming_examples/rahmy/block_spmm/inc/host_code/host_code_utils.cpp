@@ -2,6 +2,15 @@
 
 namespace bsr_host_code {
 
+CoreCoord clamped_prev(const std::vector<CoreCoord>& order, uint32_t index) {
+    return order.at(index == 0 ? 0 : index - 1);
+}
+
+CoreCoord clamped_next(const std::vector<CoreCoord>& order, uint32_t index) {
+    const uint32_t last = static_cast<uint32_t>(order.size() - 1);
+    return order.at(index >= last ? last : index + 1);
+}
+
 std::shared_ptr<Buffer> MakeBuffer(IDevice* device, uint32_t size, uint32_t page_size, bool sram) {
     InterleavedBufferConfig config{
         .device = device,

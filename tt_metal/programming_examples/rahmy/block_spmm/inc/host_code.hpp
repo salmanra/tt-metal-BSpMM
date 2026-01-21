@@ -161,6 +161,7 @@ using HostCodeFunctionPtr = void (*)(
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
     {bsr_spmm_multicore_snf, "bsr_spmm_multicore_snf"},
+    {bsr_spmm_multicore_sparse_mcast, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration, "bsr_spmm_multicore_reuse_iteration"},
     // {bsr_spmm_multicore_reuse_many_blocks_per_core, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
@@ -169,6 +170,9 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
     // {bsr_spmm_multicore_host_reuse_device_iter, "bsr_spmm_multicore_host_reuse_device_iter"} // TEST
 };
 
+CoreCoord clamped_prev(const std::vector<CoreCoord>& order, uint32_t index);
+
+CoreCoord clamped_next(const std::vector<CoreCoord>& order, uint32_t index);
 
 std::shared_ptr<Buffer> MakeBuffer(IDevice* device, uint32_t size, uint32_t page_size, bool sram = false);
 

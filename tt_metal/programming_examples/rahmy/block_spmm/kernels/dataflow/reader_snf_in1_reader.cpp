@@ -120,6 +120,8 @@ void kernel_main(){
                 l1_write_addr_in1 = get_write_ptr(cb_id_in1);
                 
                 // Read in1 block
+                // DPRINT_DATA1(DPRINT << "reading in1 block" << ENDL());
+
                 uint32_t bsr_col_index = col_indices[reduction_iter];
                 uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
                 uint32_t in1_tensor_row_start_tile_id = in1_tensor_start_tile_id + bsr_col_index * in1_block_stride;
@@ -138,4 +140,6 @@ void kernel_main(){
             }
         }
     }
+    DPRINT_DATA1(DPRINT << "in1 kernel complete" << ENDL());
+
 }

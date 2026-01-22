@@ -190,6 +190,9 @@ void kernel_main(){
     uint32_t out_num_subblocks_h = in0_block_h / out_subblock_h;
     uint32_t out_tensor_next_subblock_stride_w = out_subblock_w;
     uint32_t out_tensor_next_subblock_stride_h = out_subblock_h * Nt;
+    uint32_t out_tensor_stride_w = 1;
+    uint32_t out_tensor_stride_h = Nt;
+
     ///////////////////////////////////////////////////////////////////////
     /// PROGRAM BODY //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
@@ -258,22 +261,35 @@ void kernel_main(){
 
             // TODO: perform the write if responsible.
             if constexpr (is_output_writer){
-                uint32_t out_tensor_block_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
-                for (uint32_t m_id = 0; m_id < in0_block_h; m_id++) {
-                    uint32_t out_tensor_tile_id = out_tensor_block_start_tile_id + m_id * Nt;
-                    DPRINT_DATA0(DPRINT << "waiting on ck!" << ENDL());
-                    cb_wait_front(cb_id_out, in1_block_w);
-                    uint32_t out_read_ptr = get_read_ptr(cb_id_out);
-                    for (uint32_t n_id = 0; n_id < in1_block_w; n_id++) {
-                        noc_async_write_tile(out_tensor_tile_id, out_s, out_read_ptr);
-                        out_read_ptr += output_single_tile_size_bytes;
-                        out_tensor_tile_id += 1;
+            uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
+            for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
+                uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
+                for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
+                    uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
+                    cb_wait_front(cb_id_out, out_subblock_num_tiles);
+                    uint32_t l1_read_addr = get_read_ptr(cb_id_out);
+
+                    for (uint32_t h = 0; h < out_subblock_h; h++) {
+                        uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
+                        for (uint32_t w = 0; w < out_subblock_w; w++) {
+                            noc_async_write_tile(out_tensor_tile_id, out_s, l1_read_addr);
+                            l1_read_addr += output_single_tile_size_bytes;
+
+                            out_tensor_tile_id += out_tensor_stride_w;
+                        }
+                        out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
                     }
+
                     noc_async_write_barrier();
-                    cb_pop_front(cb_id_out, in1_block_w);
+
+                    cb_pop_front(cb_id_out, out_subblock_num_tiles);
+                    out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
                 }
+                out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
             }
-            out_tensor_x_coord_offset += in1_block_w;
+            out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
+
+            }
         }
         out_tensor_x_coord_offset = 0;
     }

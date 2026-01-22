@@ -346,6 +346,11 @@ void bsr_spmm_multicore_snf(
         (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
         (std::uint32_t)Nt,
 
+        // writer args
+        (std::uint32_t)out_subblock_w,                     // out_subblock_w
+        (std::uint32_t)out_subblock_h,                     // out_subblock_h
+
+
         // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
         // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x
         // col indices start of row obtained by // a.indptr[output_idx_y],

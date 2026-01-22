@@ -48,6 +48,8 @@ void kernel_main(){
 
     uint32_t RtNt = get_compile_time_arg_val(25);
     uint32_t Nt = get_compile_time_arg_val(26);
+    uint32_t out_subblock_w = get_compile_time_arg_val(27);
+    uint32_t out_subblock_h = get_compile_time_arg_val(28);
 
     ///////////////////////////////////////////////////////////////////////
     /// END COMPILETIME ARGS //////////////////////////////////////////////
@@ -180,7 +182,14 @@ void kernel_main(){
     *(in0_receiver_semaphore_addr_ptr) = VALID;
     const uint64_t in0_receiver_semaphore_noc_addr = 
         get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, in0_receiver_semaphore_addr);
+    
+    // Writer args
 
+    uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
+    uint32_t out_num_subblocks_w = in1_block_w / out_subblock_w;
+    uint32_t out_num_subblocks_h = in0_block_h / out_subblock_h;
+    uint32_t out_tensor_next_subblock_stride_w = out_subblock_w;
+    uint32_t out_tensor_next_subblock_stride_h = out_subblock_h * Nt;
     ///////////////////////////////////////////////////////////////////////
     /// PROGRAM BODY //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
@@ -205,7 +214,8 @@ void kernel_main(){
                 cb_reserve_back(cb_id_in0, in0_block_num_tiles);
 
                 l1_write_addr_in0 = get_write_ptr(cb_id_in0);
-                
+                uint32_t l1_write_addr_in0_start = l1_write_addr_in0;  // Save start address for forwarding
+
                 // TODO: make this a compiletime arg
                 if constexpr (is_injector_core){
                     DPRINT_DATA0(DPRINT << "injecting in0 block!" << ENDL());
@@ -239,8 +249,8 @@ void kernel_main(){
                     noc_semaphore_wait(in0_sender_semaphore_addr_ptr, 1);
                     noc_semaphore_set(in0_sender_semaphore_addr_ptr, 0);
 
-                    uint64_t in0_unicast_data_addr = get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, l1_write_addr_in0);
-                    noc_async_write(l1_write_addr_in0, in0_unicast_data_addr, current_block_bytes);
+                    uint64_t in0_unicast_data_addr = get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, l1_write_addr_in0_start);
+                    noc_async_write(l1_write_addr_in0_start, in0_unicast_data_addr, current_block_bytes);
                     noc_async_write_barrier(); // TODO: ask jon if this is necessary, it's not in their code
                     noc_semaphore_inc(in0_receiver_semaphore_noc_addr, 1);
                 }

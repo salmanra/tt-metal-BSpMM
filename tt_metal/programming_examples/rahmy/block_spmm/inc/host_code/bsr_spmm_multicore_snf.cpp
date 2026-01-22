@@ -389,6 +389,10 @@ void bsr_spmm_multicore_snf(
         (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
         (std::uint32_t)Nt,
 
+        // writer args
+        (std::uint32_t)out_subblock_w,                     // out_subblock_w
+        (std::uint32_t)out_subblock_h,                     // out_subblock_h
+
         // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
         // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x
         // col indices start of row obtained by // a.indptr[output_idx_y],
@@ -491,7 +495,7 @@ void bsr_spmm_multicore_snf(
         if (verbose) {
                 log_info(tt::LogVerif, "receiver cores {}", in0_receiver_cores);
         }
-        auto in0_receiver_and_writer_id = tt_metal::CreateKernel(
+        in0_receiver_and_writer_id = tt_metal::CreateKernel(
             program,
             "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_snf_in0_reader.cpp",
             in0_receiver_cores,

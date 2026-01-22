@@ -69,8 +69,8 @@ void kernel_main(){
     }
 
     // writer args
-    const uint32_t num_cores_y = get_arg_val<uint32_t>(arg_index++);
     uint32_t out_tensor_start_tile_id = get_arg_val<uint32_t>(arg_index++);
+    const uint32_t num_cores_y = get_arg_val<uint32_t>(arg_index++);
 
     // SnF args
     const uint32_t in0_dest_noc_x = get_arg_val<uint32_t>(arg_index++);
@@ -255,8 +255,7 @@ void kernel_main(){
                     cb_wait_front(cb_id_out, in1_block_w);
                     uint32_t out_read_ptr = get_read_ptr(cb_id_out);
                     for (uint32_t n_id = 0; n_id < in1_block_w; n_id++) {
-                        uint32_t tile_id;
-                        noc_async_write_tile(tile_id, out_s, out_read_ptr);
+                        noc_async_write_tile(out_tensor_tile_id, out_s, out_read_ptr);
                         out_read_ptr += output_single_tile_size_bytes;
                         out_tensor_tile_id += 1;
                     }

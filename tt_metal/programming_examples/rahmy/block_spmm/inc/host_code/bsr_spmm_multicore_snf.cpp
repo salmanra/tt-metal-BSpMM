@@ -604,13 +604,17 @@ void bsr_spmm_multicore_snf(
                     log_info(tt::LogVerif, "sink? {}", is_sink_core);
                     log_info(tt::LogVerif, "num runtime args: {}", in0_snf_reader_runtime_args.size());
                     log_info(tt::LogVerif, "num comptime args: {}", in0_injector_compile_time_args.size());
-
             }
             else {
                 tt_metal::SetRuntimeArgs(program, in0_receiver_and_writer_id, core, in0_snf_reader_runtime_args);
                 log_info(tt::LogVerif, "Core x {} y {} receiver", core_idx_x, core_idx_y);
-
             }
+            if (verbose && core_idx_x == 0 && core_idx_y == 1){
+                log_info(tt::LogVerif, "in0 reader runtime args for core {} , {} :", core_idx_x, core_idx_y);
+                for (size_t arg_idx = 0; arg_idx < in0_snf_reader_runtime_args.size(); arg_idx++){
+                    log_info(tt::LogVerif, "arg {} : {}", arg_idx, in0_snf_reader_runtime_args[arg_idx]);
+                }
+            } 
             tt_metal::SetRuntimeArgs(program, in1_reader_id, core, in1_reader_runtime_args);
             tt_metal::SetRuntimeArgs(program, compute_id, core, compute_runtime_args);
         }

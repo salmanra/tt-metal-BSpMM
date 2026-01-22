@@ -44,10 +44,10 @@ void kernel_main(){
     // writer args
     // TODO: no more subblocks in the DM kernels!!!!!
     // out tensor args
-    uint32_t out_tensor_addr = get_compile_time_arg_val(23);
+    uint32_t out_tensor_addr = get_compile_time_arg_val(24);
 
-    uint32_t RtNt = get_compile_time_arg_val(24);
-    uint32_t Nt = get_compile_time_arg_val(25);
+    uint32_t RtNt = get_compile_time_arg_val(25);
+    uint32_t Nt = get_compile_time_arg_val(26);
 
     ///////////////////////////////////////////////////////////////////////
     /// END COMPILETIME ARGS //////////////////////////////////////////////

@@ -486,13 +486,6 @@ void bsr_spmm_multicore_snf(
             .noc = NOC::RISCV_0_default,
             .compile_args = in0_injector_compile_time_args});
 
-    // if i make this a pointer, can i conditionally create the kernel object on the heap?
-    // I'm gonna need the full power of intellisense for the following:
-    // 1. What is the type returned by tt_metal:;CreateKernel?
-    // 2. make sure I have the pointer semantics right...
-    // 3. yah
-    // ... I thought "we could CreateKernel on a garbage set of cores. But that just leads to a hang unless you explicitly program that case."
-    //      it's the single core case, so I'm thinking it won't kill us to cause a little noc congestion for its sake?
     KernelHandle in0_receiver_and_writer_id = 0;
     if (num_cores_c > 1){
         if (verbose) {
@@ -610,6 +603,7 @@ void bsr_spmm_multicore_snf(
                     log_info(tt::LogVerif, "Core x {} y {} injector", core_idx_x, core_idx_y);
                     log_info(tt::LogVerif, "sink? {}", is_sink_core);
                     log_info(tt::LogVerif, "num runtime args: {}", in0_snf_reader_runtime_args.size());
+                    log_info(tt::LogVerif, "num comptime args: {}", in0_injector_compile_time_args.size());
 
             }
             else {

@@ -535,10 +535,10 @@ void bsr_spmm_multicore_load_balanced(
     }
 
     // EnqueueWriteBuffers
-    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), true);
-    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), true);
-    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
-    EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
+    EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
+    EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
+    EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), false);
 
     // TODO: is there a macro for build_Tracy we can invoke here to wrap in a loop and get cooking?
     EnqueueProgram(cq, program, true);

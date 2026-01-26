@@ -81,7 +81,7 @@ void kernel_main(){
     const uint32_t in0_sender_noc_y = get_arg_val<uint32_t>(arg_index++);
     const uint32_t is_sink_core = get_arg_val<uint32_t>(arg_index++);
 
-    DPRINT_DATA0(DPRINT << "num runtime args " << arg_index << ENDL());
+    // DPRINT_DATA0(DPRINT << "num runtime args " << arg_index << ENDL());
 
 
     ///////////////////////////////////////////////////////////////////////
@@ -219,7 +219,6 @@ void kernel_main(){
                 l1_write_addr_in0 = get_write_ptr(cb_id_in0);
                 uint32_t l1_write_addr_in0_start = l1_write_addr_in0;  // Save start address for forwarding
 
-                // TODO: make this a compiletime arg
                 if constexpr (is_injector_core){
                     DPRINT_DATA0(DPRINT << "injecting in0 block!" << ENDL());
 
@@ -241,7 +240,9 @@ void kernel_main(){
                     DPRINT_DATA0(DPRINT << "receiving in0 block!" << ENDL());
                     noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
                     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
+                    DPRINT_DATA0(DPRINT << "in the middle of receiving in0 block!" << ENDL());
                     noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
+                    DPRINT_DATA0(DPRINT << "done receiving in0 block!" << ENDL());
                 }
 
                 cb_push_back(cb_id_in0, in0_block_num_tiles);
@@ -251,16 +252,19 @@ void kernel_main(){
 
                     noc_semaphore_wait(in0_sender_semaphore_addr_ptr, 1);
                     noc_semaphore_set(in0_sender_semaphore_addr_ptr, 0);
+                    DPRINT_DATA0(DPRINT << "in the middle of forwarding in0 block!" << ENDL());
 
                     uint64_t in0_unicast_data_addr = get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, l1_write_addr_in0_start);
                     noc_async_write(l1_write_addr_in0_start, in0_unicast_data_addr, current_block_bytes);
                     noc_async_write_barrier(); // TODO: ask jon if this is necessary, it's not in their code
                     noc_semaphore_inc(in0_receiver_semaphore_noc_addr, 1);
+                    DPRINT_DATA0(DPRINT << "done forwarding in0 block!" << ENDL());
                 }
             }
 
             // TODO: perform the write if responsible.
             if constexpr (is_output_writer){
+
             uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
             for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
                 uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;

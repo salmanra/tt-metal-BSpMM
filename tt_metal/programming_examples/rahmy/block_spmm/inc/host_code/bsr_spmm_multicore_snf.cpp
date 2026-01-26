@@ -587,7 +587,6 @@ void bsr_spmm_multicore_snf(
 
             in0_snf_reader_runtime_args.push_back(output_idx_x_start * in1_block_w);
             in0_snf_reader_runtime_args.push_back(num_iters_y_this_core);
-            // TODO: 4 more semaphore args
             // dest_nocx/y and sender_nocx/y
             //      these are pretty simple?
             //      Let me check the minimal matmul code to see if there is anything tricky here.
@@ -599,10 +598,20 @@ void bsr_spmm_multicore_snf(
 
             auto in0_prev_core_physical = device->worker_core_from_logical_core(in0_prev_core);
             auto in0_next_core_physical = device->worker_core_from_logical_core(in0_next_core);
-            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core_physical.x);
-            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core_physical.y);
-            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core_physical.x);
-            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core_physical.y);
+
+            log_info(tt::LogVerif, "Core ({}, {}) [{}{}] -> prev logical ({}, {}) physical ({}, {}), next logical ({}, {}) physical ({}, {})",
+                core_idx_x, core_idx_y,
+                is_injector_core ? "INJ" : "RCV",
+                is_sink_core ? ",SINK" : "",
+                in0_prev_core.x, in0_prev_core.y,
+                in0_prev_core_physical.x, in0_prev_core_physical.y,
+                in0_next_core.x, in0_next_core.y,
+                in0_next_core_physical.x, in0_next_core_physical.y);
+
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core.x);
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core.y);
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core.x);
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core.y);
             
             in0_snf_reader_runtime_args.push_back(is_sink_core);
 

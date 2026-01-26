@@ -608,20 +608,21 @@ void bsr_spmm_multicore_snf(
                 in0_next_core.x, in0_next_core.y,
                 in0_next_core_physical.x, in0_next_core_physical.y);
 
-            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core.x);
-            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core.y);
-            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core.x);
-            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core.y);
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core_physical.x);
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core_physical.y);
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core_physical.x);
+            in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core_physical.y);
             
             in0_snf_reader_runtime_args.push_back(is_sink_core);
 
             if (is_injector_core){
                 tt_metal::SetRuntimeArgs(program, in0_injector_and_writer_id, core, in0_snf_reader_runtime_args);
-                if (verbose)
+                if (verbose) {
                     log_info(tt::LogVerif, "Core x {} y {} injector", core_idx_x, core_idx_y);
                     log_info(tt::LogVerif, "sink? {}", is_sink_core);
                     log_info(tt::LogVerif, "num runtime args: {}", in0_snf_reader_runtime_args.size());
                     log_info(tt::LogVerif, "num comptime args: {}", in0_injector_compile_time_args.size());
+                }
             }
             else {
                 tt_metal::SetRuntimeArgs(program, in0_receiver_and_writer_id, core, in0_snf_reader_runtime_args);

@@ -81,8 +81,14 @@ void kernel_main(){
     const uint32_t in0_sender_noc_y = get_arg_val<uint32_t>(arg_index++);
     const uint32_t is_sink_core = get_arg_val<uint32_t>(arg_index++);
 
-    // DPRINT_DATA0(DPRINT << "num runtime args " << arg_index << ENDL());
+    // //DPRINT_DATA0(DPRINT << "num runtime args " << arg_index << ENDL());
 
+    // Debug coordinate and semaphore setup
+    //DPRINT_DATA0(DPRINT << "=== Core Coord Debug ===" << ENDL());
+    //DPRINT_DATA0(DPRINT << "My NOC coords: (" << my_x[0] << ", " << my_y[0] << ")" << ENDL());
+    //DPRINT_DATA0(DPRINT << "is_injector: " << is_injector_core << " is_sink: " << is_sink_core << ENDL());
+    //DPRINT_DATA0(DPRINT << "dest (next) noc: (" << in0_dest_noc_x << ", " << in0_dest_noc_y << ")" << ENDL());
+    //DPRINT_DATA0(DPRINT << "sender (prev) noc: (" << in0_sender_noc_x << ", " << in0_sender_noc_y << ")" << ENDL());
 
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
@@ -134,7 +140,22 @@ void kernel_main(){
     const InterleavedAddrGenFast<true> out_s = {
         .bank_base_address = out_tensor_addr, .page_size = output_single_tile_size_bytes, .data_format = output_data_format};
 
-    // TODO: test indexing args getting
+    // SnF semaphores
+    volatile tt_l1_ptr uint32_t* in0_sender_semaphore_addr_ptr = 
+    reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_sender_semaphore_addr);
+    *(in0_sender_semaphore_addr_ptr) = 0;
+    const uint64_t in0_sender_semaphore_noc_addr = 
+    get_noc_addr(in0_sender_noc_x, in0_sender_noc_y, in0_sender_semaphore_addr);
+    
+    volatile tt_l1_ptr uint32_t* in0_receiver_semaphore_addr_ptr = 
+    reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_receiver_semaphore_addr);
+    *(in0_receiver_semaphore_addr_ptr) = 0;
+    const uint64_t in0_receiver_semaphore_noc_addr =
+    get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, in0_receiver_semaphore_addr);
+        
+    // IMPORTANT!!! Let the indexing args getting be the last thing before the program body.
+    //              This may help ensure no core blows past and starts making semaphore ops before other cores initialize their semaphores  
+    // indexing args getting
     if constexpr (is_output_writer){
         cb_reserve_back(cb_id_col_indices, col_indices_num_tiles);
         l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
@@ -170,19 +191,18 @@ void kernel_main(){
     uint32_t* col_indices = (uint32_t*) l1_write_addr_col_indices;
     uint32_t* indptr = (uint32_t*) l1_write_addr_indptr;
 
-    // SnF semaphores
-    volatile tt_l1_ptr uint32_t* in0_sender_semaphore_addr_ptr = 
-        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_sender_semaphore_addr);
-    *(in0_sender_semaphore_addr_ptr) = VALID;
-    const uint64_t in0_sender_semaphore_noc_addr = 
-        get_noc_addr(in0_sender_noc_x, in0_sender_noc_y, in0_sender_semaphore_addr);
 
-    volatile tt_l1_ptr uint32_t* in0_receiver_semaphore_addr_ptr = 
-        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_receiver_semaphore_addr);
-    *(in0_receiver_semaphore_addr_ptr) = VALID;
-    const uint64_t in0_receiver_semaphore_noc_addr = 
-        get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, in0_receiver_semaphore_addr);
-    
+    // Debug semaphore addresses
+    //DPRINT_DATA0(DPRINT << "=== Semaphore Debug ===" << ENDL());
+    //DPRINT_DATA0(DPRINT << "Local sender sem L1 addr: " << in0_sender_semaphore_addr << ENDL());
+    //DPRINT_DATA0(DPRINT << "Local receiver sem L1 addr: " << in0_receiver_semaphore_addr << ENDL());
+    //DPRINT_DATA0(DPRINT << "Remote sender sem NOC addr (hi/lo): "
+        // << (uint32_t)(in0_sender_semaphore_noc_addr >> 32) << " / "
+        // << (uint32_t)(in0_sender_semaphore_noc_addr & 0xFFFFFFFF) << ENDL());
+    //DPRINT_DATA0(DPRINT << "Remote receiver sem NOC addr (hi/lo): "
+        // << (uint32_t)(in0_receiver_semaphore_noc_addr >> 32) << " / "
+        // << (uint32_t)(in0_receiver_semaphore_noc_addr & 0xFFFFFFFF) << ENDL());
+
     // Writer args
 
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
@@ -237,10 +257,12 @@ void kernel_main(){
                     noc_async_read_barrier();
                 }
                 else {
-                    DPRINT_DATA0(DPRINT << "receiving in0 block!" << ENDL());
+                    //DPRINT_DATA0(DPRINT << "receiving in0 block!" << ENDL());
+                    //DPRINT_DATA0(DPRINT << "RCV: waiting on sender sem at NOC ("
+                        // << in0_sender_noc_x << ", " << in0_sender_noc_y << ")" << ENDL());
                     noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
                     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
-                    DPRINT_DATA0(DPRINT << "in the middle of receiving in0 block!" << ENDL());
+                    // //DPRINT_DATA0(DPRINT << "in the middle of receiving in0 block!" << ENDL());
                     noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
                     DPRINT_DATA0(DPRINT << "done receiving in0 block!" << ENDL());
                 }
@@ -248,11 +270,13 @@ void kernel_main(){
                 cb_push_back(cb_id_in0, in0_block_num_tiles);
 
                 if (!is_sink_core) {
-                    DPRINT_DATA0(DPRINT << "forwarding in0 block!" << ENDL());
+                    // DPRINT_DATA0(DPRINT << "forwarding in0 block!" << ENDL());
+                    //DPRINT_DATA0(DPRINT << "FWD: signaling receiver sem at NOC ("
+                        // << in0_dest_noc_x << ", " << in0_dest_noc_y << ")" << ENDL());
 
                     noc_semaphore_wait(in0_sender_semaphore_addr_ptr, 1);
                     noc_semaphore_set(in0_sender_semaphore_addr_ptr, 0);
-                    DPRINT_DATA0(DPRINT << "in the middle of forwarding in0 block!" << ENDL());
+                    // //DPRINT_DATA0(DPRINT << "in the middle of forwarding in0 block!" << ENDL());
 
                     uint64_t in0_unicast_data_addr = get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, l1_write_addr_in0_start);
                     noc_async_write(l1_write_addr_in0_start, in0_unicast_data_addr, current_block_bytes);
@@ -264,6 +288,8 @@ void kernel_main(){
 
             // TODO: perform the write if responsible.
             if constexpr (is_output_writer){
+            //DPRINT_DATA0(DPRINT << "Writing an output block" << ENDL());
+
 
             uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
             for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
@@ -292,6 +318,7 @@ void kernel_main(){
                 out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
             }
             out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
+            DPRINT_DATA0(DPRINT << "Done writing an output block" << ENDL());
 
             }
         }

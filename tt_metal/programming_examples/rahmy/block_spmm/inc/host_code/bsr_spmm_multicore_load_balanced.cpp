@@ -538,10 +538,19 @@ void bsr_spmm_multicore_load_balanced(
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
     EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
-    EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), false);
+    EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
 
-    // TODO: is there a macro for build_Tracy we can invoke here to wrap in a loop and get cooking?
-    EnqueueProgram(cq, program, true);
+    if constexpr (is_profiling){
+        int num_iters = 10; // TODO: there should be smarter way to set the number of iters. we'll see
+        EnqueueProgram(cq, program, true);
+        ZoneScopedNC("Device program Loop", tracy::Color::Aquamarine);
+        for (int i = 0; i < num_iters; i++){
+            EnqueueProgram(cq, program, true);
+        }
+    }
+    else {
+        EnqueueProgram(cq, program, false);
+    }
 
     if constexpr (verbose)
         log_info(tt::LogVerif, " -- Program returned --");

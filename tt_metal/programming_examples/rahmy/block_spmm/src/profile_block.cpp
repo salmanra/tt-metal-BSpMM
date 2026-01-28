@@ -158,14 +158,7 @@ void profile_test(
         tilize_nfaces(a.data, R, C);
         tilize_nfaces(b.data, K, N);
 
-        // warm up
         host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
-        {
-            ZoneScopedNC("Program Loop", tracy::Color::Aquamarine);
-            for (int count = 0; count < num_iters; count++){
-                host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
-            }
-        }
 
         untilize_nfaces(output.data, M, N);
     }

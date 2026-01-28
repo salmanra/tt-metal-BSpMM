@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Test case: " << test_name << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Output file: " << trace_file_location << std::endl;
+    std::cout << "--- Output file: " << csv_file_location << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
     std::system(csv_mkdir_command.c_str());

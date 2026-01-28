@@ -12,6 +12,13 @@
 #include "tt-metalium/core_coord.hpp"
 #include "tt-metalium/host_api.hpp"
 
+// profiler includes
+#include <system_error>
+#include <tracy/Tracy.hpp>
+#include <common/TracyColor.hpp>
+#include <tt-metalium/tt_metal_profiler.hpp>
+#include "hostdevcommon/profiler_common.h"
+
 using namespace tt;
 using namespace tt::tt_metal;
 

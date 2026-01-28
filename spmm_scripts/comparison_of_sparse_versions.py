@@ -72,10 +72,10 @@ for i, csv_data_dir in enumerate(csv_data_dirs):
         # print(df.shape)
         
         zones_data = {}
-        if df[df["name"] == "Program Loop"].size == 0:
+        if df[df["name"] == "Device program Loop"].size == 0:
             zones_data["Program Loop total ns"] = np.nan
         else:
-            zones_data["Program Loop total ns"] = int(df.loc[df["name"] == "Program Loop", "total_ns"].array[0])
+            zones_data["Program Loop total ns"] = int(df.loc[df["name"] == "Device program Loop", "total_ns"].array[0])
 
         # print(type(df[df["name"] == "Program Loop"]))
         # print(type(df[df["name"] == "Program Loop"]["total_ns"]))
@@ -101,6 +101,7 @@ for d in data_dicts:
     bar_values.append([d[k]["Program Loop total ns"] for k in group_labels])
 
 bar_values = np.array(bar_values)  # shape: (n_dicts, n_groups)
+print(bar_values)
 max_val = np.nanmax(bar_values) * 1.05
 
 # Plotting

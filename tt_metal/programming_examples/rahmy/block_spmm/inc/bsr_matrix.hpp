@@ -44,7 +44,6 @@ public:
     dense_matrix() : H(0), W(0) {}
 
     dense_matrix(int rows, int cols, content_type content) : H(rows), W(cols) {
-        std::cout << "big basic constructor for dense matrix" << std::endl;
         data.resize(rows * cols);
         uint32_t k = 0;
         switch (content) {
@@ -217,7 +216,6 @@ public:
         assert(H >= R);
         assert(W >= C);
 
-        std::cout << "big basic constructor for bsr matrix" << std::endl;
 
         size_t blocked_matrix_height = H / R;
         size_t blocked_matrix_width = W / C;
@@ -808,7 +806,7 @@ public:
     }
 
     void pretty_print() {
-                std::cout << "BSR Matrix:" << std::endl;
+        std::cout << "BSR Matrix:" << std::endl;
         std::cout << "Size: " << H << " x " << W << std::endl;
         std::cout << "Block Size: " << R << " x " << C << std::endl;
         std::cout << "Number of blocks: " << nblocks << std::endl;

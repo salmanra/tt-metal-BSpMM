@@ -161,7 +161,7 @@ using HostCodeFunctionPtr = void (*)(
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
     {bsr_spmm_multicore_snf, "bsr_spmm_multicore_snf"},
-    {bsr_spmm_multicore_sparse_mcast, "bsr_spmm_multicore_sparse_mcast"},
+    // {bsr_spmm_multicore_sparse_mcast, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration, "bsr_spmm_multicore_reuse_iteration"},
     // {bsr_spmm_multicore_reuse_many_blocks_per_core, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!

@@ -50,7 +50,6 @@ function capture_trace {
 
 num_host_programs=3
 
-./build_metal.sh --enable-profiler --build-programming-examples
 if [[ $? -ne 0 ]]; then
     echo Build failed
     return

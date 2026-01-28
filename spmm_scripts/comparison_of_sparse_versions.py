@@ -10,14 +10,18 @@ profiles_dir = "/home/user/tt-metal/profiles/"
 csv_dir = profiles_dir + "csvs/"
 json_output_dir = profiles_dir + "jsons/"
 png_output_dir = profiles_dir + "pngs/"
+os.makedirs(csv_dir, exist_ok=True)
+os.makedirs(png_output_dir, exist_ok=True)
+os.makedirs(json_output_dir, exist_ok=True)
 
+csv_dir_v6 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_snf"
 csv_dir_v5 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_load_balanced"
 csv_dir_v4 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_iteration"
-csv_dir_v3 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_many_blocks_per_core"
-csv_dir_v2 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse"
-csv_dir_v1 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_naive"
+# csv_dir_v3 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_many_blocks_per_core"
+# csv_dir_v2 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse"
+# csv_dir_v1 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_naive"
 
-csv_data_dirs = [csv_dir_v5, csv_dir_v4, csv_dir_v3, csv_dir_v2, csv_dir_v1]
+csv_data_dirs = [csv_dir_v6, csv_dir_v5, csv_dir_v4]
 
 test_cases = [        
         # "profile_case_sparse_single_block_R32_C32.csv",
@@ -51,13 +55,11 @@ test_cases_short = [name.replace("fill_", "") for name in test_cases_short]
 #       add {,} some other pairs if you feel it now
 #       add Zone dict to csv file name dict
 
+v6_data = {}
 v5_data = {}
 v4_data = {}
-v3_data = {}
-v2_data = {}
-v1_data = {}
 
-data_dicts = [v5_data, v4_data, v3_data, v2_data, v1_data]
+data_dicts = [v6_data, v5_data, v4_data]
 
 for i, csv_data_dir in enumerate(csv_data_dirs):
     # csv_file_names = sorted(os.listdir(csv_data_dir))

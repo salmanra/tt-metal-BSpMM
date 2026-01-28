@@ -28,14 +28,12 @@ int main(int argc, char** argv) {
 
     // let's make the test registry and test index required arguments
     // and the host code index
-    // then let num_iters be optional
     int test_num = argc > 1 ? std::stoi(argv[1]) : test_id;
     int host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
     int registry_number = argc > 3 ? std::stoi(argv[3]) : 0;
-    int num_iters = argc > 4 ? std::stoi(argv[3]) : 10;
 
-    ProfileCaseFunctionPtr *Registry;
-    std::string registry_name;
+    ProfileCaseFunctionPtr *Registry = nullptr;
+    std::string registry_name = "";
     switch (registry_number) {
         case 0:
             Registry = ProfileCaseRegistry;
@@ -75,8 +73,6 @@ int main(int argc, char** argv) {
     std::cout << "--- Host code function: " << host_function_name << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Test case: " << test_name << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Num iters: " << num_iters << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
     std::cout << "--- Output file: " << trace_file_location << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;

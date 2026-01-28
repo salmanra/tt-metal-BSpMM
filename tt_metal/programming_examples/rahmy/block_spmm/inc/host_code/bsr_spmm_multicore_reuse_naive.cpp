@@ -1,5 +1,6 @@
 #include "../host_code.hpp"
 namespace bsr_host_code {
+template<bool verbose, bool is_profiling>
 void bsr_spmm_multicore_reuse_naive(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -12,8 +13,7 @@ void bsr_spmm_multicore_reuse_naive(
     uint32_t R,
     uint32_t C,
     uint32_t B,
-    IDevice* device,
-    bool verbose = false) {
+    IDevice* device) {
 
     CommandQueue& cq = device->command_queue();
     Program program{};
@@ -70,7 +70,7 @@ void bsr_spmm_multicore_reuse_naive(
     }
 
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Metalium Core Sizing --");
         log_info(
             tt::LogVerif,
@@ -122,7 +122,7 @@ void bsr_spmm_multicore_reuse_naive(
         tt::tt_metal::num_cores_to_corerangeset(num_blocks_x * num_blocks_y, compute_with_storage_grid_size, true));
 
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Metalium Grid Sizing --");
         log_info(
             tt::LogVerif,
@@ -409,7 +409,7 @@ void bsr_spmm_multicore_reuse_naive(
         }
     }
 
-    if (verbose){
+    if constexpr (verbose){
         log_info(tt::LogVerif, " -- Runtime Args set --");
         log_info(
             tt::LogVerif,
@@ -423,12 +423,12 @@ void bsr_spmm_multicore_reuse_naive(
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), true);
     EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), true);
 
-    if (verbose)
+    if constexpr (verbose)
         log_info(tt::LogVerif, " -- All data moved to DRAM --");
 
     EnqueueProgram(cq, program, true);
 
-    if (verbose)
+    if constexpr (verbose)
         log_info(tt::LogVerif, " -- Program enqueued --");
 
     EnqueueReadBuffer(cq, dst_dram_buffer, output.data.data(), true);
@@ -436,5 +436,19 @@ void bsr_spmm_multicore_reuse_naive(
     Finish(cq);
 
 }
+
+// Explicit template instantiations
+template void bsr_spmm_multicore_reuse_naive<false, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_reuse_naive<true, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_reuse_naive<false, true>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
 
 }

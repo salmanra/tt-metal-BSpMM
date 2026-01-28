@@ -47,7 +47,6 @@ TestResult run_test(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
     std::string& test_name,
-    bool verbose = false,
     bool emit_output = false) {
 
     /*
@@ -101,7 +100,7 @@ TestResult run_test(
 
     // run bsr_spmm_multicore_reuse
     // console_printf("Do we seg fault before...");
-    host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device, verbose);
+    host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
     // console_printf("... or after running the program?\n");
 
 
@@ -182,10 +181,9 @@ void add_and_run_test(
         HostCodeFunctionPtr host_func,
         TestFunctionPtr test_case,
         vector<TestResult> &results,
-        bool verbose = false,
         bool emit_output = false) {
     auto [a, b, test_name] = test_case();
-    results.push_back(run_test(host_func, a, b, test_name, verbose, emit_output));
+    results.push_back(run_test(host_func, a, b, test_name, emit_output));
 }
 
 bool print_and_assess_results(std::vector<TestResult> &test_results, std::string& host_code_function_name){
@@ -249,7 +247,7 @@ bool print_and_assess_results(std::vector<TestResult> &test_results, std::string
 void test_suite(uint32_t host_code_function_index = 0){
     /*
     1. Reserve a vector of <test_name, PCC> pairs.
-    2. call run_test(test_func(), verbose, emit_output) for each test, adding to the vector
+    2. call run_test(test_func(), emit_output) for each test, adding to the vector
     3. iter over vector and pretty print passes and fails to the console
     */
 
@@ -318,13 +316,13 @@ void test_suite(uint32_t host_code_function_index = 0){
 
 void run_verbose_test(int host_code_num, int test_num){
     auto [a, b, test_name] = TestRegistry[test_num]();
-    TestResult res = run_test(HostCodeRegistry[host_code_num].first, a, b, test_name, true, true);
+    TestResult res = run_test(HostCodeRegistryVerbose[host_code_num].first, a, b, test_name, true);
 
     console_printf("--------------------------------------------------------\n");
     console_printf("--- Single Test results --------------------------------\n");
     console_printf("--------------------------------------------------------\n");
     console_printf("--- Host Code function: ");
-    console_printf(HostCodeRegistry[host_code_num].second.c_str());
+    console_printf(HostCodeRegistryVerbose[host_code_num].second.c_str());
     console_printf("\n");
     console_printf("--------------------------------------------------------\n");
 

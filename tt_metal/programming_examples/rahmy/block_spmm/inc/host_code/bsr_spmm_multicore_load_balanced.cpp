@@ -3,6 +3,7 @@
 namespace bsr_host_code{
 
 
+template<bool verbose, bool is_profiling>
 void bsr_spmm_multicore_load_balanced(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -15,8 +16,7 @@ void bsr_spmm_multicore_load_balanced(
     uint32_t R,
     uint32_t C,
     uint32_t B,
-    IDevice* device,
-    bool verbose){
+    IDevice* device){
     // TT-Metal CommandQueue and Program setup
     CommandQueue& cq = device->command_queue();
     Program program{};
@@ -159,7 +159,7 @@ void bsr_spmm_multicore_load_balanced(
     auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, dram_buffer_indptr_size);
 
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Metalium Block and subblock sizing --");
         log_info(
             tt::LogVerif,
@@ -171,7 +171,7 @@ void bsr_spmm_multicore_load_balanced(
             out_subblock_w);
     }
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Core Grid Allocaiton Information --");
         log_info(
             tt::LogVerif,
@@ -183,7 +183,7 @@ void bsr_spmm_multicore_load_balanced(
             nnz_rows);
     }
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Metalium Core Grid Sizing --");
         log_info(
             tt::LogVerif,
@@ -302,7 +302,7 @@ void bsr_spmm_multicore_load_balanced(
         (std::uint32_t)num_iters_x,
     };
 
-    if (verbose) {
+    if constexpr (verbose) {
         auto print_args = [](const std::string& name, const std::vector<uint32_t>& args, const std::vector<std::string>& arg_names) {
             std::cout << "==== " << name << " ====" << std::endl;
             for (size_t i = 0; i < args.size(); ++i) {
@@ -421,7 +421,7 @@ void bsr_spmm_multicore_load_balanced(
     // remove last num_empty_rows elements from perm
     perm.resize(nnz_rows);
 
-    if (verbose){
+    if constexpr (verbose){
         std::cout << "row diffs: ";
         for (int i = 0; i < row_diffs.size(); i++){
             std::cout << row_diffs[i] << ' ';
@@ -462,7 +462,7 @@ void bsr_spmm_multicore_load_balanced(
     for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
         for (uint32_t core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
             CoreCoord core(core_idx_x, core_idx_y);
-            if (verbose)
+            if constexpr (verbose)
               log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
 
             int output_idx_x_start = (core_idx_x * num_iters_x) % num_blocks_x;
@@ -494,7 +494,7 @@ void bsr_spmm_multicore_load_balanced(
             tt_metal::SetRuntimeArgs(program, mm_kernel_id, core, compute_runtime_args);
             tt_metal::SetRuntimeArgs(program, writer_id, core, writer_runtime_args);
 
-            if (verbose){
+            if constexpr (verbose){
                 if (num_iters_x_this_core < num_iters_x || num_iters_y_this_core < num_iters_y){
                     log_info(tt::LogVerif, " -- Num iters diverged! --");
                     log_info(tt::LogVerif, "(num_iters_x_this_core) = {}", num_iters_x_this_core);
@@ -543,7 +543,7 @@ void bsr_spmm_multicore_load_balanced(
     // TODO: is there a macro for build_Tracy we can invoke here to wrap in a loop and get cooking?
     EnqueueProgram(cq, program, true);
 
-    if (verbose)
+    if constexpr (verbose)
         log_info(tt::LogVerif, " -- Program returned --");
     // EnqueueReadSubBuffers
     uint32_t nonzero_row_index = 0;
@@ -555,9 +555,23 @@ void bsr_spmm_multicore_load_balanced(
         nonzero_row_index++;
     }
 
-    if (verbose)
+    if constexpr (verbose)
         log_info(tt::LogVerif, " -- Finished reading output --");
     Finish(cq);
 }
+
+// Explicit template instantiations
+template void bsr_spmm_multicore_load_balanced<false, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_load_balanced<true, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_load_balanced<false, true>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
 
 }

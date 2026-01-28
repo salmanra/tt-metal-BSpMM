@@ -63,8 +63,8 @@ int main(int argc, char** argv) {
 
 
     // get the host code and test case
-    HostCodeFunctionPtr host_function = HostCodeRegistry[host_code_num].first;
-    std::string host_function_name = HostCodeRegistry[host_code_num].second;
+    HostCodeFunctionPtr host_function = HostCodeRegistryProfiling[host_code_num].first;
+    std::string host_function_name = HostCodeRegistryProfiling[host_code_num].second;
     auto [a, b, test_name] = Registry[test_num]();
 
 
@@ -159,11 +159,11 @@ void profile_test(
         tilize_nfaces(b.data, K, N);
 
         // warm up
-        host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device, false);
+        host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
         {
             ZoneScopedNC("Program Loop", tracy::Color::Aquamarine);
             for (int count = 0; count < num_iters; count++){
-                host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device, false);
+                host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
             }
         }
 

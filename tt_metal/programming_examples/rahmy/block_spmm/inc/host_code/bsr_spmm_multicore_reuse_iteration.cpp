@@ -1,6 +1,7 @@
 #include "../host_code.hpp"
 namespace bsr_host_code {
 
+template<bool verbose, bool is_profiling>
 void bsr_spmm_multicore_reuse_iteration(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -13,8 +14,7 @@ void bsr_spmm_multicore_reuse_iteration(
     uint32_t R,
     uint32_t C,
     uint32_t B,
-    IDevice* device,
-    bool verbose){
+    IDevice* device){
 
     /*
     Host code considerations:
@@ -204,7 +204,7 @@ void bsr_spmm_multicore_reuse_iteration(
     auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, dram_buffer_indptr_size);
 
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Metalium Block and subblock sizing --");
         log_info(
             tt::LogVerif,
@@ -216,7 +216,7 @@ void bsr_spmm_multicore_reuse_iteration(
             out_subblock_w);
     }
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Core Grid Allocaiton Information --");
         log_info(
             tt::LogVerif,
@@ -228,7 +228,7 @@ void bsr_spmm_multicore_reuse_iteration(
             nnz_rows);
     }
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Metalium Core Grid Sizing --");
         log_info(
             tt::LogVerif,
@@ -347,7 +347,7 @@ void bsr_spmm_multicore_reuse_iteration(
         (std::uint32_t)num_iters_x,
     };
 
-    if (verbose) {
+    if constexpr (verbose) {
         auto print_args = [](const std::string& name, const std::vector<uint32_t>& args, const std::vector<std::string>& arg_names) {
             std::cout << "==== " << name << " ====" << std::endl;
             for (size_t i = 0; i < args.size(); ++i) {
@@ -446,7 +446,7 @@ void bsr_spmm_multicore_reuse_iteration(
         uint32_t core_idx_x = core.x;
         uint32_t core_idx_y = core.y;
 
-        if (verbose)
+        if constexpr (verbose)
             log_info(tt::LogVerif, "Core x {} y {}", core_idx_x, core_idx_y);
 
         int output_idx_x_start = (work_region * num_iters_x) % num_blocks_x;
@@ -511,7 +511,7 @@ void bsr_spmm_multicore_reuse_iteration(
     // EnqueueProgram
     EnqueueProgram(cq, program, true);
 
-    if (verbose)
+    if constexpr (verbose)
         log_info(tt::LogVerif, " -- Program returned --");
     // EnqueueReadSubBuffers
     uint32_t nonzero_row_index = 0;
@@ -523,9 +523,23 @@ void bsr_spmm_multicore_reuse_iteration(
         nonzero_row_index++;
     }
 
-    if (verbose)
+    if constexpr (verbose)
         log_info(tt::LogVerif, " -- Finished reading output --");
     Finish(cq);
 }
+
+// Explicit template instantiations
+template void bsr_spmm_multicore_reuse_iteration<false, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_reuse_iteration<true, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_reuse_iteration<false, true>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
 
 }

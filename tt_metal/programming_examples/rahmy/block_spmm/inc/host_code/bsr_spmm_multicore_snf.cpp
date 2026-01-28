@@ -12,6 +12,7 @@
 
 namespace bsr_host_code{
 
+template<bool verbose, bool is_profiling>
 void bsr_spmm_multicore_snf(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -24,8 +25,7 @@ void bsr_spmm_multicore_snf(
     uint32_t R,
     uint32_t C,
     uint32_t B,
-    IDevice* device,
-    bool verbose){
+    IDevice* device){
     // load balanced plus store-and-forwarding for sharing blocks of sparse matrix across core rows
 
     /// Transposition step:
@@ -161,7 +161,7 @@ void bsr_spmm_multicore_snf(
         {(std::size_t)start_core_x, (std::size_t)start_core_y + 1},
         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + row_offset - 1});
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, "core_range         {}", core_range);
         log_info(tt::LogVerif, "all cores          {}", all_cores);
         log_info(tt::LogVerif, "in0 injector cores {}", in0_injector_cores);
@@ -223,7 +223,7 @@ void bsr_spmm_multicore_snf(
     auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, dram_buffer_indptr_size);
 
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Metalium Block and subblock sizing --");
         log_info(
             tt::LogVerif,
@@ -235,7 +235,7 @@ void bsr_spmm_multicore_snf(
             out_subblock_w);
     }
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Core Grid Allocaiton Information --");
         log_info(
             tt::LogVerif,
@@ -247,7 +247,7 @@ void bsr_spmm_multicore_snf(
             nnz_rows);
     }
 
-    if (verbose) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Metalium Core Grid Sizing --");
         log_info(
             tt::LogVerif,
@@ -497,7 +497,7 @@ void bsr_spmm_multicore_snf(
 
     KernelHandle in0_receiver_and_writer_id = 0;
     if (num_cores_c > 1){
-        if (verbose) {
+        if constexpr (verbose) {
                 log_info(tt::LogVerif, "receiver cores {}", in0_receiver_cores);
         }
         in0_receiver_and_writer_id = tt_metal::CreateKernel(
@@ -617,7 +617,7 @@ void bsr_spmm_multicore_snf(
 
             if (is_injector_core){
                 tt_metal::SetRuntimeArgs(program, in0_injector_and_writer_id, core, in0_snf_reader_runtime_args);
-                if (verbose) {
+                if constexpr (verbose) {
                     log_info(tt::LogVerif, "Core x {} y {} injector", core_idx_x, core_idx_y);
                     log_info(tt::LogVerif, "sink? {}", is_sink_core);
                     log_info(tt::LogVerif, "num runtime args: {}", in0_snf_reader_runtime_args.size());
@@ -649,7 +649,7 @@ void bsr_spmm_multicore_snf(
     // TODO: is there a macro for build_Tracy we can invoke here to wrap in a loop and get cooking?
     EnqueueProgram(cq, program, true);
 
-    if (verbose)
+    if constexpr (verbose)
         log_info(tt::LogVerif, " -- Program returned --");
 
     uint32_t nonzero_row_index = 0;
@@ -661,9 +661,23 @@ void bsr_spmm_multicore_snf(
         nonzero_row_index++;
     }
 
-    if (verbose)
+    if constexpr (verbose)
         log_info(tt::LogVerif, " -- Finished reading output --");
     Finish(cq);
 }
+
+// Explicit template instantiations
+template void bsr_spmm_multicore_snf<false, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_snf<true, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_snf<false, true>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
 
 }

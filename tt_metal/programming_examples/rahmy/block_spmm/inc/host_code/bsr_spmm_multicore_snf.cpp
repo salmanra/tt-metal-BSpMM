@@ -602,14 +602,14 @@ void bsr_spmm_multicore_snf(
             auto in0_prev_core_physical = device->worker_core_from_logical_core(in0_prev_core);
             auto in0_next_core_physical = device->worker_core_from_logical_core(in0_next_core);
 
-            log_info(tt::LogVerif, "Core ({}, {}) [{}{}] -> prev logical ({}, {}) physical ({}, {}), next logical ({}, {}) physical ({}, {})",
-                core_idx_x, core_idx_y,
-                is_injector_core ? "INJ" : "RCV",
-                is_sink_core ? ",SINK" : "",
-                in0_prev_core.x, in0_prev_core.y,
-                in0_prev_core_physical.x, in0_prev_core_physical.y,
-                in0_next_core.x, in0_next_core.y,
-                in0_next_core_physical.x, in0_next_core_physical.y);
+            // log_info(tt::LogVerif, "Core ({}, {}) [{}{}] -> prev logical ({}, {}) physical ({}, {}), next logical ({}, {}) physical ({}, {})",
+            //     core_idx_x, core_idx_y,
+            //     is_injector_core ? "INJ" : "RCV",
+            //     is_sink_core ? ",SINK" : "",
+            //     in0_prev_core.x, in0_prev_core.y,
+            //     in0_prev_core_physical.x, in0_prev_core_physical.y,
+            //     in0_next_core.x, in0_next_core.y,
+            //     in0_next_core_physical.x, in0_next_core_physical.y);
 
             in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core_physical.x);
             in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core_physical.y);
@@ -672,9 +672,9 @@ void bsr_spmm_multicore_snf(
         nonzero_row_index++;
     }
 
+    Finish(cq);
     if constexpr (verbose)
         log_info(tt::LogVerif, " -- Finished reading output --");
-    Finish(cq);
 }
 
 // Explicit template instantiations

@@ -86,6 +86,8 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_1_block_arange();
 
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_enormous();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_iters_y();
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_iters_both();
 
 
     
@@ -165,7 +167,9 @@ namespace bsr_test_suite {
         test_1_block_arange, // 69
         // test_1_block_uniform, // PCC is a failed metric on this degen case, but the output is correct
         test_1_block_id, // 70
-        test_enormous, // 71?
+        test_enormous, // 71
+        test_many_iters_y, // 72
+        test_many_iters_both, // 73
     };
 
     static std::uniform_real_distribution<> dis(-1000.0, 1000.0);
@@ -730,7 +734,7 @@ namespace bsr_test_suite {
         uint32_t R = 32;
         uint32_t C = 32;
         uint32_t block_matrix_height = M / R;
-        uint32_t block_matrix_width = N / C;
+        uint32_t block_matrix_width = K / C;
         uint32_t nblocks = (block_matrix_height * block_matrix_width) / 4;
 
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
@@ -801,7 +805,26 @@ namespace bsr_test_suite {
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_big_dense_large_Rv3");
     }
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_iters_y() {
+        // matmul params setup
+        uint32_t M = 32768;
+        uint32_t N = 512;
+        uint32_t K = 512;
+        // block params setup
+        uint32_t R = 64;
+        uint32_t C = 64;
+        uint32_t block_matrix_height = M / R;
+        uint32_t block_matrix_width = K / C;
+        uint32_t nblocks = (block_matrix_height * block_matrix_width) / 4; 
 
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_many_iters_y");
+    }
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_iters_x() {
         // matmul params setup
         uint32_t M = 512;
@@ -821,8 +844,33 @@ namespace bsr_test_suite {
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_many_iters_x");
     }
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_iters_both() {
+        // TODO: this test case is VERY interesting now: there are enough nz rows to fill HALF 
+        //       of the alloted runtime args per kernel (124/256 for reader_in0_snf)
+        //       this also takes 10 minutes in my sequential CPU version
+        //       while taking one second (less?) on the device
+        // matmul params setup
+        uint32_t M = 32768;
+        uint32_t N = 32768;
+        uint32_t K = 512;
+        // block params setup
+        uint32_t R = 64;
+        uint32_t C = 64;
+        uint32_t block_matrix_height = M / R;
+        uint32_t block_matrix_width = K / C;
+        uint32_t nblocks = (block_matrix_height * block_matrix_width) / 4; 
 
-        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_small_many_iters_x() {
+
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_many_iters_both");
+    }
+
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_small_many_iters_x() {
         // matmul params setup
         uint32_t M = 64;
         uint32_t N = 2 << 16;

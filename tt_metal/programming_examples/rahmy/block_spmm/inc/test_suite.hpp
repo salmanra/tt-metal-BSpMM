@@ -85,6 +85,9 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_1_block_uniform();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_1_block_arange();
 
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_enormous();
+
+
     
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
@@ -162,6 +165,7 @@ namespace bsr_test_suite {
         test_1_block_arange, // 69
         // test_1_block_uniform, // PCC is a failed metric on this degen case, but the output is correct
         test_1_block_id, // 70
+        test_enormous, // 71?
     };
 
     static std::uniform_real_distribution<> dis(-1000.0, 1000.0);
@@ -717,6 +721,27 @@ namespace bsr_test_suite {
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_big_dense_no_cheat");
     }
+        std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_enormous() {
+        // matmul params setup
+        uint32_t M = 2 << 14;
+        uint32_t N = 2 << 14;
+        uint32_t K = 2 << 14;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t block_matrix_height = M / R;
+        uint32_t block_matrix_width = N / C;
+        uint32_t nblocks = (block_matrix_height * block_matrix_width) / 4;
+
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_enormous");
+    }
+
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_big_dense_large_R() {
         // matmul params setup
         uint32_t M = 4096;

@@ -86,8 +86,11 @@ void bsr_spmm_multicore_snf(
     TT_ASSERT(Nt % in1_block_w == 0);
     TT_ASSERT(Kt % in0_block_w == 0);
 
+    if constexpr (verbose) {
+        log_info(tt::LogVerif, "Rt={}, Ct={}, NpC={}", Rt, Ct, in1_block_w);
+    }
     // Core grid assignment
-    std::deque<uint32_t> folded_bsr_matrix_indices;
+    std::vector<uint32_t> folded_bsr_matrix_indices;
     uint32_t nnz_rows = 0;
     uint32_t folded_index = 0;
     for (uint32_t i = 0; i < a.indptr.size() - 1; i++) {

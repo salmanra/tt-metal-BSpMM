@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <string>
 #include "../inc/include_me.hpp"
-#include "../inc/test_suite.hpp"
+#include "../inc/profiling_suite.hpp"
 #include "../inc/host_code.hpp"
 
 #include <system_error>
@@ -59,6 +59,9 @@ int main(int argc, char** argv) {
             Registry = ProfileDenseAblationRegistry;
             registry_name = "DenseAblationKProfileSuite";
             break;
+        case 2:
+            Registry = ProfileLargeSparseRegistry;
+            registry_name = "ProfileSuiteLargeSparseVersioning";
     }
 
 
@@ -146,21 +149,13 @@ void profile_test(
         uint32_t Rt = R / TILE_HEIGHT;
         uint32_t Ct = C / TILE_WIDTH;
 
-
         // initialize output_data
+        // I wonder, do we even need to do this?
         dense_matrix<float> tmp(M, N, 0.0f);
         dense_matrix<bfloat16> output = tmp.bfloat16_cast();
 
-        // run sequential spmm
-        dense_matrix<bfloat16> golden = a.spmm_bfloat16(b);
-
-        // tilize input data
-        tilize_nfaces(a.data, R, C);
-        tilize_nfaces(b.data, K, N);
-
         host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
 
-        untilize_nfaces(output.data, M, N);
     }
 
     // tt_metal::detail::DumpDeviceProfileResults(device);

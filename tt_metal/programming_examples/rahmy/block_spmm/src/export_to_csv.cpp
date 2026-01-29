@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <string>
 #include "../inc/include_me.hpp"
-#include "../inc/test_suite.hpp"
+#include "../inc/profiling_suite.hpp"
 #include "../inc/host_code.hpp"
 
 #include <system_error>

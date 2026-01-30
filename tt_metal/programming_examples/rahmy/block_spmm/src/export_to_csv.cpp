@@ -43,6 +43,9 @@ int main(int argc, char** argv) {
             Registry = ProfileDenseAblationRegistry;
             registry_name = "DenseAblationKProfileSuite";
             break;
+        case 2:
+            Registry = ProfileLargeSparseRegistry;
+            registry_name = "ProfileSuiteLargeSparseVersioning";
     }
 
 

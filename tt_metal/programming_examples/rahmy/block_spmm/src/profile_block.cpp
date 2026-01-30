@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
     n = sprintf(buf, "mkdir -p %s", trace_directory.c_str());
     std::string mkdir_command(buf, n);
 
-    n = sprintf(buf, "nohup ./capture-release -f -o %s &", trace_file_location.c_str());
+    n = sprintf(buf, "./capture-release -f -o %s &", trace_file_location.c_str());
     std::string capture_trace_command(buf, n);
 
     n = sprintf(buf, "/home/user/tt-metal/profiles/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());

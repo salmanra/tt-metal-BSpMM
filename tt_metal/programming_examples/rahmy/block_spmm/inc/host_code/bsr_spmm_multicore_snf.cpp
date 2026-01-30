@@ -629,7 +629,8 @@ void bsr_spmm_multicore_snf(
             }
             else {
                 tt_metal::SetRuntimeArgs(program, in0_receiver_and_writer_id, core, in0_snf_reader_runtime_args);
-                log_info(tt::LogVerif, "Core x {} y {} receiver", core_idx_x, core_idx_y);
+                if constexpr (verbose)
+                    log_info(tt::LogVerif, "Core x {} y {} receiver", core_idx_x, core_idx_y);
             }
             if (verbose && core_idx_x == 0 && core_idx_y == 1){
                 log_info(tt::LogVerif, "in0 reader runtime args for core {} , {} :", core_idx_x, core_idx_y);

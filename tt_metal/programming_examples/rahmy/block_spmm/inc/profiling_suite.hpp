@@ -166,16 +166,13 @@ namespace profiling_suite {
     template <uint32_t R = 32, uint32_t C = 32, uint32_t DensityPercent = 25>
     inline ProfileCaseReturnType profile_case_sparse_diagonal_large() {
         // matmul params setup
-        uint32_t M = 32768;
-        uint32_t N = 32768;
-        uint32_t K = 32768;
+        uint32_t M = 8192;
+        uint32_t N = 8192;
+        uint32_t K = 8192;
         // block params setup
         uint32_t block_matrix_height = M / R;
-        uint32_t block_matrix_width = K / C;
 
-        constexpr float density = DensityPercent / 100.0f;
-        uint32_t divisor = uint32_t(std::round(1.0 / density));
-        uint32_t nblocks = (block_matrix_height * block_matrix_width) / divisor; 
+        uint32_t nblocks = block_matrix_height; 
 
         // nz blocks fill the diagonal
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_DIAG, RAND);
@@ -194,16 +191,15 @@ namespace profiling_suite {
     template <uint32_t R = 32, uint32_t C = 32, uint32_t DensityPercent = 25>
     inline ProfileCaseReturnType profile_case_sparse_fill_column_large() {
         // matmul params setup
-        uint32_t M = 32768;
-        uint32_t N = 32768;
-        uint32_t K = 32768;
+        uint32_t M = 8192;
+        uint32_t N = 8192;
+        uint32_t K = 8192;
         // block params setup
         uint32_t block_matrix_height = M / R;
         uint32_t block_matrix_width = K / C;
 
         constexpr float density = DensityPercent / 100.0f;
-        uint32_t divisor = uint32_t(std::round(1.0 / density));
-        uint32_t nblocks = (block_matrix_height * block_matrix_width) / divisor; 
+        uint32_t nblocks = block_matrix_height; 
 
         // nz blocks fill the first column
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_COL, RAND);
@@ -222,16 +218,14 @@ namespace profiling_suite {
     template <uint32_t R = 32, uint32_t C = 32, uint32_t DensityPercent = 25>
     inline ProfileCaseReturnType profile_case_sparse_fill_row_large() {
         // matmul params setup
-        uint32_t M = 32768;
-        uint32_t N = 32768;
-        uint32_t K = 32768;
+        uint32_t M = 8192;
+        uint32_t N = 8192;
+        uint32_t K = 8192;
         // block params setup
         uint32_t block_matrix_height = M / R;
         uint32_t block_matrix_width = K / C;
 
-        constexpr float density = DensityPercent / 100.0f;
-        uint32_t divisor = uint32_t(std::round(1.0 / density));
-        uint32_t nblocks = (block_matrix_height * block_matrix_width) / divisor; 
+        uint32_t nblocks =  block_matrix_width; 
 
         // nz blocks fill the first row
         bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_ROW, RAND);
@@ -250,9 +244,9 @@ namespace profiling_suite {
     template <uint32_t R = 32, uint32_t C = 32, uint32_t DensityPercent = 25>
     inline ProfileCaseReturnType profile_case_sparse_fill_random_large() {
         // matmul params setup
-        uint32_t M = 32768;
-        uint32_t N = 32768;
-        uint32_t K = 32768;
+        uint32_t M = 8192;
+        uint32_t N = 8192;
+        uint32_t K = 8192;
         // block params setup
         uint32_t block_matrix_height = M / R;
         uint32_t block_matrix_width = K / C;

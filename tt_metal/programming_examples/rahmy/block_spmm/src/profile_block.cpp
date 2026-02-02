@@ -113,13 +113,7 @@ int main(int argc, char** argv) {
 
     // print footer
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Host code function: " << host_function_name << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Test case: " << test_name << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Num iters: " << num_iters << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Output file: " << trace_file_location << std::endl;
+    std::cout << "--- Done! --- " << std::endl;
     std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
     return 0;

@@ -1,21 +1,21 @@
 #!/usr/bin/bash
 
 function capture_all_one_host {
-    num_tests=14 # size of ProfileCaseRegistry
+    num_tests=12 # size of ProfileCaseRegistry
     host_program_index=0
     if [[ "$#" -eq 1 ]]; then
         host_program_index=$1
     fi
     
     for ((test_case = 0 ; test_case < num_tests ; test_case++)); do
-        capture_trace $test_case $host_program_index
+        capture_trace $test_case $host_program_index 2
     done
 }
 
 function capture_reduction_one_host {
     num_tests=4 # size of ProfileCaseRegistry
     host_program_index=0
-    registry=0
+    registry=2
     if [[ "$#" -eq 1 ]]; then
         host_program_index=$1
     fi
@@ -49,13 +49,6 @@ function capture_trace {
 }
 
 num_host_programs=3
-
-if [[ $? -ne 0 ]]; then
-    echo Build failed
-    return
-else 
-    echo Build Suceeded!
-fi
 
 if [[ "$#" -eq "0" ]]; then
     capture_trace

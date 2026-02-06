@@ -89,6 +89,8 @@ namespace bsr_test_suite {
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_iters_y();
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_many_iters_both();
 
+    template<uint32_t, uint32_t, uint32_t>
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string>  profile_case_sparse_fill_random_large();
 
     
 
@@ -170,6 +172,7 @@ namespace bsr_test_suite {
         test_enormous, // 71
         test_many_iters_y, // 72
         test_many_iters_both, // 73
+        profile_case_sparse_fill_random_large<32, 32, 25>, // 74
     };
 
     static std::uniform_real_distribution<> dis(-1000.0, 1000.0);
@@ -1895,6 +1898,34 @@ namespace bsr_test_suite {
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
 
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_1_block_id");
+    }
+
+    template <uint32_t R = 32, uint32_t C = 32, uint32_t DensityPercent = 25>
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string>  profile_case_sparse_fill_random_large() {
+        // matmul params setup
+        uint32_t M = 8192;
+        uint32_t N = 8192;
+        uint32_t K = 8192;
+        // block params setup
+        uint32_t block_matrix_height = M / R;
+        uint32_t block_matrix_width = K / C;
+
+        constexpr float density = DensityPercent / 100.0f;
+        uint32_t divisor = uint32_t(std::round(1.0 / density));
+        uint32_t nblocks = (block_matrix_height * block_matrix_width) / divisor; 
+
+        // nz blocks placed randomly
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+
+        char buf[50];
+        size_t n = sprintf(buf, "profile_case_sparse_fill_random_large_R%i_C%d", R, C);
+        std::string test_name(buf, n);
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name);
     }
 
     

@@ -107,6 +107,7 @@ int main(int argc, char** argv) {
     // run ./capture-release to allow the profiler to listen for the program
     std::system(mkdir_command.c_str());
     std::system(capture_trace_command.c_str());
+    std::cout << std::endl;
 
     // // // run the program
     profile_test(host_function, a, b, test_name, num_iters);

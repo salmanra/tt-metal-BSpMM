@@ -84,10 +84,11 @@ TestResult run_test(
     dense_matrix<bfloat16> output = tmp.bfloat16_cast();
 
 
+    a.pretty_print();
     console_printf("Running golden calculation!\n");
 
     // run sequential spmm
-    dense_matrix<bfloat16> golden = a.spmm_bfloat16(b);
+    dense_matrix<bfloat16> golden = a.omp_spmm_bf16(b);
 
     // tilize input data
     console_printf("Tilizing!\n");
@@ -107,10 +108,10 @@ TestResult run_test(
     // console_printf(std::endl);
 
     // run bsr_spmm_multicore_reuse
-    console_printf("Do we seg fault before...");
+    console_printf("Entering host code");
     
     host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
-    console_printf("... or after running the program?\n");
+    console_printf("exiting host code\n");
 
 
     if (emit_output) {
@@ -325,7 +326,7 @@ void test_suite(uint32_t host_code_function_index = 0){
 
 void run_verbose_test(int host_code_num, int test_num){
     auto [a, b, test_name] = TestRegistry[test_num]();
-    TestResult res = run_test(HostCodeRegistryVerbose[host_code_num].first, a, b, test_name, false);
+    TestResult res = run_test(HostCodeRegistryVerbose[host_code_num].first, a, b, test_name, true);
 
     console_printf("--------------------------------------------------------\n");
     console_printf("--- Single Test results --------------------------------\n");

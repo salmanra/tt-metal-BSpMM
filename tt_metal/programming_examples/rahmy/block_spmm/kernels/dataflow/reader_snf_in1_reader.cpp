@@ -82,17 +82,12 @@ void kernel_main(){
         .bank_base_address = in0_tensor_addr, .page_size = in0_single_tile_size_bytes, .data_format = in0_data_format};
     const InterleavedAddrGenFast<in1_is_dram> s1 = {
         .bank_base_address = in1_tensor_addr, .page_size = in1_single_tile_size_bytes, .data_format = in1_data_format};
-    const InterleavedAddrGenFast<col_indices_is_dram> s2 = {
-        .bank_base_address = col_indices_addr,
-        .page_size = col_indices_single_tile_size_bytes,
-        .data_format = col_indices_data_format};
-    const InterleavedAddrGenFast<indptr_is_dram> s3 = {
-        .bank_base_address = indptr_addr,
-        .page_size = indptr_single_tile_size_bytes,
-        .data_format = indptr_data_format};
+    // Note: s2/s3 are not used in this kernel - indexing data is read by in0_reader
+    // and shared via circular buffers.
 
-    cb_wait_front(cb_id_indptr, indptr_num_tiles);
-    cb_wait_front(cb_id_col_indices, col_indices_num_tiles);
+    // Wait for indexing data (1 page each since CB page_size = full buffer)
+    cb_wait_front(cb_id_indptr, 1);
+    cb_wait_front(cb_id_col_indices, 1);
     l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
     l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
     
@@ -114,7 +109,7 @@ void kernel_main(){
             output_idx_x = output_idx_x_start + iter_x;
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
-
+                // DPRINT_DATA1(DPRINT << "reserving in1 CB" << ENDL());
                 cb_reserve_back(cb_id_in1, in1_block_num_tiles);
 
                 l1_write_addr_in1 = get_write_ptr(cb_id_in1);

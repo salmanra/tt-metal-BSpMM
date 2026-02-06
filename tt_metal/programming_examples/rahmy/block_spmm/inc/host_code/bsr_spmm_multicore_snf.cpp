@@ -172,7 +172,6 @@ void bsr_spmm_multicore_snf(
     }
 
     
-    // TODO: double check the semaphore apis so you know 1. what all the functions do a
     auto in0_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in0_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in1_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
@@ -225,6 +224,17 @@ void bsr_spmm_multicore_snf(
     auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, dram_buffer_col_indices_size);
     auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, dram_buffer_indptr_size);
 
+    if constexpr (verbose) {
+        log_info(tt::LogVerif, " -- DRAM Buffer Sizings in tiles --");
+        log_info(
+            tt::LogVerif,
+            " -- dst_dram={} -- sparse_matrix_data={} -- dense_matrix={} -- col_indices={} -- indptr={} --",
+            dram_buffer_dst_total_size / (TILE_WIDTH * TILE_HEIGHT),
+            dram_buffer_A_size / (TILE_WIDTH * TILE_HEIGHT),
+            dram_buffer_B_size / (TILE_WIDTH * TILE_HEIGHT),
+            dram_buffer_col_indices_size / (TILE_WIDTH * TILE_HEIGHT),
+            dram_buffer_indptr_size / (TILE_WIDTH * TILE_HEIGHT));
+    }
 
     if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Metalium Block and subblock sizing --");
@@ -285,12 +295,14 @@ void bsr_spmm_multicore_snf(
         auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_config);
 
     uint32_t column_indices_cb_index = CBIndex::c_2;  // 2
+    // Use full buffer size as page_size so noc_async_read can transfer the entire buffer
     CircularBufferConfig cb_column_indices_config = CircularBufferConfig(
         dram_buffer_col_indices_size, {{column_indices_cb_index, tt::DataFormat::Int32}})
                                                 .set_page_size(column_indices_cb_index, dram_buffer_col_indices_size);
     auto cb_column_indices = tt_metal::CreateCircularBuffer(program, all_cores, cb_column_indices_config);
 
     auto indptr_cb_index = CBIndex::c_3; // 3
+    // Use full buffer size as page_size so noc_async_read can transfer the entire buffer
     auto cb_indptr = MakeCircularBuffer(program, all_cores, indptr_cb_index, dram_buffer_indptr_size, dram_buffer_indptr_size, indexing_data_format);
 
     
@@ -342,8 +354,8 @@ void bsr_spmm_multicore_snf(
 
         in0_sender_semaphore_id, 
         in0_receiver_semaphore_id,
-        (std::uint32_t)true,
-        (std::uint32_t)true,
+        (std::uint32_t)true,                            // is_injector_core
+        (std::uint32_t)true,                            // is_output_writer
         (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
 
         (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
@@ -648,7 +660,6 @@ void bsr_spmm_multicore_snf(
     EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
     EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
 
-    // TODO: test if tt-metal has any problems with this...
     if constexpr (is_profiling){
         int num_iters = 10; // TODO: there should be smarter way to set the number of iters. we'll see
         EnqueueProgram(cq, program, true);
@@ -657,20 +668,34 @@ void bsr_spmm_multicore_snf(
             EnqueueProgram(cq, program, true);
         }
     }
+    else if constexpr (verbose){
+        EnqueueProgram(cq, program, true); // block on this call so we can determine the order of print statements
+    }
     else {
         EnqueueProgram(cq, program, false);
     }
 
     if constexpr (verbose)
         log_info(tt::LogVerif, " -- Program returned --");
+    
+    // if constexpr (verbose) {
+    //     log_info(tt::LogVerif, " -- BSR Matrix shape --");
+    // }
 
-    uint32_t nonzero_row_index = 0;
-    for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
-        if (a.indptr[row_index+1] - a.indptr[row_index] == 0)
-            continue;
-        BufferRegion DRAM_row(nonzero_row_index * dram_buffer_dst_row_size, dram_buffer_dst_row_size);
-        EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, false);
-        nonzero_row_index++;
+    // TODO: don't read back when profiling. 
+    // TODO: large random case is failing here. pipe verbose output to a file and block on subbuffer reads. 
+    if constexpr (!is_profiling){
+        uint32_t nonzero_row_index = 0;
+        for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
+            if (a.indptr[row_index+1] - a.indptr[row_index] == 0)
+                continue;
+            if constexpr (verbose) {
+                log_info(tt::LogVerif, "Reading output row {} from device", row_index);
+            }
+            BufferRegion DRAM_row(nonzero_row_index * dram_buffer_dst_row_size, dram_buffer_dst_row_size);
+            EnqueueReadSubBuffer(cq, dst_dram_buffer, output.data.data() + (row_index * R * N), DRAM_row, true);
+            nonzero_row_index++;
+        }
     }
 
     Finish(cq);

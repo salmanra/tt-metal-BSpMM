@@ -2,6 +2,8 @@
 #include <cstdint>
 #include "dataflow_api.h"
 #include "hostdevcommon/kernel_structs.h"
+#include "debug/dprint.h"
+#include "debug/dprint_tile.h"
 
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
@@ -42,7 +44,6 @@ void kernel_main(){
     constexpr uint32_t is_output_writer = get_compile_time_arg_val(23);
 
     // writer args
-    // TODO: no more subblocks in the DM kernels!!!!!
     // out tensor args
     uint32_t out_tensor_addr = get_compile_time_arg_val(24);
 
@@ -84,11 +85,11 @@ void kernel_main(){
     // //DPRINT_DATA0(DPRINT << "num runtime args " << arg_index << ENDL());
 
     // Debug coordinate and semaphore setup
-    //DPRINT_DATA0(DPRINT << "=== Core Coord Debug ===" << ENDL());
-    //DPRINT_DATA0(DPRINT << "My NOC coords: (" << my_x[0] << ", " << my_y[0] << ")" << ENDL());
-    //DPRINT_DATA0(DPRINT << "is_injector: " << is_injector_core << " is_sink: " << is_sink_core << ENDL());
-    //DPRINT_DATA0(DPRINT << "dest (next) noc: (" << in0_dest_noc_x << ", " << in0_dest_noc_y << ")" << ENDL());
-    //DPRINT_DATA0(DPRINT << "sender (prev) noc: (" << in0_sender_noc_x << ", " << in0_sender_noc_y << ")" << ENDL());
+    DPRINT_DATA0(DPRINT << "=== Core Coord Debug ===" << ENDL());
+    DPRINT_DATA0(DPRINT << "My NOC coords: (" << my_x[0] << ", " << my_y[0] << ")" << ENDL());
+    DPRINT_DATA0(DPRINT << "is_injector: " << is_injector_core << " is_sink: " << is_sink_core << ENDL());
+    DPRINT_DATA0(DPRINT << "dest (next) noc: (" << in0_dest_noc_x << ", " << in0_dest_noc_y << ")" << ENDL());
+    DPRINT_DATA0(DPRINT << "sender (prev) noc: (" << in0_sender_noc_x << ", " << in0_sender_noc_y << ")" << ENDL());
 
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
@@ -128,14 +129,17 @@ void kernel_main(){
         .bank_base_address = in0_tensor_addr, .page_size = in0_single_tile_size_bytes, .data_format = in0_data_format};
     const InterleavedAddrGenFast<in1_is_dram> s1 = {
         .bank_base_address = in1_tensor_addr, .page_size = in1_single_tile_size_bytes, .data_format = in1_data_format};
-    const InterleavedAddrGenFast<col_indices_is_dram> s2 = {
+    // For indexing data, use full buffer size as page_size (non-interleaved)
+    // This allows reading raw contiguous data instead of tile-formatted data
+    const uint32_t col_indices_total_size = col_indices_num_tiles * col_indices_single_tile_size_bytes;
+    const uint32_t indptr_total_size = indptr_num_tiles * indptr_single_tile_size_bytes;
+
+    const InterleavedAddrGen<col_indices_is_dram> s2 = {
         .bank_base_address = col_indices_addr,
-        .page_size = col_indices_single_tile_size_bytes,
-        .data_format = col_indices_data_format};
-    const InterleavedAddrGenFast<indptr_is_dram> s3 = {
+        .page_size = col_indices_total_size};
+    const InterleavedAddrGen<indptr_is_dram> s3 = {
         .bank_base_address = indptr_addr,
-        .page_size = indptr_single_tile_size_bytes,
-        .data_format = indptr_data_format};
+        .page_size = indptr_total_size};
 
     const InterleavedAddrGenFast<true> out_s = {
         .bank_base_address = out_tensor_addr, .page_size = output_single_tile_size_bytes, .data_format = output_data_format};
@@ -154,36 +158,60 @@ void kernel_main(){
     get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, in0_receiver_semaphore_addr);
         
     // IMPORTANT!!! Let the indexing args getting be the last thing before the program body.
-    //              This may help ensure no core blows past and starts making semaphore ops before other cores initialize their semaphores  
+    //              This may help ensure no core blows past and starts making semaphore ops before other cores initialize their semaphores
     // indexing args getting
     if constexpr (is_output_writer){
-        cb_reserve_back(cb_id_col_indices, col_indices_num_tiles);
+        DPRINT_DATA0(DPRINT << "reserving 1 page for col_indices (size=" << col_indices_total_size << ")" << ENDL());
+        cb_reserve_back(cb_id_col_indices, 1);
+        DPRINT_DATA0(DPRINT << "done reserving for col_indices" << ENDL());
+
         l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
-        uint32_t col_indices_dram_start_id = 0;
-        for (uint32_t i = 0; i < col_indices_num_tiles; i++){
-            noc_async_read_tile(col_indices_dram_start_id, s2, l1_write_addr_col_indices);
-            col_indices_dram_start_id++;
-            l1_write_addr_col_indices += col_indices_single_tile_size_bytes;
-        }
-        l1_write_addr_col_indices -= col_indices_single_tile_size_bytes * col_indices_num_tiles;
+        // Read entire col_indices buffer as raw contiguous data (not tiles)
+        uint64_t col_indices_noc_addr = get_noc_addr(0, s2);
+        noc_async_read(col_indices_noc_addr, l1_write_addr_col_indices, col_indices_total_size);
         noc_async_read_barrier();
-        cb_push_back(cb_id_col_indices, col_indices_num_tiles);
-    
-        cb_reserve_back(cb_id_indptr, indptr_num_tiles);
+
+        // Debug: verify col_indices CB contents using TileSlice
+        DPRINT_DATA0(DPRINT << "=== col_indices CB Debug (num_tiles=" << col_indices_num_tiles << ") ===" << ENDL());
+        for (uint32_t tile_idx = 0; tile_idx < col_indices_num_tiles; tile_idx++) {
+            DPRINT_DATA0(DPRINT << "Tile " << tile_idx << " row 0: " << TileSlice(
+                cb_id_col_indices,
+                tile_idx,
+                SliceRange{.h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1},
+                TSLICE_INPUT_CB,
+                TSLICE_WR_PTR) << ENDL());
+        }
+
+        DPRINT_DATA0(DPRINT << "pushing 1 page for col_indices" << ENDL());
+        cb_push_back(cb_id_col_indices, 1);
+
+        DPRINT_DATA0(DPRINT << "reserving 1 page for indptr (size=" << indptr_total_size << ")" << ENDL());
+        cb_reserve_back(cb_id_indptr, 1);
+        DPRINT_DATA0(DPRINT << "done reserving for indptr" << ENDL());
+
         l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
-        uint32_t indptr_dram_start_id = 0;
-        for (uint32_t i = 0; i < indptr_num_tiles; i++){
-            noc_async_read_tile(indptr_dram_start_id, s3, l1_write_addr_indptr);
-            indptr_dram_start_id++;
-            l1_write_addr_indptr += indptr_single_tile_size_bytes;
-        }
-        l1_write_addr_indptr -= indptr_single_tile_size_bytes * indptr_num_tiles;
+        // Read entire indptr buffer as raw contiguous data (not tiles)
+        uint64_t indptr_noc_addr = get_noc_addr(0, s3);
+        noc_async_read(indptr_noc_addr, l1_write_addr_indptr, indptr_total_size);
         noc_async_read_barrier();
-        cb_push_back(cb_id_indptr, indptr_num_tiles);
+
+        // Debug: verify indptr CB contents using TileSlice
+        DPRINT_DATA0(DPRINT << "=== indptr CB Debug (num_tiles=" << indptr_num_tiles << ") ===" << ENDL());
+        for (uint32_t tile_idx = 0; tile_idx < indptr_num_tiles; tile_idx++) {
+            DPRINT_DATA0(DPRINT << "Tile " << tile_idx << " row 0: " << TileSlice(
+                cb_id_indptr,
+                tile_idx,
+                SliceRange{.h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1},
+                TSLICE_INPUT_CB,
+                TSLICE_WR_PTR) << ENDL());
+        }
+
+        DPRINT_DATA0(DPRINT << "pushing 1 page for indptr" << ENDL());
+        cb_push_back(cb_id_indptr, 1);
     }
     else {
-        cb_wait_front(cb_id_indptr, indptr_num_tiles);
-        cb_wait_front(cb_id_col_indices, col_indices_num_tiles);
+        cb_wait_front(cb_id_indptr, 1);
+        cb_wait_front(cb_id_col_indices, 1);
         l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
         l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
     }
@@ -193,15 +221,15 @@ void kernel_main(){
 
 
     // Debug semaphore addresses
-    //DPRINT_DATA0(DPRINT << "=== Semaphore Debug ===" << ENDL());
-    //DPRINT_DATA0(DPRINT << "Local sender sem L1 addr: " << in0_sender_semaphore_addr << ENDL());
-    //DPRINT_DATA0(DPRINT << "Local receiver sem L1 addr: " << in0_receiver_semaphore_addr << ENDL());
-    //DPRINT_DATA0(DPRINT << "Remote sender sem NOC addr (hi/lo): "
-        // << (uint32_t)(in0_sender_semaphore_noc_addr >> 32) << " / "
-        // << (uint32_t)(in0_sender_semaphore_noc_addr & 0xFFFFFFFF) << ENDL());
-    //DPRINT_DATA0(DPRINT << "Remote receiver sem NOC addr (hi/lo): "
-        // << (uint32_t)(in0_receiver_semaphore_noc_addr >> 32) << " / "
-        // << (uint32_t)(in0_receiver_semaphore_noc_addr & 0xFFFFFFFF) << ENDL());
+    // DPRINT_DATA0(DPRINT << "=== Semaphore Debug ===" << ENDL());
+    // DPRINT_DATA0(DPRINT << "Local sender sem L1 addr: " << in0_sender_semaphore_addr << ENDL());
+    // DPRINT_DATA0(DPRINT << "Local receiver sem L1 addr: " << in0_receiver_semaphore_addr << ENDL());
+    // DPRINT_DATA0(DPRINT << "Remote sender sem NOC addr (hi/lo): "
+    //     << (uint32_t)(in0_sender_semaphore_noc_addr >> 32) << " / "
+    //     << (uint32_t)(in0_sender_semaphore_noc_addr & 0xFFFFFFFF) << ENDL());
+    // DPRINT_DATA0(DPRINT << "Remote receiver sem NOC addr (hi/lo): "
+    //     << (uint32_t)(in0_receiver_semaphore_noc_addr >> 32) << " / "
+    //     << (uint32_t)(in0_receiver_semaphore_noc_addr & 0xFFFFFFFF) << ENDL());
 
     // Writer args
 
@@ -233,14 +261,14 @@ void kernel_main(){
             output_idx_x = output_idx_x_start + iter_x;
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
-
+                // DPRINT_DATA0(DPRINT << "reserving in0 CB" << ENDL());
                 cb_reserve_back(cb_id_in0, in0_block_num_tiles);
 
                 l1_write_addr_in0 = get_write_ptr(cb_id_in0);
                 uint32_t l1_write_addr_in0_start = l1_write_addr_in0;  // Save start address for forwarding
 
                 if constexpr (is_injector_core){
-                    DPRINT_DATA0(DPRINT << "injecting in0 block!" << ENDL());
+                    // DPRINT_DATA0(DPRINT << "injecting in0 block!" << ENDL());
 
                     // Read in0 block from DRAM
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
@@ -264,7 +292,7 @@ void kernel_main(){
                     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
                     // //DPRINT_DATA0(DPRINT << "in the middle of receiving in0 block!" << ENDL());
                     noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
-                    DPRINT_DATA0(DPRINT << "done receiving in0 block!" << ENDL());
+                    // DPRINT_DATA0(DPRINT << "done receiving in0 block!" << ENDL());
                 }
 
                 cb_push_back(cb_id_in0, in0_block_num_tiles);
@@ -282,7 +310,7 @@ void kernel_main(){
                     noc_async_write(l1_write_addr_in0_start, in0_unicast_data_addr, current_block_bytes);
                     noc_async_write_barrier(); // TODO: ask jon if this is necessary, it's not in their code
                     noc_semaphore_inc(in0_receiver_semaphore_noc_addr, 1);
-                    DPRINT_DATA0(DPRINT << "done forwarding in0 block!" << ENDL());
+                    // DPRINT_DATA0(DPRINT << "done forwarding in0 block!" << ENDL());
                 }
             }
 
@@ -318,14 +346,14 @@ void kernel_main(){
                 out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
             }
             out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
-            DPRINT_DATA0(DPRINT << "Done writing an output block" << ENDL());
+            // DPRINT_DATA0(DPRINT << "Done writing an output block" << ENDL());
 
             }
         }
         out_tensor_x_coord_offset = 0;
     }
-    cb_pop_front(cb_id_col_indices, col_indices_num_tiles);
-    cb_pop_front(cb_id_indptr, indptr_num_tiles);
+    cb_pop_front(cb_id_col_indices, 1);
+    cb_pop_front(cb_id_indptr, 1);
     DPRINT_DATA0(DPRINT << "in0 kernel complete" << ENDL());
 
 }

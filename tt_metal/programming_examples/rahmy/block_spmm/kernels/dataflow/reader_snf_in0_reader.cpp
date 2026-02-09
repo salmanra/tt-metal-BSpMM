@@ -85,11 +85,11 @@ void kernel_main(){
     // //DPRINT_DATA0(DPRINT << "num runtime args " << arg_index << ENDL());
 
     // Debug coordinate and semaphore setup
-    DPRINT_DATA0(DPRINT << "=== Core Coord Debug ===" << ENDL());
-    DPRINT_DATA0(DPRINT << "My NOC coords: (" << my_x[0] << ", " << my_y[0] << ")" << ENDL());
-    DPRINT_DATA0(DPRINT << "is_injector: " << is_injector_core << " is_sink: " << is_sink_core << ENDL());
-    DPRINT_DATA0(DPRINT << "dest (next) noc: (" << in0_dest_noc_x << ", " << in0_dest_noc_y << ")" << ENDL());
-    DPRINT_DATA0(DPRINT << "sender (prev) noc: (" << in0_sender_noc_x << ", " << in0_sender_noc_y << ")" << ENDL());
+    // DPRINT_DATA0(DPRINT << "=== Core Coord Debug ===" << ENDL());
+    // DPRINT_DATA0(DPRINT << "My NOC coords: (" << my_x[0] << ", " << my_y[0] << ")" << ENDL());
+    // DPRINT_DATA0(DPRINT << "is_injector: " << is_injector_core << " is_sink: " << is_sink_core << ENDL());
+    // DPRINT_DATA0(DPRINT << "dest (next) noc: (" << in0_dest_noc_x << ", " << in0_dest_noc_y << ")" << ENDL());
+    // DPRINT_DATA0(DPRINT << "sender (prev) noc: (" << in0_sender_noc_x << ", " << in0_sender_noc_y << ")" << ENDL());
 
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
@@ -174,7 +174,7 @@ void kernel_main(){
         // Debug: verify col_indices CB contents using TileSlice
         DPRINT_DATA0(DPRINT << "=== col_indices CB Debug (num_tiles=" << col_indices_num_tiles << ") ===" << ENDL());
         for (uint32_t tile_idx = 0; tile_idx < col_indices_num_tiles; tile_idx++) {
-            DPRINT_DATA0(DPRINT << "Tile " << tile_idx << " row 0: " << TileSlice(
+            DPRINT_DATA0(DPRINT << "col_indices Tile " << tile_idx << " row 0: " << TileSlice(
                 cb_id_col_indices,
                 tile_idx,
                 SliceRange{.h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1},
@@ -198,7 +198,7 @@ void kernel_main(){
         // Debug: verify indptr CB contents using TileSlice
         DPRINT_DATA0(DPRINT << "=== indptr CB Debug (num_tiles=" << indptr_num_tiles << ") ===" << ENDL());
         for (uint32_t tile_idx = 0; tile_idx < indptr_num_tiles; tile_idx++) {
-            DPRINT_DATA0(DPRINT << "Tile " << tile_idx << " row 0: " << TileSlice(
+            DPRINT_DATA0(DPRINT << "indptr Tile " << tile_idx << " row 0: " << TileSlice(
                 cb_id_indptr,
                 tile_idx,
                 SliceRange{.h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1},

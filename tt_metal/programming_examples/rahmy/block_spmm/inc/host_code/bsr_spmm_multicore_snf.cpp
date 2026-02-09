@@ -57,8 +57,18 @@ void bsr_spmm_multicore_snf(
 
     tt::DataFormat indexing_data_format = tt::DataFormat::Int32;
     uint32_t indexing_data_single_tile_size = detail::TileSize(indexing_data_format);
-    uint32_t num_tiles_for_col_indices = (indexing_data_single_tile_size - 1 + sizeof(int) * nnz_blocks) / indexing_data_single_tile_size;
-    uint32_t num_tiles_for_indptr = (indexing_data_single_tile_size - 1 + sizeof(int) * (M / R + 1)) / indexing_data_single_tile_size;
+    uint32_t dram_buffer_indptr_size =
+        sizeof(int) * (M / R + 1);
+    // Round up to tile size
+    dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
+
+    uint32_t dram_buffer_col_indices_size =
+        sizeof(int) * nnz_blocks;
+    // Round up to tile size
+    dram_buffer_col_indices_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_col_indices_size) / (indexing_data_single_tile_size));
+
+    uint32_t num_tiles_for_col_indices = dram_buffer_col_indices_size / indexing_data_single_tile_size; 
+    uint32_t num_tiles_for_indptr = dram_buffer_indptr_size / indexing_data_single_tile_size;
     uint32_t num_tiles_indexing = num_tiles_for_col_indices + num_tiles_for_indptr;
 
     // Core Grid detection
@@ -67,8 +77,6 @@ void bsr_spmm_multicore_snf(
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
     uint32_t num_cores_total = num_cores_x * num_cores_y;
-
-
 
     // Per-core tiling and blocking args
     uint32_t Mt = M / TILE_HEIGHT;
@@ -208,15 +216,6 @@ void bsr_spmm_multicore_snf(
     uint32_t dram_buffer_B_size =
         single_tile_size * Nt * Kt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 
-    uint32_t dram_buffer_col_indices_size =
-        sizeof(indexing_data_format) * nnz_blocks;
-    // Round up to tile size
-    dram_buffer_col_indices_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_col_indices_size) / (indexing_data_single_tile_size));
-
-    uint32_t dram_buffer_indptr_size =
-        sizeof(indexing_data_format) * (M / R + 1);
-    // Round up to tile size
-    dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
 
     auto dst_dram_buffer = MakeBuffer(device, dram_buffer_dst_total_size, single_tile_size);
     auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
@@ -224,16 +223,17 @@ void bsr_spmm_multicore_snf(
     auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, dram_buffer_col_indices_size);
     auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, dram_buffer_indptr_size);
 
-    if constexpr (verbose) {
+    if constexpr (true) {
         log_info(tt::LogVerif, " -- DRAM Buffer Sizings in tiles --");
         log_info(
             tt::LogVerif,
-            " -- dst_dram={} -- sparse_matrix_data={} -- dense_matrix={} -- col_indices={} -- indptr={} --",
-            dram_buffer_dst_total_size / (TILE_WIDTH * TILE_HEIGHT),
-            dram_buffer_A_size / (TILE_WIDTH * TILE_HEIGHT),
-            dram_buffer_B_size / (TILE_WIDTH * TILE_HEIGHT),
-            dram_buffer_col_indices_size / (TILE_WIDTH * TILE_HEIGHT),
-            dram_buffer_indptr_size / (TILE_WIDTH * TILE_HEIGHT));
+            " -- dst_dram={} -- sparse_matrix_data={} -- dense_matrix={} -- col_indices={} -- indptr={} -- idx_data_single_tile_size={}",
+            dram_buffer_dst_total_size / single_tile_size,
+            dram_buffer_A_size / single_tile_size,
+            dram_buffer_B_size / single_tile_size,
+            dram_buffer_col_indices_size / indexing_data_single_tile_size,
+            dram_buffer_indptr_size / indexing_data_single_tile_size,
+            indexing_data_single_tile_size);
     }
 
     if constexpr (verbose) {

@@ -5,6 +5,9 @@
 #include "debug/dprint.h"
 #include "debug/dprint_tile.h"
 
+#include <tools/profiler/kernel_profiler.hpp>
+
+
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
     /// COMPILETIME ARGS //////////////////////////////////////////////////
@@ -294,7 +297,9 @@ void kernel_main(){
                     noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
                     // DPRINT_DATA0(DPRINT << "done receiving in0 block!" << ENDL());
                 }
-
+                {
+                    DeviceZoneScopedN("in0 Block Pushed to CB");
+                }
                 cb_push_back(cb_id_in0, in0_block_num_tiles);
 
                 if (!is_sink_core) {
@@ -317,8 +322,6 @@ void kernel_main(){
             // TODO: perform the write if responsible.
             if constexpr (is_output_writer){
             //DPRINT_DATA0(DPRINT << "Writing an output block" << ENDL());
-
-
             uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
             for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
                 uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
@@ -347,7 +350,7 @@ void kernel_main(){
             }
             out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
             // DPRINT_DATA0(DPRINT << "Done writing an output block" << ENDL());
-
+            DeviceZoneScopedN("Output block written to DRAM");
             }
         }
         out_tensor_x_coord_offset = 0;

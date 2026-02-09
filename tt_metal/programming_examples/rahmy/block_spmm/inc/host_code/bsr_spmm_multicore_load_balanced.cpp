@@ -143,12 +143,12 @@ void bsr_spmm_multicore_load_balanced(
         single_tile_size * Nt * Kt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 
     uint32_t dram_buffer_col_indices_size =
-        sizeof(indexing_data_format) * nnz_blocks;
+        sizeof(int) * nnz_blocks;
     // Round up to tile size
     dram_buffer_col_indices_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_col_indices_size) / (indexing_data_single_tile_size));
 
     uint32_t dram_buffer_indptr_size =
-        sizeof(indexing_data_format) * (M / R + 1);
+        sizeof(int) * (M / R + 1);
     // Round up to tile size
     dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
 

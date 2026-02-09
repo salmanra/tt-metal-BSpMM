@@ -78,6 +78,9 @@ void kernel_main(){
     uint32_t l1_write_addr_col_indices;
     uint32_t l1_write_addr_indptr;
 
+    const uint32_t col_indices_total_size = col_indices_num_tiles * col_indices_single_tile_size_bytes;
+    const uint32_t indptr_total_size = indptr_num_tiles * indptr_single_tile_size_bytes;
+
     const InterleavedAddrGenFast<in0_is_dram> s0 = {
         .bank_base_address = in0_tensor_addr, .page_size = in0_single_tile_size_bytes, .data_format = in0_data_format};
     const InterleavedAddrGenFast<in1_is_dram> s1 = {
@@ -91,29 +94,53 @@ void kernel_main(){
         .page_size = indptr_single_tile_size_bytes,
         .data_format = indptr_data_format};
 
-    cb_reserve_back(cb_id_col_indices, col_indices_num_tiles);
-    l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
-    uint32_t col_indices_dram_start_id = 0;
-    for (uint32_t i = 0; i < col_indices_num_tiles; i++){
-        noc_async_read_tile(col_indices_dram_start_id, s2, l1_write_addr_col_indices);
-        col_indices_dram_start_id++;
-        l1_write_addr_col_indices += col_indices_single_tile_size_bytes;
-    }
-    l1_write_addr_col_indices -= col_indices_single_tile_size_bytes * col_indices_num_tiles;
-    noc_async_read_barrier();
-    cb_push_back(cb_id_col_indices, col_indices_num_tiles);
+    DPRINT_DATA0(DPRINT << "reserving 1 page for col_indices (size=" << col_indices_total_size << ")" << ENDL());
+    cb_reserve_back(cb_id_col_indices, 1);
+    DPRINT_DATA0(DPRINT << "done reserving for col_indices" << ENDL());
 
-    cb_reserve_back(cb_id_indptr, indptr_num_tiles);
-    l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
-    uint32_t indptr_dram_start_id = 0;
-    for (uint32_t i = 0; i < indptr_num_tiles; i++){
-        noc_async_read_tile(indptr_dram_start_id, s3, l1_write_addr_indptr);
-        indptr_dram_start_id++;
-        l1_write_addr_indptr += indptr_single_tile_size_bytes;
-    }
-    l1_write_addr_indptr -= indptr_single_tile_size_bytes * indptr_num_tiles;
+    l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
+    // Read entire col_indices buffer as raw contiguous data (not tiles)
+    uint64_t col_indices_noc_addr = get_noc_addr(0, s2);
+    noc_async_read(col_indices_noc_addr, l1_write_addr_col_indices, col_indices_total_size);
     noc_async_read_barrier();
-    cb_push_back(cb_id_indptr, indptr_num_tiles);
+
+    // Debug: verify col_indices CB contents using TileSlice
+    DPRINT_DATA0(DPRINT << "=== col_indices CB Debug (num_tiles=" << col_indices_num_tiles << ") ===" << ENDL());
+    for (uint32_t tile_idx = 0; tile_idx < col_indices_num_tiles; tile_idx++) {
+        DPRINT_DATA0(DPRINT << "col_indices Tile " << tile_idx << " row 0: " << TileSlice(
+            cb_id_col_indices,
+            tile_idx,
+            SliceRange{.h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1},
+            TSLICE_INPUT_CB,
+            TSLICE_WR_PTR) << ENDL());
+    }
+
+    DPRINT_DATA0(DPRINT << "pushing 1 page for col_indices" << ENDL());
+    cb_push_back(cb_id_col_indices, 1);
+
+    DPRINT_DATA0(DPRINT << "reserving 1 page for indptr (size=" << indptr_total_size << ")" << ENDL());
+    cb_reserve_back(cb_id_indptr, 1);
+    DPRINT_DATA0(DPRINT << "done reserving for indptr" << ENDL());
+
+    l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
+    // Read entire indptr buffer as raw contiguous data (not tiles)
+    uint64_t indptr_noc_addr = get_noc_addr(0, s3);
+    noc_async_read(indptr_noc_addr, l1_write_addr_indptr, indptr_total_size);
+    noc_async_read_barrier();
+
+    // Debug: verify indptr CB contents using TileSlice
+    DPRINT_DATA0(DPRINT << "=== indptr CB Debug (num_tiles=" << indptr_num_tiles << ") ===" << ENDL());
+    for (uint32_t tile_idx = 0; tile_idx < indptr_num_tiles; tile_idx++) {
+        DPRINT_DATA0(DPRINT << "indptr Tile " << tile_idx << " row 0: " << TileSlice(
+            cb_id_indptr,
+            tile_idx,
+            SliceRange{.h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1},
+            TSLICE_INPUT_CB,
+            TSLICE_WR_PTR) << ENDL());
+    }
+
+    DPRINT_DATA0(DPRINT << "pushing 1 page for indptr" << ENDL());
+    cb_push_back(cb_id_indptr, 1);
 
     uint32_t* col_indices = (uint32_t*) l1_write_addr_col_indices;
     uint32_t* indptr = (uint32_t*) l1_write_addr_indptr;

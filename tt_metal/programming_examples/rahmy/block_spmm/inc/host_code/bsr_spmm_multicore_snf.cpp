@@ -223,7 +223,7 @@ void bsr_spmm_multicore_snf(
     auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, dram_buffer_col_indices_size);
     auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, dram_buffer_indptr_size);
 
-    if constexpr (true) {
+    if constexpr (verbose) {
         log_info(tt::LogVerif, " -- DRAM Buffer Sizings in tiles --");
         log_info(
             tt::LogVerif,
@@ -678,12 +678,6 @@ void bsr_spmm_multicore_snf(
     if constexpr (verbose)
         log_info(tt::LogVerif, " -- Program returned --");
     
-    // if constexpr (verbose) {
-    //     log_info(tt::LogVerif, " -- BSR Matrix shape --");
-    // }
-
-    // TODO: don't read back when profiling. 
-    // TODO: large random case is failing here. pipe verbose output to a file and block on subbuffer reads. 
     if constexpr (!is_profiling){
         uint32_t nonzero_row_index = 0;
         for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {

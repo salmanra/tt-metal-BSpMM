@@ -4,6 +4,9 @@ CK is neutral to order, but it's probably worth naming loop vars
 */
 
 
+#include <tools/profiler/kernel_profiler.hpp>
+
+
 #include <cstdint>
 #include "hostdevcommon/kernel_structs.h"
 #include "compute_kernel_api/tile_move_copy.h"
@@ -126,7 +129,7 @@ void MAIN {
                             }
                             cb_push_back(tt::CBIndex::c_16, out_subblock_num_tiles);
                             // DPRINT_MATH(DPRINT << "pushed " << out_subblock_num_tiles <<  " tiles to 16 " << ENDL());
-
+                            DeviceZoneScopedN("Output Block Pushed to CB");
                         } else {
                             // Wait for tiles in output buffer to be written out since interm and output share memory
                             if (input_block == 0) {

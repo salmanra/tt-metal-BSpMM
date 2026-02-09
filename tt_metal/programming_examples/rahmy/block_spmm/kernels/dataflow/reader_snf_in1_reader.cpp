@@ -3,6 +3,9 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/kernel_structs.h"
 
+#include <tools/profiler/kernel_profiler.hpp>
+
+
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
     /// COMPILETIME ARGS //////////////////////////////////////////////////
@@ -60,7 +63,7 @@ void kernel_main(){
     const uint32_t cb_id_col_indices = tt::CBIndex::c_2;
     const uint32_t cb_id_indptr = tt::CBIndex::c_3;
 
-    // input data format will probably by bfloat16
+    // input data format will probably be bfloat16
     const uint32_t in0_single_tile_size_bytes = get_tile_size(cb_id_in0);
     const DataFormat in0_data_format = get_dataformat(cb_id_in0);
 
@@ -131,6 +134,7 @@ void kernel_main(){
                 }
 
                 noc_async_read_barrier();
+                DeviceZoneScopedN("in1 Block Pushed to CB");
                 cb_push_back(cb_id_in1, in1_block_num_tiles);
             }
         }

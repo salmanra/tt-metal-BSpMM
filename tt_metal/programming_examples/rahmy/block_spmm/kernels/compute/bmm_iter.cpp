@@ -129,7 +129,6 @@ void MAIN {
                             }
                             cb_push_back(tt::CBIndex::c_16, out_subblock_num_tiles);
                             // DPRINT_MATH(DPRINT << "pushed " << out_subblock_num_tiles <<  " tiles to 16 " << ENDL());
-                            DeviceZoneScopedN("Output Block Pushed to CB");
                         } else {
                             // Wait for tiles in output buffer to be written out since interm and output share memory
                             if (input_block == 0) {
@@ -166,6 +165,8 @@ void MAIN {
                 // DPRINT_MATH(DPRINT << "done computing on one input block" << ENDL());
 
             }
+            // TODO: this scope breaks my rules. Is that okay?
+            DeviceZoneScopedN("Output Block Pushed to CB");
         }
     }
     DPRINT_MATH(DPRINT << "CK complete" << ENDL());

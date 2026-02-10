@@ -129,6 +129,7 @@ void profile_test(
     // device setup
     constexpr int device_id = 0;
     IDevice* device = CreateDevice(device_id);
+    tracy::GetProfiler().IsConnected();
     {
         ZoneScopedNC("Post-device setup", tracy::Color::DarkOliveGreen);
         // matmul params setup

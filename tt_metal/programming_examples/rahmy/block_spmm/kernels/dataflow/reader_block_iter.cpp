@@ -114,6 +114,7 @@ void kernel_main(){
 
                 cb_push_back(spmm::cb_id_in0, in0_block_num_tiles);
                 cb_push_back(spmm::cb_id_in1, in1_block_num_tiles);
+                DeviceZoneScopedN("in0 Block and in0 Block Pushed to CB");
             }
         }
     }

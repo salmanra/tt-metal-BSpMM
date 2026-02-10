@@ -39,18 +39,19 @@ function capture_reduction_one_host {
 function capture_trace {
     latest_host_program_index=0
     default_test_case=0
+    
     if [[ "$#" -eq "0" ]]; then
         # run test 30
-        ./build/programming_examples/rahmy/profile_block $default_test_case $latest_host_program_index
+       TT_METAL_DEVICE_PROFILER=1 ./build/programming_examples/rahmy/profile_block $default_test_case $latest_host_program_index
     elif [[ "$#" -eq "1" ]]; then
         # run test given test with default func
-        ./build/programming_examples/rahmy/profile_block $1 $latest_host_program_index
+        TT_METAL_DEVICE_PROFILER=1 ./build/programming_examples/rahmy/profile_block $1 $latest_host_program_index
     elif [[ "$#" -eq "2" ]]; then
         # run the given test with the given program
-        ./build/programming_examples/rahmy/profile_block $1 $2
+        TT_METAL_DEVICE_PROFILER=1 ./build/programming_examples/rahmy/profile_block $1 $2
     elif [[ "$#" -eq "3" ]]; then
         # run tests from the given registry 
-        ./build/programming_examples/rahmy/profile_block $1 $2 $3
+        TT_METAL_DEVICE_PROFILER=1 ./build/programming_examples/rahmy/profile_block $1 $2 $3
     fi
 }
 

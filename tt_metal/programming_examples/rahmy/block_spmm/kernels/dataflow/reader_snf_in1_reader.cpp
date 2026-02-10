@@ -2,8 +2,10 @@
 #include <cstdint>
 #include "dataflow_api.h"
 #include "hostdevcommon/kernel_structs.h"
-
 #include <tools/profiler/kernel_profiler.hpp>
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_reader_common.hpp"
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_indexing.hpp"
 
 
 void kernel_main(){
@@ -57,46 +59,15 @@ void kernel_main(){
     /// END RUNTIME ARGS //////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
 
+    const auto ti = spmm::get_tile_info();
 
-    const uint32_t cb_id_in0 = tt::CBIndex::c_0;
-    const uint32_t cb_id_in1 = tt::CBIndex::c_1;
-    const uint32_t cb_id_col_indices = tt::CBIndex::c_2;
-    const uint32_t cb_id_indptr = tt::CBIndex::c_3;
-
-    // input data format will probably be bfloat16
-    const uint32_t in0_single_tile_size_bytes = get_tile_size(cb_id_in0);
-    const DataFormat in0_data_format = get_dataformat(cb_id_in0);
-
-    const uint32_t in1_single_tile_size_bytes = get_tile_size(cb_id_in1);
-    const DataFormat in1_data_format = get_dataformat(cb_id_in1);
-
-    const uint32_t col_indices_single_tile_size_bytes = get_tile_size(cb_id_col_indices);
-    const DataFormat col_indices_data_format = get_dataformat(cb_id_col_indices);
-
-    const uint32_t indptr_single_tile_size_bytes = get_tile_size(cb_id_indptr);
-    const DataFormat indptr_data_format = get_dataformat(cb_id_indptr);
-
-    uint32_t l1_write_addr_in0;
-    uint32_t l1_write_addr_in1;
-    uint32_t l1_write_addr_col_indices;
-    uint32_t l1_write_addr_indptr;
-
-    const InterleavedAddrGenFast<in0_is_dram> s0 = {
-        .bank_base_address = in0_tensor_addr, .page_size = in0_single_tile_size_bytes, .data_format = in0_data_format};
     const InterleavedAddrGenFast<in1_is_dram> s1 = {
-        .bank_base_address = in1_tensor_addr, .page_size = in1_single_tile_size_bytes, .data_format = in1_data_format};
-    // Note: s2/s3 are not used in this kernel - indexing data is read by in0_reader
-    // and shared via circular buffers.
+        .bank_base_address = in1_tensor_addr, .page_size = ti.in1_tile_size, .data_format = ti.in1_format};
 
-    // Wait for indexing data (1 page each since CB page_size = full buffer)
-    cb_wait_front(cb_id_indptr, 1);
-    cb_wait_front(cb_id_col_indices, 1);
-    l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
-    l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
-    
+    // Wait for indexing data loaded by in0_reader on the other RISC
+    uint32_t* indptr = spmm::wait_for_indexing(spmm::cb_id_indptr);
+    uint32_t* col_indices = spmm::wait_for_indexing(spmm::cb_id_col_indices);
 
-    uint32_t* col_indices = (uint32_t*) l1_write_addr_col_indices;
-    uint32_t* indptr = (uint32_t*) l1_write_addr_indptr;
     ///////////////////////////////////////////////////////////////////////
     /// PROGRAM BODY //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
@@ -112,30 +83,22 @@ void kernel_main(){
             output_idx_x = output_idx_x_start + iter_x;
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
-                // DPRINT_DATA1(DPRINT << "reserving in1 CB" << ENDL());
-                cb_reserve_back(cb_id_in1, in1_block_num_tiles);
+                cb_reserve_back(spmm::cb_id_in1, in1_block_num_tiles);
 
-                l1_write_addr_in1 = get_write_ptr(cb_id_in1);
-                
-                // Read in1 block
-                // DPRINT_DATA1(DPRINT << "reading in1 block" << ENDL());
+                uint32_t l1_write_addr_in1 = get_write_ptr(spmm::cb_id_in1);
 
+                // Read in1 block (row selected by BSR col_indices)
                 uint32_t bsr_col_index = col_indices[reduction_iter];
                 uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
-                uint32_t in1_tensor_row_start_tile_id = in1_tensor_start_tile_id + bsr_col_index * in1_block_stride;
-                for (uint32_t h = 0; h < in1_block_h; h++) {
-                    uint32_t in1_tensor_tile_id = in1_tensor_row_start_tile_id;
-                    for (uint32_t w = 0; w < in1_block_w; w++) {
-                        noc_async_read_tile(in1_tensor_tile_id, s1, l1_write_addr_in1);
-                        l1_write_addr_in1 += in1_single_tile_size_bytes;
-                        in1_tensor_tile_id += in1_tensor_stride_w;
-                    }
-                    in1_tensor_row_start_tile_id += in1_tensor_stride_h;
-                }
+                spmm::read_block_by_tile(
+                    in1_tensor_start_tile_id + bsr_col_index * in1_block_stride,
+                    s1, l1_write_addr_in1,
+                    ti.in1_tile_size, in1_block_h, in1_block_w,
+                    in1_tensor_stride_h, in1_tensor_stride_w);
 
                 noc_async_read_barrier();
                 DeviceZoneScopedN("in1 Block Pushed to CB");
-                cb_push_back(cb_id_in1, in1_block_num_tiles);
+                cb_push_back(spmm::cb_id_in1, in1_block_num_tiles);
             }
         }
     }

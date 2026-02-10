@@ -3,9 +3,10 @@
 #include "dataflow_api.h"
 #include "hostdevcommon/kernel_structs.h"
 #include "debug/dprint.h"
-#include "debug/dprint_tile.h"
-
 #include <tools/profiler/kernel_profiler.hpp>
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_reader_common.hpp"
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_indexing.hpp"
 
 
 void kernel_main(){
@@ -38,8 +39,8 @@ void kernel_main(){
 
     constexpr uint32_t col_indices_num_tiles = get_compile_time_arg_val(18);
     constexpr uint32_t indptr_num_tiles = get_compile_time_arg_val(19);
-    
-    // store-and-forward args    
+
+    // store-and-forward args
     uint32_t in0_sender_semaphore_addr = get_semaphore(get_compile_time_arg_val(20));
     uint32_t in0_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(21));
 
@@ -47,9 +48,7 @@ void kernel_main(){
     constexpr uint32_t is_output_writer = get_compile_time_arg_val(23);
 
     // writer args
-    // out tensor args
     uint32_t out_tensor_addr = get_compile_time_arg_val(24);
-
     uint32_t RtNt = get_compile_time_arg_val(25);
     uint32_t Nt = get_compile_time_arg_val(26);
     uint32_t out_subblock_w = get_compile_time_arg_val(27);
@@ -85,157 +84,49 @@ void kernel_main(){
     const uint32_t in0_sender_noc_y = get_arg_val<uint32_t>(arg_index++);
     const uint32_t is_sink_core = get_arg_val<uint32_t>(arg_index++);
 
-    // //DPRINT_DATA0(DPRINT << "num runtime args " << arg_index << ENDL());
-
-    // Debug coordinate and semaphore setup
-    // DPRINT_DATA0(DPRINT << "=== Core Coord Debug ===" << ENDL());
-    // DPRINT_DATA0(DPRINT << "My NOC coords: (" << my_x[0] << ", " << my_y[0] << ")" << ENDL());
-    // DPRINT_DATA0(DPRINT << "is_injector: " << is_injector_core << " is_sink: " << is_sink_core << ENDL());
-    // DPRINT_DATA0(DPRINT << "dest (next) noc: (" << in0_dest_noc_x << ", " << in0_dest_noc_y << ")" << ENDL());
-    // DPRINT_DATA0(DPRINT << "sender (prev) noc: (" << in0_sender_noc_x << ", " << in0_sender_noc_y << ")" << ENDL());
-
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
 
-    const uint32_t cb_id_in0 = tt::CBIndex::c_0;
-    const uint32_t cb_id_in1 = tt::CBIndex::c_1;
-    const uint32_t cb_id_col_indices = tt::CBIndex::c_2;
-    const uint32_t cb_id_indptr = tt::CBIndex::c_3;
-    const uint32_t cb_id_out = tt::CBIndex::c_16;
-
-    // input data format will probably by bfloat16
-    const uint32_t in0_single_tile_size_bytes = get_tile_size(cb_id_in0);
-    const DataFormat in0_data_format = get_dataformat(cb_id_in0);
-
-    const uint32_t in1_single_tile_size_bytes = get_tile_size(cb_id_in1);
-    const DataFormat in1_data_format = get_dataformat(cb_id_in1);
-
-    const uint32_t col_indices_single_tile_size_bytes = get_tile_size(cb_id_col_indices);
-    const DataFormat col_indices_data_format = get_dataformat(cb_id_col_indices);
-
-    const uint32_t indptr_single_tile_size_bytes = get_tile_size(cb_id_indptr);
-    const DataFormat indptr_data_format = get_dataformat(cb_id_indptr);
-
-    const uint32_t output_single_tile_size_bytes = get_tile_size(cb_id_out);
-    const DataFormat output_data_format = get_dataformat(cb_id_out);
-
-
-    uint32_t l1_write_addr_in0;
-    uint32_t l1_write_addr_in1;
-    uint32_t l1_write_addr_col_indices;
-    uint32_t l1_write_addr_indptr;
-
-    uint32_t l1_read_addr_out;
+    const auto tile_info = spmm::get_tile_info();
+    const uint32_t output_tile_size = get_tile_size(spmm::cb_id_out);
+    const DataFormat output_format = get_dataformat(spmm::cb_id_out);
 
     const InterleavedAddrGenFast<in0_is_dram> s0 = {
-        .bank_base_address = in0_tensor_addr, .page_size = in0_single_tile_size_bytes, .data_format = in0_data_format};
-    const InterleavedAddrGenFast<in1_is_dram> s1 = {
-        .bank_base_address = in1_tensor_addr, .page_size = in1_single_tile_size_bytes, .data_format = in1_data_format};
-    // For indexing data, use full buffer size as page_size (non-interleaved)
-    // This allows reading raw contiguous data instead of tile-formatted data
-    const uint32_t col_indices_total_size = col_indices_num_tiles * col_indices_single_tile_size_bytes;
-    const uint32_t indptr_total_size = indptr_num_tiles * indptr_single_tile_size_bytes;
-
-    const InterleavedAddrGen<col_indices_is_dram> s2 = {
-        .bank_base_address = col_indices_addr,
-        .page_size = col_indices_total_size};
-    const InterleavedAddrGen<indptr_is_dram> s3 = {
-        .bank_base_address = indptr_addr,
-        .page_size = indptr_total_size};
-
+        .bank_base_address = in0_tensor_addr, .page_size = tile_info.in0_tile_size, .data_format = tile_info.in0_format};
     const InterleavedAddrGenFast<true> out_s = {
-        .bank_base_address = out_tensor_addr, .page_size = output_single_tile_size_bytes, .data_format = output_data_format};
+        .bank_base_address = out_tensor_addr, .page_size = output_tile_size, .data_format = output_format};
 
     // SnF semaphores
-    volatile tt_l1_ptr uint32_t* in0_sender_semaphore_addr_ptr = 
+    volatile tt_l1_ptr uint32_t* in0_sender_semaphore_addr_ptr =
     reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_sender_semaphore_addr);
     *(in0_sender_semaphore_addr_ptr) = 0;
-    const uint64_t in0_sender_semaphore_noc_addr = 
+    const uint64_t in0_sender_semaphore_noc_addr =
     get_noc_addr(in0_sender_noc_x, in0_sender_noc_y, in0_sender_semaphore_addr);
-    
-    volatile tt_l1_ptr uint32_t* in0_receiver_semaphore_addr_ptr = 
+
+    volatile tt_l1_ptr uint32_t* in0_receiver_semaphore_addr_ptr =
     reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in0_receiver_semaphore_addr);
     *(in0_receiver_semaphore_addr_ptr) = 0;
     const uint64_t in0_receiver_semaphore_noc_addr =
     get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, in0_receiver_semaphore_addr);
-        
-    // IMPORTANT!!! Let the indexing args getting be the last thing before the program body.
-    //              This may help ensure no core blows past and starts making semaphore ops before other cores initialize their semaphores
-    // indexing args getting
+
+    // Load or wait for sparse indexing data
+    uint32_t* col_indices;
+    uint32_t* indptr;
     if constexpr (is_output_writer){
-        DPRINT_DATA0(DPRINT << "reserving 1 page for col_indices (size=" << col_indices_total_size << ")" << ENDL());
-        cb_reserve_back(cb_id_col_indices, 1);
-        DPRINT_DATA0(DPRINT << "done reserving for col_indices" << ENDL());
-
-        l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
-        // Read entire col_indices buffer as raw contiguous data (not tiles)
-        uint64_t col_indices_noc_addr = get_noc_addr(0, s2);
-        noc_async_read(col_indices_noc_addr, l1_write_addr_col_indices, col_indices_total_size);
-        noc_async_read_barrier();
-
-        // Debug: verify col_indices CB contents using TileSlice
-        DPRINT_DATA0(DPRINT << "=== col_indices CB Debug (num_tiles=" << col_indices_num_tiles << ") ===" << ENDL());
-        for (uint32_t tile_idx = 0; tile_idx < col_indices_num_tiles; tile_idx++) {
-            DPRINT_DATA0(DPRINT << "col_indices Tile " << tile_idx << " row 0: " << TileSlice(
-                cb_id_col_indices,
-                tile_idx,
-                SliceRange{.h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1},
-                TSLICE_INPUT_CB,
-                TSLICE_WR_PTR) << ENDL());
-        }
-
-        DPRINT_DATA0(DPRINT << "pushing 1 page for col_indices" << ENDL());
-        cb_push_back(cb_id_col_indices, 1);
-
-        DPRINT_DATA0(DPRINT << "reserving 1 page for indptr (size=" << indptr_total_size << ")" << ENDL());
-        cb_reserve_back(cb_id_indptr, 1);
-        DPRINT_DATA0(DPRINT << "done reserving for indptr" << ENDL());
-
-        l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
-        // Read entire indptr buffer as raw contiguous data (not tiles)
-        uint64_t indptr_noc_addr = get_noc_addr(0, s3);
-        noc_async_read(indptr_noc_addr, l1_write_addr_indptr, indptr_total_size);
-        noc_async_read_barrier();
-
-        // Debug: verify indptr CB contents using TileSlice
-        DPRINT_DATA0(DPRINT << "=== indptr CB Debug (num_tiles=" << indptr_num_tiles << ") ===" << ENDL());
-        for (uint32_t tile_idx = 0; tile_idx < indptr_num_tiles; tile_idx++) {
-            DPRINT_DATA0(DPRINT << "indptr Tile " << tile_idx << " row 0: " << TileSlice(
-                cb_id_indptr,
-                tile_idx,
-                SliceRange{.h0 = 0, .h1 = 1, .hs = 1, .w0 = 0, .w1 = 32, .ws = 1},
-                TSLICE_INPUT_CB,
-                TSLICE_WR_PTR) << ENDL());
-        }
-
-        DPRINT_DATA0(DPRINT << "pushing 1 page for indptr" << ENDL());
-        cb_push_back(cb_id_indptr, 1);
+        col_indices = spmm::load_indexing_contiguous<col_indices_is_dram>(
+            spmm::cb_id_col_indices, col_indices_addr,
+            tile_info.col_indices_tile_size, tile_info.col_indices_format, col_indices_num_tiles);
+        indptr = spmm::load_indexing_contiguous<indptr_is_dram>(
+            spmm::cb_id_indptr, indptr_addr,
+            tile_info.indptr_tile_size, tile_info.indptr_format, indptr_num_tiles);
     }
     else {
-        cb_wait_front(cb_id_indptr, 1);
-        cb_wait_front(cb_id_col_indices, 1);
-        l1_write_addr_col_indices = get_write_ptr(cb_id_col_indices);
-        l1_write_addr_indptr = get_write_ptr(cb_id_indptr);
+        indptr = spmm::wait_for_indexing(spmm::cb_id_indptr);
+        col_indices = spmm::wait_for_indexing(spmm::cb_id_col_indices);
     }
 
-    uint32_t* col_indices = (uint32_t*) l1_write_addr_col_indices;
-    uint32_t* indptr = (uint32_t*) l1_write_addr_indptr;
-
-
-    // Debug semaphore addresses
-    // DPRINT_DATA0(DPRINT << "=== Semaphore Debug ===" << ENDL());
-    // DPRINT_DATA0(DPRINT << "Local sender sem L1 addr: " << in0_sender_semaphore_addr << ENDL());
-    // DPRINT_DATA0(DPRINT << "Local receiver sem L1 addr: " << in0_receiver_semaphore_addr << ENDL());
-    // DPRINT_DATA0(DPRINT << "Remote sender sem NOC addr (hi/lo): "
-    //     << (uint32_t)(in0_sender_semaphore_noc_addr >> 32) << " / "
-    //     << (uint32_t)(in0_sender_semaphore_noc_addr & 0xFFFFFFFF) << ENDL());
-    // DPRINT_DATA0(DPRINT << "Remote receiver sem NOC addr (hi/lo): "
-    //     << (uint32_t)(in0_receiver_semaphore_noc_addr >> 32) << " / "
-    //     << (uint32_t)(in0_receiver_semaphore_noc_addr & 0xFFFFFFFF) << ENDL());
-
-    // Writer args
-
+    // Writer setup
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
     uint32_t out_num_subblocks_w = in1_block_w / out_subblock_w;
     uint32_t out_num_subblocks_h = in0_block_h / out_subblock_h;
@@ -253,7 +144,7 @@ void kernel_main(){
         uint32_t out_tensor_y_coord_offset = RtNt * folded_y_coords[iter_y];
 
         // For now, all blocks are the same size. But soon we will want this line to accomodate unaligned blocks
-        uint32_t current_block_bytes = in0_single_tile_size_bytes * in0_block_num_tiles;
+        uint32_t current_block_bytes = tile_info.in0_tile_size * in0_block_num_tiles;
         // Get y_coord for this iter
         output_idx_y = y_coords[iter_y];
         uint32_t block_row_start = indptr[output_idx_y];
@@ -264,99 +155,71 @@ void kernel_main(){
             output_idx_x = output_idx_x_start + iter_x;
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
-                // DPRINT_DATA0(DPRINT << "reserving in0 CB" << ENDL());
-                cb_reserve_back(cb_id_in0, in0_block_num_tiles);
+                cb_reserve_back(spmm::cb_id_in0, in0_block_num_tiles);
 
-                l1_write_addr_in0 = get_write_ptr(cb_id_in0);
+                uint32_t l1_write_addr_in0 = get_write_ptr(spmm::cb_id_in0);
                 uint32_t l1_write_addr_in0_start = l1_write_addr_in0;  // Save start address for forwarding
 
                 if constexpr (is_injector_core){
-                    // DPRINT_DATA0(DPRINT << "injecting in0 block!" << ENDL());
-
                     // Read in0 block from DRAM
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
-                    uint32_t in0_tensor_row_start_tile_id = in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles;
-                    for (uint32_t h = 0; h < in0_block_h; h++) {
-                        uint32_t in0_tensor_tile_id = in0_tensor_row_start_tile_id;
-                        for (uint32_t w = 0; w < in0_block_w; w++) {
-                            noc_async_read_tile(in0_tensor_tile_id, s0, l1_write_addr_in0);
-                            l1_write_addr_in0 += in0_single_tile_size_bytes;
-                            in0_tensor_tile_id += in0_tensor_stride_w;
-                        }
-                        in0_tensor_row_start_tile_id += in0_tensor_stride_h;
-                    }
+                    spmm::read_block_by_tile(
+                        in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
+                        s0, l1_write_addr_in0,
+                        tile_info.in0_tile_size, in0_block_h, in0_block_w,
+                        in0_tensor_stride_h, in0_tensor_stride_w);
                     noc_async_read_barrier();
                 }
                 else {
-                    //DPRINT_DATA0(DPRINT << "receiving in0 block!" << ENDL());
-                    //DPRINT_DATA0(DPRINT << "RCV: waiting on sender sem at NOC ("
-                        // << in0_sender_noc_x << ", " << in0_sender_noc_y << ")" << ENDL());
                     noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
                     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
-                    // //DPRINT_DATA0(DPRINT << "in the middle of receiving in0 block!" << ENDL());
                     noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
-                    // DPRINT_DATA0(DPRINT << "done receiving in0 block!" << ENDL());
                 }
                 {
                     DeviceZoneScopedN("in0 Block Pushed to CB");
                 }
-                cb_push_back(cb_id_in0, in0_block_num_tiles);
+                cb_push_back(spmm::cb_id_in0, in0_block_num_tiles);
 
                 if (!is_sink_core) {
-                    // DPRINT_DATA0(DPRINT << "forwarding in0 block!" << ENDL());
-                    //DPRINT_DATA0(DPRINT << "FWD: signaling receiver sem at NOC ("
-                        // << in0_dest_noc_x << ", " << in0_dest_noc_y << ")" << ENDL());
-
                     noc_semaphore_wait(in0_sender_semaphore_addr_ptr, 1);
                     noc_semaphore_set(in0_sender_semaphore_addr_ptr, 0);
-                    // //DPRINT_DATA0(DPRINT << "in the middle of forwarding in0 block!" << ENDL());
 
                     uint64_t in0_unicast_data_addr = get_noc_addr(in0_dest_noc_x, in0_dest_noc_y, l1_write_addr_in0_start);
                     noc_async_write(l1_write_addr_in0_start, in0_unicast_data_addr, current_block_bytes);
-                    noc_async_write_barrier(); // TODO: ask jon if this is necessary, it's not in their code
+                    noc_async_write_barrier();
                     noc_semaphore_inc(in0_receiver_semaphore_noc_addr, 1);
-                    // DPRINT_DATA0(DPRINT << "done forwarding in0 block!" << ENDL());
                 }
             }
 
-            // TODO: perform the write if responsible.
             if constexpr (is_output_writer){
-            //DPRINT_DATA0(DPRINT << "Writing an output block" << ENDL());
             uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
             for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
                 uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
                 for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
-                    uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
-                    cb_wait_front(cb_id_out, out_subblock_num_tiles);
-                    uint32_t l1_read_addr = get_read_ptr(cb_id_out);
+                    cb_wait_front(spmm::cb_id_out, out_subblock_num_tiles);
+                    uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
 
-                    for (uint32_t h = 0; h < out_subblock_h; h++) {
-                        uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
-                        for (uint32_t w = 0; w < out_subblock_w; w++) {
-                            noc_async_write_tile(out_tensor_tile_id, out_s, l1_read_addr);
-                            l1_read_addr += output_single_tile_size_bytes;
-
-                            out_tensor_tile_id += out_tensor_stride_w;
-                        }
-                        out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
-                    }
+                    spmm::write_subblock_by_tile(
+                        out_tensor_sbw_start_tile_id,
+                        out_s, l1_read_addr,
+                        output_tile_size, out_subblock_h, out_subblock_w,
+                        out_tensor_stride_h, out_tensor_stride_w);
 
                     noc_async_write_barrier();
 
-                    cb_pop_front(cb_id_out, out_subblock_num_tiles);
+                    cb_pop_front(spmm::cb_id_out, out_subblock_num_tiles);
                     out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
                 }
                 out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
             }
             out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
-            // DPRINT_DATA0(DPRINT << "Done writing an output block" << ENDL());
             DeviceZoneScopedN("Output block written to DRAM");
             }
         }
         out_tensor_x_coord_offset = 0;
     }
-    cb_pop_front(cb_id_col_indices, 1);
-    cb_pop_front(cb_id_indptr, 1);
+    cb_pop_front(spmm::cb_id_col_indices, 1);
+    cb_pop_front(spmm::cb_id_indptr, 1);
     DPRINT_DATA0(DPRINT << "in0 kernel complete" << ENDL());
 
 }

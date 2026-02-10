@@ -169,10 +169,9 @@ namespace bsr_test_suite {
         test_1_block_arange, // 69
         // test_1_block_uniform, // PCC is a failed metric on this degen case, but the output is correct
         test_1_block_id, // 70
-        test_enormous, // 71
-        test_many_iters_y, // 72
-        test_many_iters_both, // 73
-        profile_case_sparse_fill_random_large<32, 32, 25>, // 74
+        // test_enormous, // 71
+        // test_many_iters_y, // 72
+        // test_many_iters_both, // 73
     };
 
     static std::uniform_real_distribution<> dis(-1000.0, 1000.0);

@@ -58,7 +58,7 @@ TestResult run_test(
     */
 
     // device setup
-    console_printf("Setting up the device!\n");
+    // console_printf("Setting up the device!\n");
 
     constexpr int device_id = 0;
     IDevice* device = CreateDevice(device_id);
@@ -77,21 +77,21 @@ TestResult run_test(
     uint32_t Rt = R / TILE_HEIGHT;
     uint32_t Ct = C / TILE_WIDTH;
 
-    console_printf("Initalizing output data!\n");
+    // console_printf("Initalizing output data!\n");
 
     // initialize output_data
     dense_matrix<float> tmp(M, N, 0.0f);
     dense_matrix<bfloat16> output = tmp.bfloat16_cast();
 
 
-    a.pretty_print();
-    console_printf("Running golden calculation!\n");
+    // a.pretty_print();
+    // console_printf("Running golden calculation!\n");
 
     // run sequential spmm
     dense_matrix<bfloat16> golden = a.omp_spmm_bf16(b);
 
     // tilize input data
-    console_printf("Tilizing!\n");
+    // console_printf("Tilizing!\n");
 
     a.data = tilize_nfaces(a.data, R, C);
     b.data = tilize_nfaces(b.data, K, N);
@@ -108,10 +108,10 @@ TestResult run_test(
     // console_printf(std::endl);
 
     // run bsr_spmm_multicore_reuse
-    console_printf("Entering host code");
+    // console_printf("Entering host code");
     
     host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
-    console_printf("exiting host code\n");
+    // console_printf("exiting host code\n");
 
 
     if (emit_output) {

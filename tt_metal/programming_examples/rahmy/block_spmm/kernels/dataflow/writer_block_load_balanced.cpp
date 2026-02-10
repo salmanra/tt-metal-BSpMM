@@ -12,6 +12,11 @@ for num_iters_x:
 #include <cstring>
 #include "dataflow_api.h"
 
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_reader_common.hpp"
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_indexing.hpp"
+
+
 void kernel_main() {
     ///////////////////////////////////////////////////////////////////////
     /// COMPILETIME ARGS //////////////////////////////////////////////////
@@ -75,17 +80,12 @@ void kernel_main() {
                     uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
                     cb_wait_front(cb_id_out0, out_subblock_tile_count);
                     uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
-
-                    for (uint32_t h = 0; h < out_subblock_h; h++) {
-                        uint32_t out_tensor_tile_id = out_tensor_sb_row_start_tile_id;
-                        for (uint32_t w = 0; w < out_subblock_w; w++) {
-                            noc_async_write_tile(out_tensor_tile_id, s, l1_read_addr);
-                            l1_read_addr += l1_read_addr_increment;
-
-                            out_tensor_tile_id += out_tensor_stride_w;
-                        }
-                        out_tensor_sb_row_start_tile_id += out_tensor_stride_h;
-                    }
+                   
+                    spmm::write_subblock_by_tile(
+                        out_tensor_sbw_start_tile_id,
+                        s, l1_read_addr,
+                        single_tile_size_bytes, out_subblock_h, out_subblock_w,
+                        out_tensor_stride_h, out_tensor_stride_w);
 
                     noc_async_write_barrier();
 

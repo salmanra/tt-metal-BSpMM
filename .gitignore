@@ -1,8 +1,8 @@
 # Rahmy's ignore files
 tt_metal/programming_examples/rahmy/block_spmm/*.zip
 tt_metal/programming_examples/rahmy/block_spmm/test_*/*
+tt_metal/programming_examples/rahmy/block_spmm/profile_case_*/*
 nohup.out
-profile_case*
 
 .cache
 .clangd

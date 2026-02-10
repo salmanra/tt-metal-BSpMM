@@ -57,20 +57,20 @@ void kernel_main(){
     /// END RUNTIME ARGS //////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
 
-    const auto ti = spmm::get_tile_info();
+    const auto tile_info = spmm::get_tile_info();
 
     const InterleavedAddrGenFast<in0_is_dram> s0 = {
-        .bank_base_address = in0_tensor_addr, .page_size = ti.in0_tile_size, .data_format = ti.in0_format};
+        .bank_base_address = in0_tensor_addr, .page_size = tile_info.in0_tile_size, .data_format = tile_info.in0_format};
     const InterleavedAddrGenFast<in1_is_dram> s1 = {
-        .bank_base_address = in1_tensor_addr, .page_size = ti.in1_tile_size, .data_format = ti.in1_format};
+        .bank_base_address = in1_tensor_addr, .page_size = tile_info.in1_tile_size, .data_format = tile_info.in1_format};
 
     // Load sparse indexing data
     uint32_t* col_indices = spmm::load_indexing_contiguous<col_indices_is_dram>(
         spmm::cb_id_col_indices, col_indices_addr,
-        ti.col_indices_tile_size, ti.col_indices_format, col_indices_num_tiles);
+        tile_info.col_indices_tile_size, tile_info.col_indices_format, col_indices_num_tiles);
     uint32_t* indptr = spmm::load_indexing_contiguous<indptr_is_dram>(
         spmm::cb_id_indptr, indptr_addr,
-        ti.indptr_tile_size, ti.indptr_format, indptr_num_tiles);
+        tile_info.indptr_tile_size, tile_info.indptr_format, indptr_num_tiles);
 
     ///////////////////////////////////////////////////////////////////////
     /// PROGRAM BODY //////////////////////////////////////////////////////
@@ -98,7 +98,7 @@ void kernel_main(){
                 spmm::read_block_by_tile(
                     in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
                     s0, l1_write_addr_in0,
-                    ti.in0_tile_size, in0_block_h, in0_block_w,
+                    tile_info.in0_tile_size, in0_block_h, in0_block_w,
                     in0_tensor_stride_h, in0_tensor_stride_w);
 
                 // Read in1 block (row selected by BSR col_indices)
@@ -107,7 +107,7 @@ void kernel_main(){
                 spmm::read_block_by_tile(
                     in1_tensor_start_tile_id + bsr_col_index * in1_block_stride,
                     s1, l1_write_addr_in1,
-                    ti.in1_tile_size, in1_block_h, in1_block_w,
+                    tile_info.in1_tile_size, in1_block_h, in1_block_w,
                     in1_tensor_stride_h, in1_tensor_stride_w);
 
                 noc_async_read_barrier();

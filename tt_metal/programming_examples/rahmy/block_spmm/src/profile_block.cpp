@@ -33,23 +33,34 @@ void profile_test(
     std::string& test_name,
     int num_iters = 10);
 
-int main(int argc, char** argv) {
+void capture_profile(
+    int host_code_num,
+    int test_num, 
+    ProfileCaseFunctionPtr *Registry, 
+    std::string registry_name, 
+    int num_iters = 10);
 
+int main(int argc, char** argv) {
     const int num_host_programs = sizeof(HostCodeRegistry) / sizeof(HostCodeRegistry[0]);
 
     const int test_id = 0;
     const int host_code_id = 0;
-
+     
+    bool run_all_profiles = argc > 1 ? std::string(argv[1]) == "all" : true;
+    bool run_all_host_codes = argc > 2 ? std::string(argv[2]) == "all" : true;
+    int test_num = 0;
+    int host_code_num = 0;
     // let's make the test registry and test index required arguments
     // and the host code index
-    // then let num_iters be optional
-    int test_num = argc > 1 ? std::stoi(argv[1]) : test_id;
-    int host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
-    int registry_number = argc > 3 ? std::stoi(argv[3]) : 0;
-    int num_iters = argc > 4 ? std::stoi(argv[3]) : 10;
+    if (!run_all_profiles) 
+        test_num = argc > 1 ? std::stoi(argv[1]) : test_id;
+    if (!run_all_host_codes)
+        host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
+    
+    int registry_number = argc > 3 ? std::stoi(argv[3]) : 2;
 
     ProfileCaseFunctionPtr *Registry = nullptr;
-    std::string registry_name;
+    std::string registry_name = "";
     switch (registry_number) {
         case 0:
             Registry = ProfileCaseRegistry;
@@ -64,7 +75,26 @@ int main(int argc, char** argv) {
             registry_name = "ProfileSuiteLargeSparseVersioning";
     }
 
+    int num_profiles = sizeof(Registry) / sizeof(Registry[0]);
+    if (run_all_profiles && !run_all_host_codes){
+        for (int i = 0; i < num_profiles; i++){
+            capture_profile(host_code_num, i, Registry, registry_name, 10);
+        }
+    }
+    else if (run_all_profiles && run_all_host_codes){
+        for (int i = 0; i < num_profiles; i++){
+            for (int j = 0; j < num_host_programs; j++){
+                capture_profile(j, i, Registry, registry_name, 10);
+            }
+        }
+    }
+    else {
+        capture_profile(host_code_num, test_num, Registry, registry_name, 10);
+    }
 
+}
+
+void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Registry, std::string registry_name, int num_iters){
     // get the host code and test case
     HostCodeFunctionPtr host_function = HostCodeRegistryProfiling[host_code_num].first;
     std::string host_function_name = HostCodeRegistryProfiling[host_code_num].second;
@@ -73,7 +103,7 @@ int main(int argc, char** argv) {
 
     // set up command strings to direct and capture the trace (and its csv file)
     char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/profiles/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_new/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
     std::string trace_file_location = trace_directory + test_name + ".tracy";
 
@@ -83,7 +113,7 @@ int main(int argc, char** argv) {
     n = sprintf(buf, "./capture-release -f -o %s &", trace_file_location.c_str());
     std::string capture_trace_command(buf, n);
 
-    n = sprintf(buf, "/home/user/tt-metal/profiles/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    n = sprintf(buf, "/home/user/tt-metal/profiles_new/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string csv_directory(buf);
     std::string csv_file_location = csv_directory + test_name + ".csv";
 
@@ -93,17 +123,6 @@ int main(int argc, char** argv) {
     n = sprintf(buf, "./csvexport-release %s > %s", trace_file_location.c_str(), csv_file_location.c_str());
     std::string csvexport_command(buf);
 
-    // print header
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Host code function: " << host_function_name << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Test case: " << test_name << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Num iters: " << num_iters << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Output file: " << trace_file_location << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-
     // run ./capture-release to allow the profiler to listen for the program
     std::system(mkdir_command.c_str());
     std::system(capture_trace_command.c_str());
@@ -112,12 +131,7 @@ int main(int argc, char** argv) {
     // // // run the program
     profile_test(host_function, a, b, test_name, num_iters);
 
-    // print footer
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Done! --- " << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
 
-    return 0;
 }
 
 void profile_test(

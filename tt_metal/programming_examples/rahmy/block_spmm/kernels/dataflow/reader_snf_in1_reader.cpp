@@ -83,7 +83,10 @@ void kernel_main(){
             output_idx_x = output_idx_x_start + iter_x;
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
-                cb_reserve_back(spmm::cb_id_in1, in1_block_num_tiles);
+                {
+                    DeviceZoneScopedN("Reader kernel waiting on CB space for in1");
+                    cb_reserve_back(spmm::cb_id_in1, in1_block_num_tiles);
+                }
 
                 uint32_t l1_write_addr_in1 = get_write_ptr(spmm::cb_id_in1);
 
@@ -97,7 +100,6 @@ void kernel_main(){
                     in1_tensor_stride_h, in1_tensor_stride_w);
 
                 noc_async_read_barrier();
-                DeviceZoneScopedN("in1 Block Pushed to CB");
                 cb_push_back(spmm::cb_id_in1, in1_block_num_tiles);
             }
         }

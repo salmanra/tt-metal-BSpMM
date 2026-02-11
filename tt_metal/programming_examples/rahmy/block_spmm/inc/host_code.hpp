@@ -170,8 +170,8 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
     {bsr_spmm_multicore_load_balanced<false, false>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<false, false>, "bsr_spmm_multicore_reuse_iteration"},
     // {bsr_spmm_multicore_reuse_many_blocks_per_core<false, false>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
-    {bsr_spmm_multicore_reuse<false, false>, "bsr_spmm_multicore_reuse"},
-    {bsr_spmm_multicore_reuse_naive<false, false>, "bsr_spmm_multicore_reuse_naive"},
+    // {bsr_spmm_multicore_reuse<false, false>, "bsr_spmm_multicore_reuse"},
+    // {bsr_spmm_multicore_reuse_naive<false, false>, "bsr_spmm_multicore_reuse_naive"},
     // {bsr_spmm_multicore_host_reuse_device_iter<false, false>, "bsr_spmm_multicore_host_reuse_device_iter"} // TEST
 };
 
@@ -180,9 +180,9 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryVerbose[] = {
     // {bsr_spmm_multicore_sparse_mcast<true, false>, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced<true, false>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<true, false>, "bsr_spmm_multicore_reuse_iteration"},
-    // {bsr_spmm_multicore_reuse_many_blocks_per_core<true, false>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
-    {bsr_spmm_multicore_reuse<true, false>, "bsr_spmm_multicore_reuse"},
-    {bsr_spmm_multicore_reuse_naive<true, false>, "bsr_spmm_multicore_reuse_naive"},
+    // // {bsr_spmm_multicore_reuse_many_blocks_per_core<true, false>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
+    // {bsr_spmm_multicore_reuse<true, false>, "bsr_spmm_multicore_reuse"},
+    // {bsr_spmm_multicore_reuse_naive<true, false>, "bsr_spmm_multicore_reuse_naive"},
     // {bsr_spmm_multicore_host_reuse_device_iter<true, false>, "bsr_spmm_multicore_host_reuse_device_iter"} // TEST
 };
 
@@ -192,8 +192,8 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryProfiling[] =
     {bsr_spmm_multicore_load_balanced<false, true>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<false, true>, "bsr_spmm_multicore_reuse_iteration"},
     // {bsr_spmm_multicore_reuse_many_blocks_per_core<false, true>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
-    {bsr_spmm_multicore_reuse<false, true>, "bsr_spmm_multicore_reuse"},
-    {bsr_spmm_multicore_reuse_naive<false, true>, "bsr_spmm_multicore_reuse_naive"},
+    // {bsr_spmm_multicore_reuse<false, true>, "bsr_spmm_multicore_reuse"},
+    // {bsr_spmm_multicore_reuse_naive<false, true>, "bsr_spmm_multicore_reuse_naive"},
     // {bsr_spmm_multicore_host_reuse_device_iter<false, true>, "bsr_spmm_multicore_host_reuse_device_iter"} // TEST
 };
 

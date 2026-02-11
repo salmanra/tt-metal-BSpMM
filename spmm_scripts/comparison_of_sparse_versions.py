@@ -14,9 +14,9 @@ os.makedirs(csv_dir, exist_ok=True)
 os.makedirs(png_output_dir, exist_ok=True)
 os.makedirs(json_output_dir, exist_ok=True)
 
-csv_dir_v6 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_snf"
-csv_dir_v5 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_load_balanced"
-csv_dir_v4 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_iteration"
+csv_dir_v6 = csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_snf"
+csv_dir_v5 = csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_load_balanced"
+csv_dir_v4 = csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_reuse_iteration"
 # csv_dir_v3 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_many_blocks_per_core"
 # csv_dir_v2 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse"
 # csv_dir_v1 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_naive"

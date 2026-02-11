@@ -65,9 +65,11 @@ void MAIN {
             uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;
             for (uint32_t input_block = 0; input_block < num_blocks; input_block++){
                 bool last_out = input_block == (num_blocks - 1);
-
-                cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
-                cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
+                {
+                    DeviceZoneScopedN("Compute kernel waiting on data from reader kernels.");
+                    cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
+                    cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
+                }
 
                 // DPRINT_MATH(DPRINT << "in0 block num tiles:  " << in0_block_num_tiles << ENDL());
                 // DPRINT_MATH(DPRINT << "in1 block num tiles:  " <<  in1_block_num_tiles << ENDL());
@@ -165,8 +167,6 @@ void MAIN {
                 // DPRINT_MATH(DPRINT << "done computing on one input block" << ENDL());
 
             }
-            // TODO: this scope breaks my rules. Is that okay?
-            DeviceZoneScopedN("Output Block Pushed to CB");
         }
     }
     DPRINT_MATH(DPRINT << "CK complete" << ENDL());

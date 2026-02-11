@@ -19,18 +19,52 @@ using namespace tt::tt_metal;
 using namespace bsr_host_code;
 using namespace profiling_suite;
 
+void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Registry, std::string registry_name){
+    // get the host code and test case
+    HostCodeFunctionPtr host_function = HostCodeRegistry[host_code_num].first;
+    std::string host_function_name = HostCodeRegistry[host_code_num].second;
+    auto [a, b, test_name] = Registry[test_num]();
+
+
+    // set up command strings to direct and capture the trace (and its csv file)
+    char buf[1000];
+    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_new/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    std::string trace_directory(buf, n);
+    std::string trace_file_location = trace_directory + test_name + ".tracy";
+
+    n = sprintf(buf, "/home/user/tt-metal/profiles_new/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    std::string csv_directory(buf);
+    std::string csv_file_location = csv_directory + test_name + ".csv";
+
+    n = sprintf(buf, "mkdir -p %s", csv_directory.c_str());
+    std::string csv_mkdir_command(buf, n);
+
+    n = sprintf(buf, "./csvexport-release %s > %s", trace_file_location.c_str(), csv_file_location.c_str());
+    std::string csvexport_command(buf);
+
+    std::system(csv_mkdir_command.c_str());
+    std::system(csvexport_command.c_str());
+}
+
 int main(int argc, char** argv) {
 
     const int num_host_programs = sizeof(HostCodeRegistry) / sizeof(HostCodeRegistry[0]);
 
     const int test_id = 0;
     const int host_code_id = 0;
-
+     
+    bool export_all_profiles = argc > 1 ? std::string(argv[1]) == "all" : true;
+    bool export_all_host_codes = argc > 2 ? std::string(argv[2]) == "all" : true;
+    int test_num = 0;
+    int host_code_num = 0;
     // let's make the test registry and test index required arguments
     // and the host code index
-    int test_num = argc > 1 ? std::stoi(argv[1]) : test_id;
-    int host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
-    int registry_number = argc > 3 ? std::stoi(argv[3]) : 0;
+    if (!export_all_profiles) 
+        test_num = argc > 1 ? std::stoi(argv[1]) : test_id;
+    if (!export_all_host_codes)
+        host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
+    
+    int registry_number = argc > 3 ? std::stoi(argv[3]) : 2;
 
     ProfileCaseFunctionPtr *Registry = nullptr;
     std::string registry_name = "";
@@ -48,40 +82,22 @@ int main(int argc, char** argv) {
             registry_name = "ProfileSuiteLargeSparseVersioning";
     }
 
-
-    // get the host code and test case
-    HostCodeFunctionPtr host_function = HostCodeRegistry[host_code_num].first;
-    std::string host_function_name = HostCodeRegistry[host_code_num].second;
-    auto [a, b, test_name] = Registry[test_num]();
-
-
-    // set up command strings to direct and capture the trace (and its csv file)
-    char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/profiles/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
-    std::string trace_directory(buf, n);
-    std::string trace_file_location = trace_directory + test_name + ".tracy";
-
-    n = sprintf(buf, "/home/user/tt-metal/profiles/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
-    std::string csv_directory(buf);
-    std::string csv_file_location = csv_directory + test_name + ".csv";
-
-    n = sprintf(buf, "mkdir -p %s", csv_directory.c_str());
-    std::string csv_mkdir_command(buf, n);
-
-    n = sprintf(buf, "./csvexport-release %s > %s", trace_file_location.c_str(), csv_file_location.c_str());
-    std::string csvexport_command(buf);
-
-    // print header
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Host code function: " << host_function_name << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Test case: " << test_name << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-    std::cout << "--- Output file: " << csv_file_location << std::endl;
-    std::cout << "---------------------------------------------------------------------------------" << std::endl;
-
-    std::system(csv_mkdir_command.c_str());
-    std::system(csvexport_command.c_str());
+    int num_profiles = sizeof(Registry) / sizeof(Registry[0]);
+    if (export_all_profiles && !export_all_host_codes){
+        for (int i = 0; i < num_profiles; i++){
+            export_to_csv(host_code_num, i, Registry, registry_name);
+        }
+    }
+    else if (export_all_profiles && export_all_host_codes){
+        for (int i = 0; i < num_profiles; i++){
+            for (int j = 0; j < num_host_programs; j++){
+                export_to_csv(j, i, Registry, registry_name);
+            }
+        }
+    }
+    else {
+        export_to_csv(host_code_num, test_num, Registry, registry_name);
+    }
 
     return 0;
 }

@@ -1,14 +1,20 @@
 #!/usr/bin/bash
 
 function capture_all_one_host {
-    num_tests=12 # size of ProfileCaseRegistry
+    num_tests=12 # size of ProfileLargeSparseRegistry
     host_program_index=0
+    registry=2
     if [[ "$#" -eq 1 ]]; then
         host_program_index=$1
     fi
     
+    if [[ "$#" -eq 2 ]]; then
+        host_program_index=$1
+        registry=$2
+    fi
+    
     for ((test_case = 0 ; test_case < num_tests ; test_case++)); do
-        capture_trace $test_case $host_program_index 2
+        capture_trace $test_case $host_program_index $registry
     done
 }
 

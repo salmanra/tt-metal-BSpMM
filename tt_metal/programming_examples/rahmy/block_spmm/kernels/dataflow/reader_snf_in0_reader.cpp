@@ -155,8 +155,10 @@ void kernel_main(){
             output_idx_x = output_idx_x_start + iter_x;
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
-                cb_reserve_back(spmm::cb_id_in0, in0_block_num_tiles);
-
+                {
+                    DeviceZoneScopedN("Reader waiting on CB space for in0");
+                    cb_reserve_back(spmm::cb_id_in0, in0_block_num_tiles);
+                }
                 uint32_t l1_write_addr_in0 = get_write_ptr(spmm::cb_id_in0);
                 uint32_t l1_write_addr_in0_start = l1_write_addr_in0;  // Save start address for forwarding
 
@@ -174,9 +176,6 @@ void kernel_main(){
                     noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
                     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
                     noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
-                }
-                {
-                    DeviceZoneScopedN("in0 Block Pushed to CB");
                 }
                 cb_push_back(spmm::cb_id_in0, in0_block_num_tiles);
 
@@ -213,7 +212,6 @@ void kernel_main(){
                 out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
             }
             out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
-            DeviceZoneScopedN("Output block written to DRAM");
             }
         }
         out_tensor_x_coord_offset = 0;

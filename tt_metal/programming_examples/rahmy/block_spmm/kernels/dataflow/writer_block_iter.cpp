@@ -89,7 +89,6 @@ void kernel_main() {
                 out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
             }
             out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
-            DeviceZoneScopedN("Output block written to DRAM");
         }
         // hop to next output row and reset output column offset
         out_tensor_start_tile_id += RtNt;

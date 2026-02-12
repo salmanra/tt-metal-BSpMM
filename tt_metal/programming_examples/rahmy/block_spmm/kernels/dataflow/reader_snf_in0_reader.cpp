@@ -191,27 +191,28 @@ void kernel_main(){
             }
 
             if constexpr (is_output_writer){
-            uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
-            for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
-                uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
-                for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
-                    cb_wait_front(spmm::cb_id_out, out_subblock_num_tiles);
-                    uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
+                uint32_t out_block_num_tiles = in0_block_h * in1_block_w;
+                uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
 
-                    spmm::write_subblock_by_tile(
-                        out_tensor_sbw_start_tile_id,
-                        out_s, l1_read_addr,
-                        output_tile_size, out_subblock_h, out_subblock_w,
-                        out_tensor_stride_h, out_tensor_stride_w);
+                cb_wait_front(spmm::cb_id_out, out_block_num_tiles);
+                uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
 
-                    noc_async_write_barrier();
-
-                    cb_pop_front(spmm::cb_id_out, out_subblock_num_tiles);
-                    out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
+                for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
+                    uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
+                    for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
+                        spmm::write_subblock_by_tile(
+                            out_tensor_sbw_start_tile_id,
+                            out_s, l1_read_addr,
+                            output_tile_size, out_subblock_h, out_subblock_w,
+                            out_tensor_stride_h, out_tensor_stride_w);
+                        out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
+                    }
+                    out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
                 }
-                out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
-            }
-            out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
+
+                noc_async_write_barrier();
+                cb_pop_front(spmm::cb_id_out, out_block_num_tiles);
+                out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
             }
         }
         out_tensor_x_coord_offset = 0;

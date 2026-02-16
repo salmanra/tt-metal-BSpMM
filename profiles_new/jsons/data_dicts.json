@@ -1,0 +1,116 @@
+[
+    {
+        "diagonal_large_R128_C128": {
+            "Program Loop total ns": 29375063
+        },
+        "diagonal_large_R32_C32": {
+            "Program Loop total ns": 26479706
+        },
+        "diagonal_large_R64_C64": {
+            "Program Loop total ns": 27786618
+        },
+        "column_large_R128_C128": {
+            "Program Loop total ns": 29243222
+        },
+        "column_large_R32_C32": {
+            "Program Loop total ns": 26620779
+        },
+        "column_large_R64_C64": {
+            "Program Loop total ns": 27919519
+        },
+        "random_large_R128_C128": {
+            "Program Loop total ns": 357813124
+        },
+        "random_large_R32_C32": {
+            "Program Loop total ns": 1447845903
+        },
+        "random_large_R64_C64": {
+            "Program Loop total ns": 738514798
+        },
+        "row_large_R128_C128": {
+            "Program Loop total ns": 40950899
+        },
+        "row_large_R32_C32": {
+            "Program Loop total ns": 46244355
+        },
+        "row_large_R64_C64": {
+            "Program Loop total ns": 46072200
+        }
+    },
+    {
+        "diagonal_large_R128_C128": {
+            "Program Loop total ns": 15996043
+        },
+        "diagonal_large_R32_C32": {
+            "Program Loop total ns": 27169558
+        },
+        "diagonal_large_R64_C64": {
+            "Program Loop total ns": 17825716
+        },
+        "column_large_R128_C128": {
+            "Program Loop total ns": 15723654
+        },
+        "column_large_R32_C32": {
+            "Program Loop total ns": 26834185
+        },
+        "column_large_R64_C64": {
+            "Program Loop total ns": 17633846
+        },
+        "random_large_R128_C128": {
+            "Program Loop total ns": 193267643
+        },
+        "random_large_R32_C32": {
+            "Program Loop total ns": 1007115158
+        },
+        "random_large_R64_C64": {
+            "Program Loop total ns": 545168439
+        },
+        "row_large_R128_C128": {
+            "Program Loop total ns": 27679419
+        },
+        "row_large_R32_C32": {
+            "Program Loop total ns": 42682754
+        },
+        "row_large_R64_C64": {
+            "Program Loop total ns": 32739790
+        }
+    },
+    {
+        "diagonal_large_R128_C128": {
+            "Program Loop total ns": 16093433
+        },
+        "diagonal_large_R32_C32": {
+            "Program Loop total ns": 14846926
+        },
+        "diagonal_large_R64_C64": {
+            "Program Loop total ns": 14361474
+        },
+        "column_large_R128_C128": {
+            "Program Loop total ns": 15954316
+        },
+        "column_large_R32_C32": {
+            "Program Loop total ns": 15323853
+        },
+        "column_large_R64_C64": {
+            "Program Loop total ns": 14213684
+        },
+        "random_large_R128_C128": {
+            "Program Loop total ns": 202038289
+        },
+        "random_large_R32_C32": {
+            "Program Loop total ns": 605969177
+        },
+        "random_large_R64_C64": {
+            "Program Loop total ns": 354286215
+        },
+        "row_large_R128_C128": {
+            "Program Loop total ns": 28083013
+        },
+        "row_large_R32_C32": {
+            "Program Loop total ns": 43372688
+        },
+        "row_large_R64_C64": {
+            "Program Loop total ns": 32582320
+        }
+    }
+]

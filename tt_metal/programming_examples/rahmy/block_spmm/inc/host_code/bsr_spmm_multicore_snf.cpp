@@ -57,13 +57,13 @@ void bsr_spmm_multicore_snf(
 
     tt::DataFormat indexing_data_format = tt::DataFormat::Int32;
     uint32_t indexing_data_single_tile_size = detail::TileSize(indexing_data_format);
-    uint32_t dram_buffer_indptr_size =
-        sizeof(int) * (M / R + 1);
+    uint32_t dram_buffer_indptr_size = // can't we use the size of tiles and avoid the data format debacle?
+        sizeof(int) * a.indptr.size();
     // Round up to tile size
     dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
 
     uint32_t dram_buffer_col_indices_size =
-        sizeof(int) * nnz_blocks;
+        sizeof(int) * a.indices.size();
     // Round up to tile size
     dram_buffer_col_indices_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_col_indices_size) / (indexing_data_single_tile_size));
 
@@ -220,8 +220,8 @@ void bsr_spmm_multicore_snf(
     auto dst_dram_buffer = MakeBuffer(device, dram_buffer_dst_total_size, single_tile_size);
     auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
     auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
-    auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, dram_buffer_col_indices_size);
-    auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, dram_buffer_indptr_size);
+    auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, indexing_data_single_tile_size);
+    auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, indexing_data_single_tile_size);
 
     if constexpr (verbose) {
         log_info(tt::LogVerif, " -- DRAM Buffer Sizings in tiles --");
@@ -298,12 +298,12 @@ void bsr_spmm_multicore_snf(
     // Use full buffer size as page_size so noc_async_read can transfer the entire buffer
     CircularBufferConfig cb_column_indices_config = CircularBufferConfig(
         dram_buffer_col_indices_size, {{column_indices_cb_index, tt::DataFormat::Int32}})
-                                                .set_page_size(column_indices_cb_index, dram_buffer_col_indices_size);
+                                                .set_page_size(column_indices_cb_index, indexing_data_single_tile_size);
     auto cb_column_indices = tt_metal::CreateCircularBuffer(program, all_cores, cb_column_indices_config);
 
     auto indptr_cb_index = CBIndex::c_3; // 3
     // Use full buffer size as page_size so noc_async_read can transfer the entire buffer
-    auto cb_indptr = MakeCircularBuffer(program, all_cores, indptr_cb_index, dram_buffer_indptr_size, dram_buffer_indptr_size, indexing_data_format);
+    auto cb_indptr = MakeCircularBuffer(program, all_cores, indptr_cb_index, dram_buffer_indptr_size, indexing_data_single_tile_size, indexing_data_format);
 
     
     /* 
@@ -525,18 +525,18 @@ void bsr_spmm_multicore_snf(
                 .compile_args = in0_receiver_compile_time_args});
     }
 
-    // Find Perms. No changes from LB?
+    // Find Perms. No changes from LB
     uint32_t num_empty_rows = (M / R) - nnz_rows;
     std::vector<int> row_diffs;
-
-    for (int i = 0; i < folded_bsr_matrix_indices.size() - 1; i++){
-        row_diffs.push_back(folded_bsr_matrix_indices[i+1] - folded_bsr_matrix_indices[i]);
+    for (int i = 0; i < a.indptr.size() - 1; i++){
+        row_diffs.push_back(a.indptr[i+1] - a.indptr[i]);
     }
     std::vector<int> perm(row_diffs.size());
     sortingPermutation(row_diffs, perm);
 
     // remove last num_empty_rows elements from perm
     perm.resize(nnz_rows);
+
 
     // 1. initialize a vector for each row of cores
     std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
@@ -655,10 +655,17 @@ void bsr_spmm_multicore_snf(
         }
     }
 
+    // Pad indexing data to match tile-aligned DRAM buffer sizes
+    std::vector<uint32_t> padded_col_indices(dram_buffer_col_indices_size / sizeof(uint32_t), 0);
+    std::copy(a.indices.begin(), a.indices.end(), padded_col_indices.begin());
+
+    std::vector<uint32_t> padded_indptr(dram_buffer_indptr_size / sizeof(uint32_t), 0);
+    std::copy(a.indptr.begin(), a.indptr.end(), padded_indptr.begin());
+
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
-    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
-    EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, padded_col_indices.data(), false);
+    EnqueueWriteBuffer(cq, indptr_dram_buffer, padded_indptr.data(), true);
 
     if constexpr (is_profiling){
         int num_iters = 10; // TODO: there should be smarter way to set the number of iters. we'll see

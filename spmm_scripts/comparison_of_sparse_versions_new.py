@@ -5,16 +5,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import json
 
-
-
-profiles_dir = "/home/user/tt-metal/profiles/"
+profiles_dir = "/home/user/tt-metal/profiles_new/"
 csv_dir = profiles_dir + "csvs/"
 json_output_dir = profiles_dir + "jsons/"
 png_output_dir = profiles_dir + "pngs/"
 os.makedirs(csv_dir, exist_ok=True)
 os.makedirs(png_output_dir, exist_ok=True)
 os.makedirs(json_output_dir, exist_ok=True)
-
 
 csv_dir_v6 = csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_snf"
 csv_dir_v5 = csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_load_balanced"
@@ -26,10 +23,23 @@ csv_dir_v4 = csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_reu
 csv_data_dirs = [csv_dir_v6, csv_dir_v5, csv_dir_v4]
 csv_data_labels = [os.path.basename(d) for d in csv_data_dirs]
 
-
 test_cases = sorted(
     set.union(*(
         {f for f in os.listdir(d) if f.endswith(".csv")}
+        for d in csv_data_dirs
+    ))
+)
+
+sparse_logs = sorted(
+    set.union(*(
+        {f for f in os.listdir(d) if f.endswith("sparse.log")}
+        for d in csv_data_dirs
+    ))
+)
+
+dense_logs = sorted(
+    set.union(*(
+        {f for f in os.listdir(d) if f.endswith("dense.log")}
         for d in csv_data_dirs
     ))
 )
@@ -49,6 +59,24 @@ test_cases_short = [name.replace("fill_", "") for name in test_cases_short]
 #       add {,} some other pairs if you feel it now
 #       add Zone dict to csv file name dict
 
+def parse_log_metadata(filepath):
+    """Parse matrix metadata from a pretty_print log file."""
+    result = {}
+    try:
+        with open(filepath, 'r') as f:
+            for line in f:
+                if '(H x W)' in line:
+                    parts = line.split(':')[1].strip().split(' x ')
+                    result['H'], result['W'] = int(parts[0]), int(parts[1])
+                elif '(R x C)' in line:
+                    parts = line.split(':')[1].strip().split(' x ')
+                    result['R'], result['C'] = int(parts[0]), int(parts[1])
+                elif 'Number of blocks' in line:
+                    result['nblocks'] = int(line.split(':')[1].strip())
+    except FileNotFoundError:
+        pass
+    return result
+
 v6_data = {}
 v5_data = {}
 v4_data = {}
@@ -59,8 +87,26 @@ for i, csv_data_dir in enumerate(csv_data_dirs):
     # csv_file_names = sorted(os.listdir(csv_data_dir))
     # csv_file_names = os.listdir(csv_data_dir)
     csv_files = [os.path.join(csv_data_dir, f) for f in test_case_files]
+    sparse_log_files = [os.path.join(csv_data_dir, f) for f in sparse_logs]
+    dense_log_files = [os.path.join(csv_data_dir, f) for f in dense_logs]
     for j, csv_file in enumerate(csv_files):
         df = pd.read_csv(csv_file)
+        sparse_log = sparse_logs[j]
+        dense_log = dense_logs[j]
+
+        sparse_meta = parse_log_metadata(sparse_log_files[j])
+        dense_meta = parse_log_metadata(dense_log_files[j])
+
+        M = sparse_meta['H']
+        K = sparse_meta['W']
+        N = dense_meta['W']
+        R = sparse_meta['R']
+        C = sparse_meta['C']
+        nblocks = sparse_meta['nblocks']
+
+        nnz_elts = nblocks * R * C
+        total_ops = nnz_elts * N * 2 # 1 add and 1 mul for each nz elt for each column of the dense matrix
+
         # print(f'We are in the {j}th csv file of the {i}th host')
         # print(df[df["name"] == "Program Loop"].size) # what do you mean not all of these dfs have a Program Loop?
         # print(df.shape)
@@ -69,20 +115,19 @@ for i, csv_data_dir in enumerate(csv_data_dirs):
         if df[df["name"] == "Device program Loop"].size == 0:
             zones_data["Program Loop total ns"] = np.nan
         else:
-            zones_data["Program Loop total ns"] = int(df.loc[df["name"] == "Device program Loop", "total_ns"].array[0])
+            nanosec = int(df.loc[df["name"] == "Device program Loop", "total_ns"].array[0])
+            zones_data["Program Loop total seconds"] = nanosec / 1e9 
 
         # print(type(df[df["name"] == "Program Loop"]))
         # print(type(df[df["name"] == "Program Loop"]["total_ns"]))
         # total_ns = df.get("total_ns")["Program Loop"]
         # zones_data["Program Loop total ns"] = total_ns
-
+        zones_data["FLOP count"] = total_ops
         data_dicts[i][test_cases_short[j]] = zones_data
 
 # pprint.pp(data_dicts)
 with open(json_output_dir + "data_dicts.json", "w") as f:
     json.dump(data_dicts, f, indent=4)
-# Now we can make a simple bar chart? And we could write this to a more easily readable JSON file.
-#
 
 # Extract keys (csv file names) and values ("Program Loop total ns") for each dict
 group_labels = list(data_dicts[0].keys())
@@ -92,7 +137,7 @@ n_dicts = len(data_dicts)
 # Prepare data for plotting
 bar_values = []
 for d in data_dicts:
-    bar_values.append([d[k]["Program Loop total ns"] for k in group_labels])
+    bar_values.append([d[k]["FLOP count"] / d[k]["Program Loop total seconds"] for k in group_labels])
 
 bar_values = np.array(bar_values)  # shape: (n_dicts, n_groups)
 # print(bar_values)

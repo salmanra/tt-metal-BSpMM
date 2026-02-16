@@ -65,12 +65,13 @@ void kernel_main(){
         .bank_base_address = in1_tensor_addr, .page_size = tile_info.in1_tile_size, .data_format = tile_info.in1_format};
 
     // Load sparse indexing data
-    uint32_t* col_indices = spmm::load_indexing_contiguous<col_indices_is_dram>(
+    uint32_t* col_indices = spmm::load_indexing_tiled<col_indices_is_dram>(
         spmm::cb_id_col_indices, col_indices_addr,
         tile_info.col_indices_tile_size, tile_info.col_indices_format, col_indices_num_tiles);
-    uint32_t* indptr = spmm::load_indexing_contiguous<indptr_is_dram>(
+    uint32_t* indptr = spmm::load_indexing_tiled<indptr_is_dram>(
         spmm::cb_id_indptr, indptr_addr,
         tile_info.indptr_tile_size, tile_info.indptr_format, indptr_num_tiles);
+    DPRINT_DATA0(DPRINT << "read indexing data" << ENDL());
 
     ///////////////////////////////////////////////////////////////////////
     /// PROGRAM BODY //////////////////////////////////////////////////////
@@ -89,6 +90,9 @@ void kernel_main(){
                 {
                     DeviceZoneScopedN("Reader kernel waiting on space in CB for in0 and in1.");
                     cb_reserve_back(spmm::cb_id_in0, in0_block_num_tiles);
+                }
+                {
+                    DeviceZoneScopedN("Reader kernel waiting on space in CB for in1.");
                     cb_reserve_back(spmm::cb_id_in1, in1_block_num_tiles);
                 }
 
@@ -96,21 +100,27 @@ void kernel_main(){
                 uint32_t l1_write_addr_in1 = get_write_ptr(spmm::cb_id_in1);
 
                 // Read in0 block
-                uint32_t num_blocks_in = reduction_iter - block_row_start;
-                spmm::read_block_by_tile(
-                    in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
-                    s0, l1_write_addr_in0,
-                    tile_info.in0_tile_size, in0_block_h, in0_block_w,
-                    in0_tensor_stride_h, in0_tensor_stride_w);
-
+                {
+                    DeviceZoneScopedN("RK reading in0.");
+                    uint32_t num_blocks_in = reduction_iter - block_row_start;
+                    spmm::read_block_by_tile(
+                        in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
+                        s0, l1_write_addr_in0,
+                        tile_info.in0_tile_size, in0_block_h, in0_block_w,
+                        in0_tensor_stride_h, in0_tensor_stride_w);
+                        
+                }
                 // Read in1 block (row selected by BSR col_indices)
-                uint32_t bsr_col_index = col_indices[reduction_iter];
-                uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
-                spmm::read_block_by_tile(
-                    in1_tensor_start_tile_id + bsr_col_index * in1_block_stride,
-                    s1, l1_write_addr_in1,
-                    tile_info.in1_tile_size, in1_block_h, in1_block_w,
-                    in1_tensor_stride_h, in1_tensor_stride_w);
+                {
+                    DeviceZoneScopedN("RK reading in1.");
+                    uint32_t bsr_col_index = col_indices[reduction_iter];
+                    uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
+                    spmm::read_block_by_tile(
+                        in1_tensor_start_tile_id + bsr_col_index * in1_block_stride,
+                        s1, l1_write_addr_in1,
+                        tile_info.in1_tile_size, in1_block_h, in1_block_w,
+                        in1_tensor_stride_h, in1_tensor_stride_w);
+                }
 
                 noc_async_read_barrier();
 
@@ -119,6 +129,8 @@ void kernel_main(){
             }
         }
     }
-    cb_pop_front(spmm::cb_id_col_indices, 1);
-    cb_pop_front(spmm::cb_id_indptr, 1);
+    cb_pop_front(spmm::cb_id_col_indices, col_indices_num_tiles);
+    cb_pop_front(spmm::cb_id_indptr, indptr_num_tiles);
+    DPRINT_DATA0(DPRINT << "in0 kernel complete" << ENDL());
+
 }

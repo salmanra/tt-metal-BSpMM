@@ -44,6 +44,19 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
 
     std::system(csv_mkdir_command.c_str());
     std::system(csvexport_command.c_str());
+
+    // create two output ostreams to two new files in the same dir as the CSV file,
+    //  of the same name as the csv file, append {_sparse, _dense} and swap the extension to .log 
+    // pipe the output of a.pretty_print() to the sparse file
+    // pipe the output of b.pretty_print() to the sparse file
+    std::string sparse_log_file = csv_directory + test_name + "_sparse.log";
+    std::ofstream os_sparse(sparse_log_file);
+
+    std::string dense_log_file = csv_directory + test_name + "_dense.log";
+    std::ofstream os_dense(dense_log_file);
+
+    a.pretty_print(os_sparse);
+    b.pretty_print(os_dense);
 }
 
 int main(int argc, char** argv) {

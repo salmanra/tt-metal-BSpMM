@@ -92,6 +92,7 @@ namespace bsr_test_suite {
     template<uint32_t, uint32_t, uint32_t>
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string>  profile_case_sparse_fill_random_large();
 
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_triangular();
     
 
     using TestFunctionPtr = std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> (*)();
@@ -172,6 +173,7 @@ namespace bsr_test_suite {
         // test_enormous, // 71
         // test_many_iters_y, // 72
         // test_many_iters_both, // 73
+        test_triangular, // 71
     };
 
     static std::uniform_real_distribution<> dis(-1000.0, 1000.0);
@@ -1015,6 +1017,28 @@ namespace bsr_test_suite {
         bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
         dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_basic");
+    }
+
+     
+    std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_triangular() {
+        // matmul params setup
+        uint32_t M = 8192;
+        uint32_t N = 8192;
+        uint32_t K = 8192;
+        // block params setup
+        uint32_t R = 32;
+        uint32_t C = 32;
+        uint32_t nblocks = 0; // unused in tril constructor
+        uint32_t block_matrix_height = M / R;
+
+        // all nz on one row
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_TRIL, RAND);
+
+        dense_matrix<float> dense(K, N, RAND);
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_triangular");
     }
 
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string> test_2_blocks() {

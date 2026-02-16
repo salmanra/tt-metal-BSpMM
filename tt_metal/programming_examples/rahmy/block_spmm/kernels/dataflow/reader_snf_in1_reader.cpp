@@ -65,8 +65,8 @@ void kernel_main(){
         .bank_base_address = in1_tensor_addr, .page_size = ti.in1_tile_size, .data_format = ti.in1_format};
 
     // Wait for indexing data loaded by in0_reader on the other RISC
-    uint32_t* indptr = spmm::wait_for_indexing(spmm::cb_id_indptr);
-    uint32_t* col_indices = spmm::wait_for_indexing(spmm::cb_id_col_indices);
+    uint32_t* indptr = spmm::wait_for_indexing(spmm::cb_id_indptr, indptr_num_tiles);
+    uint32_t* col_indices = spmm::wait_for_indexing(spmm::cb_id_col_indices, col_indices_num_tiles);
 
     ///////////////////////////////////////////////////////////////////////
     /// PROGRAM BODY //////////////////////////////////////////////////////
@@ -83,23 +83,23 @@ void kernel_main(){
             output_idx_x = output_idx_x_start + iter_x;
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
+                cb_reserve_back(spmm::cb_id_in1, in1_block_num_tiles);
                 {
-                    DeviceZoneScopedN("Reader kernel waiting on CB space for in1");
-                    cb_reserve_back(spmm::cb_id_in1, in1_block_num_tiles);
+                    DeviceZoneScopedN("Reading dense block of in1 from DRAM");
+                    uint32_t l1_write_addr_in1 = get_write_ptr(spmm::cb_id_in1);
+
+                    // Read in1 block (row selected by BSR col_indices)
+                    uint32_t bsr_col_index = col_indices[reduction_iter];
+                    uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
+                    spmm::read_block_by_tile(
+                        in1_tensor_start_tile_id + bsr_col_index * in1_block_stride,
+                        s1, l1_write_addr_in1,
+                        ti.in1_tile_size, in1_block_h, in1_block_w,
+                        in1_tensor_stride_h, in1_tensor_stride_w);
                 }
 
-                uint32_t l1_write_addr_in1 = get_write_ptr(spmm::cb_id_in1);
-
-                // Read in1 block (row selected by BSR col_indices)
-                uint32_t bsr_col_index = col_indices[reduction_iter];
-                uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
-                spmm::read_block_by_tile(
-                    in1_tensor_start_tile_id + bsr_col_index * in1_block_stride,
-                    s1, l1_write_addr_in1,
-                    ti.in1_tile_size, in1_block_h, in1_block_w,
-                    in1_tensor_stride_h, in1_tensor_stride_w);
-
                 noc_async_read_barrier();
+
                 cb_push_back(spmm::cb_id_in1, in1_block_num_tiles);
             }
         }

@@ -67,6 +67,7 @@ void kernel_main() {
     uint32_t out_tensor_x_coord_offset = 0;
     for (uint32_t y = 0; y < num_iters_y; y++){
         for (uint32_t x = 0; x < num_iters_x; x++){
+            DeviceZoneScopedN("Writing Block back to DRAM");
             uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_x_coord_offset;
             for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
                 uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;

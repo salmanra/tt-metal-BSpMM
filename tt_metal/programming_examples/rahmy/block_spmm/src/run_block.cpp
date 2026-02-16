@@ -3,6 +3,7 @@
 #include <string>
 #include "../inc/include_me.hpp"
 #include "../inc/test_suite.hpp"
+#include "../inc/profiling_suite.hpp"
 #include "../inc/host_code.hpp"
 
 using namespace tt::constants;
@@ -12,6 +13,7 @@ using namespace tt::tt_metal;
 
 using namespace bsr_test_suite;
 using namespace bsr_host_code;
+using namespace profiling_suite;
 
 #define ESC "\033["
 #define BLACK_BKG "106"
@@ -78,7 +80,7 @@ void run_test(
     dense_matrix<bfloat16> output = tmp.bfloat16_cast();
 
 
-    a.pretty_print();
+    // a.pretty_print();
 
 
     // tilize input data
@@ -103,21 +105,23 @@ void run_test(
     CloseDevice(device);
 }
 
-void run_full_test(int host_code_num, int test_num){
-    auto [a, b, test_name] = TestRegistry[test_num]();
-    run_test(HostCodeRegistry[host_code_num].first, a, b, test_name);
+void run_full_test(int host_code_num, int test_num, TestFunctionPtr* registry){
+    auto [a, b, test_name] = registry[test_num]();
+    run_test(HostCodeRegistryVerbose[host_code_num].first, a, b, test_name);
 
     console_printf("--------------------------------------------------------\n");
     console_printf("--- Single Test results --------------------------------\n");
     console_printf("--------------------------------------------------------\n");
     console_printf("--- Host Code function: ");
-    console_printf(HostCodeRegistry[host_code_num].second.c_str());
+    console_printf(HostCodeRegistryVerbose[host_code_num].second.c_str());
     console_printf("\n");
     console_printf("--------------------------------------------------------\n");
 
-    console_printf("Test #");
+    console_printf("--- Test #");
     console_printf(std::to_string(test_num).c_str());
-    console_printf(" ");
+    console_printf(", ");
+    console_printf(test_name.c_str());
+    console_printf(" ---\n");
     console_printf("--------------------------------------------------------\n");
     console_printf("--- COMPLETE!!! ----------------------------------------\n");
     console_printf("--------------------------------------------------------\n");
@@ -132,11 +136,30 @@ int main(int argc, char** argv) {
     if (argc > 2) {
         host_code_index = std::stoi(argv[2]);
     }
+
+    // Registry selection (mirrors profile_block.cpp)
+    int registry_number = argc > 3 ? std::stoi(argv[3]) : -1;
+    TestFunctionPtr *registry = nullptr;
+    switch (registry_number) {
+        case 0:
+            registry = ProfileCaseRegistry;
+            break;
+        case 1:
+            registry = ProfileDenseAblationRegistry;
+            break;
+        case 2:
+            registry = ProfileLargeSparseRegistry;
+            break;
+        default:
+            registry = TestRegistry;
+            break;
+    }
+
     test_num = argc > 1 ? std::stoi(argv[1]) : -1;
     if (test_num == -1) {
         console_printf("No test specified. Returning.\n");
         return 0;
     }
-    run_full_test(host_code_index, test_num);
+    run_full_test(host_code_index, test_num, registry);
     console_printf("Leaving the test program\n");
 }

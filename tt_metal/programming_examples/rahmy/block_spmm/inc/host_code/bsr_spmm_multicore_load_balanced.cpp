@@ -27,9 +27,20 @@ void bsr_spmm_multicore_load_balanced(
 
     tt::DataFormat indexing_data_format = tt::DataFormat::Int32;
     uint32_t indexing_data_single_tile_size = detail::TileSize(indexing_data_format);
-    uint32_t num_tiles_for_col_indices = (indexing_data_single_tile_size - 1 + sizeof(int) * nnz_blocks) / indexing_data_single_tile_size;
-    uint32_t num_tiles_for_indptr = (indexing_data_single_tile_size - 1 + sizeof(int) * (M / R + 1)) / indexing_data_single_tile_size;
-    uint32_t num_tiles_indexing = num_tiles_for_col_indices + num_tiles_for_indptr;
+
+    uint32_t dram_buffer_col_indices_size =
+        sizeof(int) * a.indices.size();
+    // Round up to tile size
+    dram_buffer_col_indices_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_col_indices_size) / (indexing_data_single_tile_size));
+
+    uint32_t dram_buffer_indptr_size =
+        sizeof(int) * a.indptr.size();
+    // Round up to tile size
+    dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
+
+    uint32_t num_tiles_for_col_indices = dram_buffer_col_indices_size / indexing_data_single_tile_size;
+    uint32_t num_tiles_for_indptr = dram_buffer_indptr_size / indexing_data_single_tile_size;
+    uint32_t num_tiles_for_indexing = num_tiles_for_col_indices + num_tiles_for_indptr;
 
     // Core Grid detection
     auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
@@ -37,8 +48,6 @@ void bsr_spmm_multicore_load_balanced(
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
     uint32_t num_cores_total = num_cores_x * num_cores_y;
-
-
 
     // Per-core tiling and blocking args
     uint32_t Mt = M / TILE_HEIGHT;
@@ -50,7 +59,7 @@ void bsr_spmm_multicore_load_balanced(
 
     uint32_t in0_block_h = Rt;
     uint32_t in0_block_w = Ct;
-    uint32_t in1_block_w = get_Npc_from_BSR_block_size(Nt, in0_block_h, in0_block_w, num_cores_x, num_tiles_indexing);
+    uint32_t in1_block_w = get_Npc_from_BSR_block_size(Nt, in0_block_h, in0_block_w, num_cores_x, num_tiles_for_indexing);
 
     TT_ASSERT(Mt % in0_block_h == 0);
     TT_ASSERT(Nt % in1_block_w == 0);
@@ -142,22 +151,26 @@ void bsr_spmm_multicore_load_balanced(
     uint32_t dram_buffer_B_size =
         single_tile_size * Nt * Kt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 
-    uint32_t dram_buffer_col_indices_size =
-        sizeof(int) * nnz_blocks;
-    // Round up to tile size
-    dram_buffer_col_indices_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_col_indices_size) / (indexing_data_single_tile_size));
-
-    uint32_t dram_buffer_indptr_size =
-        sizeof(int) * (M / R + 1);
-    // Round up to tile size
-    dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
 
     auto dst_dram_buffer = MakeBuffer(device, dram_buffer_dst_total_size, single_tile_size);
     auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
     auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
-    auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, dram_buffer_col_indices_size);
-    auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, dram_buffer_indptr_size);
+    auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, indexing_data_single_tile_size);
+    auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, indexing_data_single_tile_size);
 
+
+    if constexpr (verbose) {
+        log_info(tt::LogVerif, " -- DRAM Buffer Sizings in tiles --");
+        log_info(
+            tt::LogVerif,
+            " -- dst_dram={} -- sparse_matrix_data={} -- dense_matrix={} -- col_indices={} -- indptr={} -- idx_data_single_tile_size={}",
+            dram_buffer_dst_total_size / single_tile_size,
+            dram_buffer_A_size / single_tile_size,
+            dram_buffer_B_size / single_tile_size,
+            dram_buffer_col_indices_size / indexing_data_single_tile_size,
+            dram_buffer_indptr_size / indexing_data_single_tile_size,
+            indexing_data_single_tile_size);
+    }
 
     if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Metalium Block and subblock sizing --");
@@ -222,11 +235,11 @@ void bsr_spmm_multicore_load_balanced(
     uint32_t column_indices_cb_index = CBIndex::c_2;  // 2
     CircularBufferConfig cb_column_indices_config = CircularBufferConfig(
         dram_buffer_col_indices_size, {{column_indices_cb_index, tt::DataFormat::Int32}})
-                                                .set_page_size(column_indices_cb_index, dram_buffer_col_indices_size);
+                                                .set_page_size(column_indices_cb_index, indexing_data_single_tile_size);
     auto cb_column_indices = tt_metal::CreateCircularBuffer(program, all_cores, cb_column_indices_config);
 
     auto indptr_cb_index = CBIndex::c_3; // 3
-    auto cb_indptr = MakeCircularBuffer(program, all_cores, indptr_cb_index, dram_buffer_indptr_size, dram_buffer_indptr_size, indexing_data_format);
+    auto cb_indptr = MakeCircularBuffer(program, all_cores, indptr_cb_index, dram_buffer_indptr_size, indexing_data_single_tile_size, indexing_data_format);
 
 
     // Compiletime arguments
@@ -400,20 +413,10 @@ void bsr_spmm_multicore_load_balanced(
 
     // Scanning for load-balancing
     // 0. Sort block rows by number of nonzero blocks, get perm vector
-    // TODO: get folded indices first, then sort and perm
     uint32_t num_empty_rows = (M / R) - nnz_rows;
     std::vector<int> row_diffs;
-    // for (int i = 0; i < a.indptr.size() - 1; i++){
-    //     row_diffs.push_back(a.indptr[i+1] - a.indptr[i]);
-    // }
-    // std::vector<int> perm(row_diffs.size());
-    // sortingPermutation(row_diffs, perm);
-
-    // // remove last num_empty_rows elements from perm
-    // perm.resize(nnz_rows);
-
-    for (int i = 0; i < folded_bsr_matrix_indices.size() - 1; i++){
-        row_diffs.push_back(folded_bsr_matrix_indices[i+1] - folded_bsr_matrix_indices[i]);
+    for (int i = 0; i < a.indptr.size() - 1; i++){
+        row_diffs.push_back(a.indptr[i+1] - a.indptr[i]);
     }
     std::vector<int> perm(row_diffs.size());
     sortingPermutation(row_diffs, perm);
@@ -422,6 +425,13 @@ void bsr_spmm_multicore_load_balanced(
     perm.resize(nnz_rows);
 
     if constexpr (verbose){
+        std::cout << "folded bsr matrix indices: ";
+        for (int i = 0; i < folded_bsr_matrix_indices.size(); i++){
+            std::cout << folded_bsr_matrix_indices[i] << ' ';
+        }
+        std::cout << std::endl;
+        std::cout << std::endl;
+
         std::cout << "row diffs: ";
         for (int i = 0; i < row_diffs.size(); i++){
             std::cout << row_diffs[i] << ' ';
@@ -503,7 +513,7 @@ void bsr_spmm_multicore_load_balanced(
             }
 
             if (verbose && core_idx_x == 0 && core_idx_y == 7) {
-                a.pretty_print();
+                // a.pretty_print();
                 log_info(tt::LogVerif, " -- Reader Args --");
                 log_info(tt::LogVerif, "reader_arg[0] (num_iters_x) = {}", reader_runtime_args[0]);
                 log_info(tt::LogVerif, "reader_arg[1] (num_iters_y) = {}",  reader_runtime_args[1]);
@@ -534,11 +544,18 @@ void bsr_spmm_multicore_load_balanced(
         }
     }
 
+    // Pad indexing data to match tile-aligned DRAM buffer sizes
+    std::vector<uint32_t> padded_col_indices(dram_buffer_col_indices_size / sizeof(uint32_t), 0);
+    std::copy(a.indices.begin(), a.indices.end(), padded_col_indices.begin());
+
+    std::vector<uint32_t> padded_indptr(dram_buffer_indptr_size / sizeof(uint32_t), 0);
+    std::copy(a.indptr.begin(), a.indptr.end(), padded_indptr.begin());
+
     // EnqueueWriteBuffers
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
-    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
-    EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, padded_col_indices.data(), false);
+    EnqueueWriteBuffer(cq, indptr_dram_buffer, padded_indptr.data(), true);
 
     if constexpr (is_profiling){
         int num_iters = 10; // TODO: there should be smarter way to set the number of iters. we'll see

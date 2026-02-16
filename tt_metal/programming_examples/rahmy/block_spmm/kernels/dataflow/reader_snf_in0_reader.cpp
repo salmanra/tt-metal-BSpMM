@@ -114,16 +114,16 @@ void kernel_main(){
     uint32_t* col_indices;
     uint32_t* indptr;
     if constexpr (is_output_writer){
-        col_indices = spmm::load_indexing_contiguous<col_indices_is_dram>(
+        col_indices = spmm::load_indexing_tiled<col_indices_is_dram>(
             spmm::cb_id_col_indices, col_indices_addr,
             tile_info.col_indices_tile_size, tile_info.col_indices_format, col_indices_num_tiles);
-        indptr = spmm::load_indexing_contiguous<indptr_is_dram>(
+        indptr = spmm::load_indexing_tiled<indptr_is_dram>(
             spmm::cb_id_indptr, indptr_addr,
             tile_info.indptr_tile_size, tile_info.indptr_format, indptr_num_tiles);
     }
     else {
-        indptr = spmm::wait_for_indexing(spmm::cb_id_indptr);
-        col_indices = spmm::wait_for_indexing(spmm::cb_id_col_indices);
+        indptr = spmm::wait_for_indexing(spmm::cb_id_indptr, indptr_num_tiles);
+        col_indices = spmm::wait_for_indexing(spmm::cb_id_col_indices, col_indices_num_tiles);
     }
 
     // Writer setup
@@ -155,15 +155,13 @@ void kernel_main(){
             output_idx_x = output_idx_x_start + iter_x;
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
-                {
-                    DeviceZoneScopedN("Reader waiting on CB space for in0");
-                    cb_reserve_back(spmm::cb_id_in0, in0_block_num_tiles);
-                }
+                cb_reserve_back(spmm::cb_id_in0, in0_block_num_tiles);
                 uint32_t l1_write_addr_in0 = get_write_ptr(spmm::cb_id_in0);
                 uint32_t l1_write_addr_in0_start = l1_write_addr_in0;  // Save start address for forwarding
 
                 if constexpr (is_injector_core){
                     // Read in0 block from DRAM
+                    DeviceZoneScopedN("Reading nonzero block from in0 from DRAM");
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
                     spmm::read_block_by_tile(
                         in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
@@ -173,6 +171,7 @@ void kernel_main(){
                     noc_async_read_barrier();
                 }
                 else {
+                    DeviceZoneScopedN("Waiting on nonzero block from in0 from neighbor");
                     noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
                     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
                     noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
@@ -195,21 +194,25 @@ void kernel_main(){
                 uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
 
                 cb_wait_front(spmm::cb_id_out, out_block_num_tiles);
-                uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
+                {
 
-                for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
-                    uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
-                    for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
-                        spmm::write_subblock_by_tile(
-                            out_tensor_sbw_start_tile_id,
-                            out_s, l1_read_addr,
-                            output_tile_size, out_subblock_h, out_subblock_w,
-                            out_tensor_stride_h, out_tensor_stride_w);
-                        out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
+                    DeviceZoneScopedN("Writing Block back to DRAM");
+                    uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
+                    
+                    for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
+                        uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
+                        for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
+                            spmm::write_subblock_by_tile(
+                                out_tensor_sbw_start_tile_id,
+                                out_s, l1_read_addr,
+                                output_tile_size, out_subblock_h, out_subblock_w,
+                                out_tensor_stride_h, out_tensor_stride_w);
+                                out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
+                        }
+                        out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
                     }
-                    out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
+                        
                 }
-
                 noc_async_write_barrier();
                 cb_pop_front(spmm::cb_id_out, out_block_num_tiles);
                 out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
@@ -217,8 +220,8 @@ void kernel_main(){
         }
         out_tensor_x_coord_offset = 0;
     }
-    cb_pop_front(spmm::cb_id_col_indices, 1);
-    cb_pop_front(spmm::cb_id_indptr, 1);
+    cb_pop_front(spmm::cb_id_col_indices, col_indices_num_tiles);
+    cb_pop_front(spmm::cb_id_indptr, indptr_num_tiles);
     DPRINT_DATA0(DPRINT << "in0 kernel complete" << ENDL());
 
 }

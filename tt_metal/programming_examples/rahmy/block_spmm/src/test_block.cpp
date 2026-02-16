@@ -3,6 +3,7 @@
 #include <string>
 #include "../inc/include_me.hpp"
 #include "../inc/test_suite.hpp"
+#include "../inc/profiling_suite.hpp"
 #include "../inc/host_code.hpp"
 
 using namespace tt::constants;
@@ -12,6 +13,7 @@ using namespace tt::tt_metal;
 
 using namespace bsr_test_suite;
 using namespace bsr_host_code;
+using namespace profiling_suite;
 
 #define ESC "\033["
 #define BLACK_BKG "106"
@@ -83,8 +85,8 @@ TestResult run_test(
     dense_matrix<float> tmp(M, N, 0.0f);
     dense_matrix<bfloat16> output = tmp.bfloat16_cast();
 
-
-    // a.pretty_print();
+    
+    a.pretty_print();
     // console_printf("Running golden calculation!\n");
 
     // run sequential spmm
@@ -254,7 +256,7 @@ bool print_and_assess_results(std::vector<TestResult> &test_results, std::string
     return all_pass;
 }
 
-void test_suite(uint32_t host_code_function_index = 0){
+void test_suite(uint32_t host_code_function_index, TestFunctionPtr* registry, size_t num_tests){
     /*
     1. Reserve a vector of <test_name, PCC> pairs.
     2. call run_test(test_func(), emit_output) for each test, adding to the vector
@@ -262,7 +264,6 @@ void test_suite(uint32_t host_code_function_index = 0){
     */
 
     auto [host_function_ptr, host_function_name] = HostCodeRegistry[host_code_function_index];
-    size_t num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
     // 1. Print Header
     //
     console_printf("---------------------------------------------------------------------------------\n");
@@ -286,7 +287,7 @@ void test_suite(uint32_t host_code_function_index = 0){
             spacing = " ";
         if (i >= 100)
             spacing = "";
-        add_and_run_test(host_function_ptr, TestRegistry[i], test_results);
+        add_and_run_test(host_function_ptr, registry[i], test_results);
         auto res = test_results[i];
         bool pass = res.pearson >= 0.99;
         count_pass += pass;
@@ -324,8 +325,8 @@ void test_suite(uint32_t host_code_function_index = 0){
     console_printf("---------------------------------------------------------------------------------\n");
 }
 
-void run_verbose_test(int host_code_num, int test_num){
-    auto [a, b, test_name] = TestRegistry[test_num]();
+void run_verbose_test(int host_code_num, int test_num, TestFunctionPtr* registry){
+    auto [a, b, test_name] = registry[test_num]();
     TestResult res = run_test(HostCodeRegistryVerbose[host_code_num].first, a, b, test_name, true);
 
     console_printf("--------------------------------------------------------\n");
@@ -371,6 +372,29 @@ int main(int argc, char** argv) {
         host_code_index = std::stoi(argv[2]);
     }
 
+    // Registry selection (mirrors profile_block.cpp)
+    int registry_number = argc > 3 ? std::stoi(argv[3]) : -1;
+    TestFunctionPtr *registry = nullptr;
+    size_t num_tests = 0;
+    switch (registry_number) {
+        case 0:
+            registry = ProfileCaseRegistry;
+            num_tests = sizeof(ProfileCaseRegistry) / sizeof(ProfileCaseRegistry[0]);
+            break;
+        case 1:
+            registry = ProfileDenseAblationRegistry;
+            num_tests = sizeof(ProfileDenseAblationRegistry) / sizeof(ProfileDenseAblationRegistry[0]);
+            break;
+        case 2:
+            registry = ProfileLargeSparseRegistry;
+            num_tests = sizeof(ProfileLargeSparseRegistry) / sizeof(ProfileLargeSparseRegistry[0]);
+            break;
+        default:
+            registry = TestRegistry;
+            num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
+            break;
+    }
+
     if (test_all) {
         //
         // Redirect TT-Metal output to some file.
@@ -396,7 +420,7 @@ int main(int argc, char** argv) {
         ::close(log_fd); // not needed after dup2
         //
         //
-        test_suite(host_code_index);
+        test_suite(host_code_index, registry, num_tests);
     }
     else {
         //
@@ -406,7 +430,7 @@ int main(int argc, char** argv) {
             console_printf("No test specified. Returning.\n");
             return 0;
         }
-        run_verbose_test(host_code_index, test_num);
+        run_verbose_test(host_code_index, test_num, registry);
         console_printf("Leaving the test program\n");
 
     }

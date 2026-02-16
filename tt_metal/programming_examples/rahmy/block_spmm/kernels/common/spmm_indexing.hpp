@@ -62,8 +62,8 @@ inline uint32_t* load_indexing_tiled(
 
 // Wait for indexing data that was loaded by another RISC on the same core.
 // Returns pointer to the data in the CB.
-inline uint32_t* wait_for_indexing(uint32_t cb_id) {
-    cb_wait_front(cb_id, 1);
+inline uint32_t* wait_for_indexing(uint32_t cb_id, uint32_t num_tiles = 1) {
+    cb_wait_front(cb_id, num_tiles);
     return reinterpret_cast<uint32_t*>(get_read_ptr(cb_id));
 }
 

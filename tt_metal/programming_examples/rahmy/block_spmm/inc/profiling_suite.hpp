@@ -82,6 +82,8 @@ namespace profiling_suite {
     ProfileCaseReturnType profile_case_sparse_fill_row_large();
     template <uint32_t, uint32_t, uint32_t>
     ProfileCaseReturnType profile_case_sparse_fill_random_large();
+    template <uint32_t, uint32_t>
+    ProfileCaseReturnType profile_case_sparse_fill_lower_triangular_large();
 
     ProfileCaseReturnType profile_case_sanity_check();
 
@@ -131,6 +133,9 @@ namespace profiling_suite {
         profile_case_sparse_fill_random_large<32, 32, 25>, // 9
         profile_case_sparse_fill_random_large<64, 64, 25>, // 10
         profile_case_sparse_fill_random_large<128, 128, 25>, // 11
+        profile_case_sparse_fill_lower_triangular_large<32, 32>, // 12
+        profile_case_sparse_fill_lower_triangular_large<64, 64>, // 13
+        profile_case_sparse_fill_lower_triangular_large<128, 128>, // 14
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -163,6 +168,31 @@ namespace profiling_suite {
     ////////////////////////////////////////////////////////////////////////////
     ///////// Large Cases //////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
+    template <uint32_t R = 32, uint32_t C = 32>
+    inline ProfileCaseReturnType profile_case_sparse_fill_lower_triangular_large(){
+        // matmul params setup
+        uint32_t M = 8192;
+        uint32_t N = 8192;
+        uint32_t K = 8192;
+        // block params setup
+        uint32_t block_matrix_height = M / R;
+
+        uint32_t nblocks = 0; // unused in triangular constructor 
+
+        // nz blocks fill the diagonal
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_TRIL, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+
+
+        bsr_matrix<bfloat16> bsr_bfloat16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bfloat16 = dense.bfloat16_cast();
+
+        char buf[100];
+        size_t n = sprintf(buf, "profile_case_sparse_fill_lower_triangular_large%i_C%d", R, C);
+        std::string test_name(buf, n);
+        return std::make_tuple(bsr_bfloat16, dense_bfloat16, test_name);
+    }
+
     template <uint32_t R = 32, uint32_t C = 32, uint32_t DensityPercent = 25>
     inline ProfileCaseReturnType profile_case_sparse_diagonal_large() {
         // matmul params setup

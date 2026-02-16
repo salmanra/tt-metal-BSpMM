@@ -54,6 +54,7 @@ void MAIN {
     ///////////////////////////////////////////////////////////////////////
     mm_init(tt::CBIndex::c_0, tt::CBIndex::c_1, tt::CBIndex::c_16);
 
+    DPRINT_MATH(DPRINT << "CK got all args" << ENDL());
 
     for (uint32_t iter_y = 0; iter_y < num_iters_y; iter_y++){
         uint32_t num_blocks = row_sizes[iter_y];
@@ -64,12 +65,10 @@ void MAIN {
 
             uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;
             for (uint32_t input_block = 0; input_block < num_blocks; input_block++){
+                DeviceZoneScopedN("CK using input blocks");
                 bool last_out = input_block == (num_blocks - 1);
-                {
-                    DeviceZoneScopedN("Compute kernel waiting on data from reader kernels.");
-                    cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
-                    cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
-                }
+                cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
+                cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
 
                 // DPRINT_MATH(DPRINT << "in0 block num tiles:  " << in0_block_num_tiles << ENDL());
                 // DPRINT_MATH(DPRINT << "in1 block num tiles:  " <<  in1_block_num_tiles << ENDL());

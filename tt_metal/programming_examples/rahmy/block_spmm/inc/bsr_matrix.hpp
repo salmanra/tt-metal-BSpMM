@@ -17,6 +17,7 @@
 #define FILL_ROW 1
 #define FILL_COL 2
 #define FILL_DIAG 3 // will require the size to be perfect
+#define FILL_TRIL 4 // block lower triangular (requires square block grid)
 #define TILE_SIZE 32
 #define RAND_DENOM 2 << 10 // trying to control the range...
 #define SIGNED_RAND_MAX RAND_MAX / 2
@@ -123,15 +124,19 @@ public:
         return dense_matrix<bfloat16>(bfloat16_data, H, W);
     }
 
-    void print() {
-        std::cout << "Dense Matrix:" << std::endl;
+    void print(std::ostream& os = std::cout) {
+        os << "Dense Matrix:" << std::endl;
         for (size_t i = 0; i < H; ++i) {
             for (size_t j = 0; j < W; ++j) {
-                std::cout << data[i * W + j] << " ";
+                os << data[i * W + j] << " ";
             }
-            std::cout << std::endl;
+            os << std::endl;
         }
+    }
 
+    void pretty_print(std::ostream& os = std::cout) {
+        os << "Dense Matrix:" << std::endl;
+        os << "Size (H x W): " << H << " x " << W << std::endl;
     }
 
     dense_matrix<T> gemm(const dense_matrix<T> &other) {
@@ -291,7 +296,7 @@ public:
                     float temp = ((k / C) == (k % C)) ? 1.0 : 0.0;
                     T val = static_cast<T>(temp);
                     switch (content) {
-                        case RAND: 
+                        case RAND:
                             data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
                             break;
                         case UNIFORM:
@@ -303,6 +308,36 @@ public:
                         case ARANGE:
                             data.push_back(static_cast<T>(k));
                             break;
+                    }
+                }
+            }
+
+        } else if (fill_type == FILL_TRIL) {
+            assert(blocked_matrix_height == blocked_matrix_width);
+            nblocks = blocked_matrix_height * (blocked_matrix_height + 1) / 2;
+            indices.reserve(nblocks);
+            data.reserve(nblocks * R * C);
+            for (size_t i = 0; i < blocked_matrix_height; i++) {
+                for (size_t j = 0; j <= i; j++) {
+                    indptr[i + 1]++;
+                    indices.push_back(j);
+                    for (size_t k = 0; k < R * C; k++) {
+                        float temp = ((k / C) == (k % C)) ? 1.0 : 0.0;
+                        T val = static_cast<T>(temp);
+                        switch (content) {
+                            case RAND:
+                                data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
+                                break;
+                            case UNIFORM:
+                                data.push_back(static_cast<T>(1.0));
+                                break;
+                            case ID:
+                                data.push_back(val);
+                                break;
+                            case ARANGE:
+                                data.push_back(static_cast<T>(k));
+                                break;
+                        }
                     }
                 }
             }
@@ -357,6 +392,20 @@ public:
                         for (size_t k = 0; k < R * C; k++) {
                             data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
                         }
+                    }
+                }
+            }
+        } else if (fill_type == FILL_TRIL) {
+            assert(blocked_matrix_height == blocked_matrix_width);
+            nblocks = blocked_matrix_height * (blocked_matrix_height + 1) / 2;
+            indices.reserve(nblocks);
+            data.reserve(nblocks * R * C);
+            for (size_t i = 0; i < blocked_matrix_height; i++) {
+                for (size_t j = 0; j <= i; j++) {
+                    indptr[i + 1]++;
+                    indices.push_back(j);
+                    for (size_t k = 0; k < R * C; k++) {
+                        data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
                     }
                 }
             }
@@ -833,44 +882,44 @@ public:
         return output;
     }
 
-    void print() {
-        std::cout << "BSR Matrix:" << std::endl;
-        std::cout << "Size: " << H << " x " << W << std::endl;
-        std::cout << "Block Size: " << R << " x " << C << std::endl;
-        std::cout << "Number of blocks: " << nblocks << std::endl;
-        std::cout << "Indptr:" << std::endl;
+    void print(std::ostream& os = std::cout) {
+        os << "BSR Matrix:" << std::endl;
+        os << "Size: " << H << " x " << W << std::endl;
+        os << "Block Size: " << R << " x " << C << std::endl;
+        os << "Number of blocks: " << nblocks << std::endl;
+        os << "Indptr:" << std::endl;
         for (size_t i = 0; i < indptr.size(); ++i) {
-            std::cout << indptr[i] << " ";
+            os << indptr[i] << " ";
         }
-        std::cout << std::endl;
-        std::cout << "Indices:" << std::endl;
+        os << std::endl;
+        os << "Indices:" << std::endl;
         for (size_t i = 0; i < indices.size(); ++i) {
-            std::cout << indices[i] << " ";
+            os << indices[i] << " ";
         }
-        std::cout << std::endl;
-        std::cout << "Data:" << std::endl;
+        os << std::endl;
+        os << "Data:" << std::endl;
         for (size_t i = 0; i < data.size(); ++i) {
-            std::cout << data[i] << " ";
+            os << data[i] << " ";
         }
-        std::cout << std::endl;
+        os << std::endl;
     }
 
-    void pretty_print() {
-        std::cout << "BSR Matrix:" << std::endl;
-        std::cout << "Size: " << H << " x " << W << std::endl;
-        std::cout << "Block Size: " << R << " x " << C << std::endl;
-        std::cout << "Number of blocks: " << nblocks << std::endl;
-        std::cout << "Indptr:" << std::endl;
+    void pretty_print(std::ostream& os = std::cout) {
+        os << "BSR Matrix:" << std::endl;
+        os << "Size (H x W): " << H << " x " << W << std::endl;
+        os << "Block Size (R x C): " << R << " x " << C << std::endl;
+        os << "Number of blocks: " << nblocks << std::endl;
+        os << "Indptr:" << std::endl;
         for (size_t i = 0; i < indptr.size(); ++i) {
-            std::cout << indptr[i] << " ";
+            os << indptr[i] << " ";
         }
-        std::cout << std::endl;
-        std::cout << "Indices:" << std::endl;
+        os << std::endl;
+        os << "Indices:" << std::endl;
         for (size_t i = 0; i < indices.size(); ++i) {
-            std::cout << indices[i] << " ";
+            os << indices[i] << " ";
         }
-        std::cout << std::endl;
-        std::cout << "Data:" << std::endl;
+        os << std::endl;
+        os << "Data:" << std::endl;
         for (size_t i = 0; i < H / R; i++) {
             for (size_t j = 0; j < W / C; j++) {
                 char nz = '_';
@@ -880,11 +929,11 @@ public:
                         break;
                     }
                 }
-                std::cout << nz << " ";
+                os << nz << " ";
             }
-            std::cout << std::endl;
+            os << std::endl;
         }
-        std::cout << std::endl;
+        os << std::endl;
     }
 
 };

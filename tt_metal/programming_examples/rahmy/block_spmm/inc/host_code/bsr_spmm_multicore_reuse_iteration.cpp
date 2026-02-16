@@ -188,21 +188,33 @@ void bsr_spmm_multicore_reuse_iteration(
         single_tile_size * Nt * Kt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
 
     uint32_t dram_buffer_col_indices_size =
-        sizeof(indexing_data_format) * nnz_blocks;
+        sizeof(int) * a.indices.size();
     // Round up to tile size
     dram_buffer_col_indices_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_col_indices_size) / (indexing_data_single_tile_size));
 
     uint32_t dram_buffer_indptr_size =
-        sizeof(indexing_data_format) * (M / R + 1);
+        sizeof(int) * a.indptr.size();
     // Round up to tile size
     dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
 
     auto dst_dram_buffer = MakeBuffer(device, dram_buffer_dst_total_size, single_tile_size);
     auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
     auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
-    auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, dram_buffer_col_indices_size);
-    auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, dram_buffer_indptr_size);
+    auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, indexing_data_single_tile_size);
+    auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, indexing_data_single_tile_size);
 
+    if constexpr (verbose) {
+        log_info(tt::LogVerif, " -- DRAM Buffer Sizings in tiles --");
+        log_info(
+            tt::LogVerif,
+            " -- dst_dram={} -- sparse_matrix_data={} -- dense_matrix={} -- col_indices={} -- indptr={} -- idx_data_single_tile_size={}",
+            dram_buffer_dst_total_size / single_tile_size,
+            dram_buffer_A_size / single_tile_size,
+            dram_buffer_B_size / single_tile_size,
+            dram_buffer_col_indices_size / indexing_data_single_tile_size,
+            dram_buffer_indptr_size / indexing_data_single_tile_size,
+            indexing_data_single_tile_size);
+    }
 
     if constexpr (verbose) {
         log_info(tt::LogVerif, " -- Metalium Block and subblock sizing --");
@@ -267,11 +279,11 @@ void bsr_spmm_multicore_reuse_iteration(
     uint32_t column_indices_cb_index = CBIndex::c_2;  // 2
     CircularBufferConfig cb_column_indices_config = CircularBufferConfig(
         dram_buffer_col_indices_size, {{column_indices_cb_index, tt::DataFormat::Int32}})
-                                                .set_page_size(column_indices_cb_index, dram_buffer_col_indices_size);
+                                                .set_page_size(column_indices_cb_index, indexing_data_single_tile_size);
     auto cb_column_indices = tt_metal::CreateCircularBuffer(program, all_cores, cb_column_indices_config);
 
     auto indptr_cb_index = CBIndex::c_3; // 3
-    auto cb_indptr = MakeCircularBuffer(program, all_cores, indptr_cb_index, dram_buffer_indptr_size, dram_buffer_indptr_size, indexing_data_format);
+    auto cb_indptr = MakeCircularBuffer(program, all_cores, indptr_cb_index, dram_buffer_indptr_size, indexing_data_single_tile_size, indexing_data_format);
 
 
     // Compiletime arguments
@@ -478,7 +490,7 @@ void bsr_spmm_multicore_reuse_iteration(
         tt_metal::SetRuntimeArgs(program, writer_id, core, writer_runtime_args);
 
         if (verbose && core_idx_x == 0 && core_idx_y == 0) {
-            a.pretty_print();
+            // a.pretty_print(); 
             log_info(tt::LogVerif, " -- Reader Args --");
             log_info(tt::LogVerif, "reader_arg[0] (num_iters_x) = {}", reader_runtime_args[0]);
             log_info(tt::LogVerif, "reader_arg[1] (num_iters_y) = {}",  reader_runtime_args[1]);
@@ -503,13 +515,28 @@ void bsr_spmm_multicore_reuse_iteration(
         }
     }
 
+    // Pad indexing data to match tile-aligned DRAM buffer sizes
+    std::vector<uint32_t> padded_col_indices(dram_buffer_col_indices_size / sizeof(uint32_t), 0);
+    std::copy(a.indices.begin(), a.indices.end(), padded_col_indices.begin());
+
+    std::vector<uint32_t> padded_indptr(dram_buffer_indptr_size / sizeof(uint32_t), 0);
+    std::copy(a.indptr.begin(), a.indptr.end(), padded_indptr.begin());
+
     // EnqueueWriteBuffers
+    if constexpr (verbose)
+        log_info(tt::LogVerif, " -- Initiating src0 H2D transfer --");
     EnqueueWriteBuffer(cq, src0_dram_buffer, a.data.data(), false);
+    if constexpr (verbose)
+        log_info(tt::LogVerif, " -- Initiating src1 H2D transfer --");
     EnqueueWriteBuffer(cq, src1_dram_buffer, b.data.data(), false);
-    EnqueueWriteBuffer(cq, column_indices_dram_buffer, a.indices.data(), false);
-    EnqueueWriteBuffer(cq, indptr_dram_buffer, a.indptr.data(), true);
+    if constexpr (verbose)
+        log_info(tt::LogVerif, " -- Initiating indptr H2D transfer --");
+    EnqueueWriteBuffer(cq, indptr_dram_buffer, padded_indptr.data(), false);
+    if constexpr (verbose)
+        log_info(tt::LogVerif, " -- Initiating col_indices H2D transfer --");
+    EnqueueWriteBuffer(cq, column_indices_dram_buffer, padded_col_indices.data(), false);
     // EnqueueProgram
-        if constexpr (is_profiling){
+    if constexpr (is_profiling){
         int num_iters = 10; // TODO: there should be smarter way to set the number of iters. we'll see
         EnqueueProgram(cq, program, true);
         ZoneScopedNC("Device program Loop", tracy::Color::Aquamarine);
@@ -518,6 +545,8 @@ void bsr_spmm_multicore_reuse_iteration(
         }
     }
     else {
+        if constexpr (verbose)
+            log_info(tt::LogVerif, " -- Enqueueing program --");
         EnqueueProgram(cq, program, false);
     }
 

@@ -68,7 +68,7 @@ void MAIN {
                 bool last_out = input_block == (num_blocks - 1);
                 cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
                 cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
-                DeviceZoneScopedN("CK using input blocks");
+                UNPACK(DeviceZoneScopedN("CK using input blocks"));
 
                 // DPRINT_MATH(DPRINT << "in0 block num tiles:  " << in0_block_num_tiles << ENDL());
                 // DPRINT_MATH(DPRINT << "in1 block num tiles:  " <<  in1_block_num_tiles << ENDL());

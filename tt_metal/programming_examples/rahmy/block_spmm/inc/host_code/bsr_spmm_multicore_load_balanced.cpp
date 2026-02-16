@@ -382,13 +382,16 @@ void bsr_spmm_multicore_load_balanced(
     }
 
     // Create Kernels
+    bool transpose_NoCs = true;
+    auto noc_riscv_0 = transpose_NoCs ? NOC::RISCV_1_default : NOC::RISCV_0_default;
+    auto noc_riscv_1 = transpose_NoCs ? NOC::RISCV_0_default : NOC::RISCV_1_default;
     auto reader_id = tt_metal::CreateKernel(
         program,
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_block_iter.cpp",
         all_cores,
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_0,
-            .noc = NOC::RISCV_0_default,
+            .noc = noc_riscv_0,
             .compile_args = reader_compile_time_args});
 
     auto writer_id = tt_metal::CreateKernel(
@@ -397,7 +400,7 @@ void bsr_spmm_multicore_load_balanced(
         all_cores,
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_1,
-            .noc = NOC::RISCV_1_default,
+            .noc = noc_riscv_1,
             .compile_args = writer_compile_time_args});
 
     // Create compute kernel

@@ -5,17 +5,21 @@ import matplotlib.pyplot as plt
 import numpy as np
 import json
 
-profiles_dir = "/home/user/tt-metal/profiles_new/"
-csv_dir = profiles_dir + "csvs/"
-json_output_dir = profiles_dir + "jsons/"
-png_output_dir = profiles_dir + "pngs/"
-os.makedirs(csv_dir, exist_ok=True)
+snf_profiles_dir = "/home/user/tt-metal/profiles_noc_flipped/"
+naive_profiles_dir = "/home/user/tt-metal/profiles_new/"
+snf_csv_dir = snf_profiles_dir + "csvs/"
+naive_csv_dir = naive_profiles_dir + "csvs/"
+
+json_output_dir = snf_profiles_dir + "jsons/"
+png_output_dir = snf_profiles_dir + "pngs/"
+os.makedirs(snf_csv_dir, exist_ok=True)
+os.makedirs(naive_csv_dir, exist_ok=True)
 os.makedirs(png_output_dir, exist_ok=True)
 os.makedirs(json_output_dir, exist_ok=True)
 
-csv_dir_v6 = csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_snf"
-csv_dir_v5 = csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_load_balanced"
-csv_dir_v4 = csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_reuse_iteration"
+csv_dir_v6 = snf_csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_snf"
+csv_dir_v5 = naive_csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_load_balanced"
+csv_dir_v4 = naive_csv_dir + "ProfileSuiteLargeSparseVersioning/bsr_spmm_multicore_reuse_iteration"
 # csv_dir_v3 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_many_blocks_per_core"
 # csv_dir_v2 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse"
 # csv_dir_v1 = csv_dir + "ProfileSuiteSparseVersioning/bsr_spmm_multicore_reuse_naive"
@@ -184,4 +188,4 @@ ax.legend()
 plt.tight_layout()
 plt.show()
 
-plt.savefig(png_output_dir + "fig2_tflops.png")
+plt.savefig(png_output_dir + "fig2_tflops_opt_nocs.png")

@@ -1,63 +1,63 @@
 [
     {
         "diagonal_large_R128_C128": {
-            "Program Loop total seconds": 0.028867986,
+            "Program Loop total seconds": 0.015778696,
             "FLOP count": 0.017179869184
         },
         "diagonal_large_R32_C32": {
-            "Program Loop total seconds": 0.02682366,
+            "Program Loop total seconds": 0.025674747,
             "FLOP count": 0.004294967296
         },
         "diagonal_large_R64_C64": {
-            "Program Loop total seconds": 0.028433849,
+            "Program Loop total seconds": 0.017802418,
             "FLOP count": 0.008589934592
         },
         "column_large_R128_C128": {
-            "Program Loop total seconds": 0.029057577,
+            "Program Loop total seconds": 0.016122784,
             "FLOP count": 0.017179869184
         },
         "column_large_R32_C32": {
-            "Program Loop total seconds": 0.026368624,
+            "Program Loop total seconds": 0.025582239,
             "FLOP count": 0.004294967296
         },
         "column_large_R64_C64": {
-            "Program Loop total seconds": 0.02839429,
+            "Program Loop total seconds": 0.017964905,
             "FLOP count": 0.008589934592
         },
         "lower_triangular_large128_C128": {
-            "Program Loop total seconds": 0.714759363,
+            "Program Loop total seconds": 0.330626507,
             "FLOP count": 0.55834574848
         },
         "lower_triangular_large32_C32": {
-            "Program Loop total seconds": 2.895834711,
+            "Program Loop total seconds": 1.948591056,
             "FLOP count": 0.551903297536
         },
         "lower_triangular_large64_C64": {
-            "Program Loop total seconds": 1.444212932,
+            "Program Loop total seconds": 0.547267453,
             "FLOP count": 0.554050781184
         },
         "random_large_R128_C128": {
-            "Program Loop total seconds": 0.352559522,
+            "Program Loop total seconds": 0.168858086,
             "FLOP count": 0.274877906944
         },
         "random_large_R32_C32": {
-            "Program Loop total seconds": 1.444433972,
+            "Program Loop total seconds": 0.974124338,
             "FLOP count": 0.274877906944
         },
         "random_large_R64_C64": {
-            "Program Loop total seconds": 0.733569321,
+            "Program Loop total seconds": 0.519963935,
             "FLOP count": 0.274877906944
         },
         "row_large_R128_C128": {
-            "Program Loop total seconds": 0.040679363,
+            "Program Loop total seconds": 0.028180007,
             "FLOP count": 0.017179869184
         },
         "row_large_R32_C32": {
-            "Program Loop total seconds": 0.046948792,
+            "Program Loop total seconds": 0.04236985,
             "FLOP count": 0.004294967296
         },
         "row_large_R64_C64": {
-            "Program Loop total seconds": 0.045751707,
+            "Program Loop total seconds": 0.033064124,
             "FLOP count": 0.008589934592
         }
     },

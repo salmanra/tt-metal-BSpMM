@@ -481,6 +481,9 @@ void bsr_spmm_multicore_snf(
        3. in0 injector cores in0 reader w/ injector comp args
        4. in0 receiver cores in0 reader w/ receiver comp args
     */
+    bool transpose_NoCs = true;
+    auto noc_riscv_0 = transpose_NoCs ? NOC::RISCV_1_default : NOC::RISCV_0_default;
+    auto noc_riscv_1 = transpose_NoCs ? NOC::RISCV_0_default : NOC::RISCV_1_default;
 
     auto compute_id = tt_metal::CreateKernel(
         program,
@@ -497,7 +500,7 @@ void bsr_spmm_multicore_snf(
         all_cores,
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_1,
-            .noc = NOC::RISCV_1_default,
+            .noc = noc_riscv_1,
             .compile_args = in1_reader_compile_time_args});
 
 
@@ -507,7 +510,7 @@ void bsr_spmm_multicore_snf(
         in0_injector_cores,
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_0,
-            .noc = NOC::RISCV_0_default,
+            .noc = noc_riscv_0,
             .compile_args = in0_injector_compile_time_args});
 
     KernelHandle in0_receiver_and_writer_id = 0;
@@ -521,7 +524,7 @@ void bsr_spmm_multicore_snf(
             in0_receiver_cores,
             tt_metal::DataMovementConfig{
                 .processor = DataMovementProcessor::RISCV_0,
-                .noc = NOC::RISCV_0_default,
+                .noc = noc_riscv_0,
                 .compile_args = in0_receiver_compile_time_args});
     }
 

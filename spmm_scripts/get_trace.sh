@@ -113,7 +113,7 @@ function list_registries {
 
 function build_with_profiling_enabled {
     pushd "$TT_METAL_DIR" > /dev/null
-    ./build_metal.sh --enable-profiler --build-programming-examples
+    ./build_metal.sh --enable-profiler --build-programming-examples > build.log 2> build_err.log
     local rc=$?
     popd > /dev/null
     if [[ $rc -ne 0 ]]; then
@@ -128,6 +128,7 @@ function get_trace {
     local host_code="$2"
     local registry="$3"
 
+    build_with_profiling_enabled
     pkill capture-release 2>/dev/null || true
     TT_METAL_DEVICE_PROFILER=1 "$TT_METAL_DIR/build/programming_examples/rahmy/profile_block" \
         "$profile_case" "$host_code" "$registry"
@@ -150,7 +151,9 @@ function main {
         return
     fi
 
+    # Getting weird profiling errors, I think it will resolve  if we instead rebuild every time
     build_with_profiling_enabled
+
 
     # Determine which profile registries to iterate over
     local reg_start reg_end

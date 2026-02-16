@@ -135,9 +135,10 @@ n_groups = len(group_labels)
 n_dicts = len(data_dicts)
 
 # Prepare data for plotting
+num_iters = 10 # TODO : coordinate num iters
 bar_values = []
 for d in data_dicts:
-    bar_values.append([d[k]["FLOP count"] / d[k]["Program Loop total seconds"] for k in group_labels])
+    bar_values.append([d[k]["FLOP count"] / (d[k]["Program Loop total seconds"] / num_iters) for k in group_labels])
 
 bar_values = np.array(bar_values)  # shape: (n_dicts, n_groups)
 # print(bar_values)
@@ -167,7 +168,7 @@ for i in range(n_dicts):
             ax.plot(xpos, ypos, marker='x', color='red', markersize=12, markeredgewidth=3, label=None if i != 0 or idx != np.where(mask_nan)[0][0] else 'Missing')
 
 ax.set_xlabel('Test Case')
-ax.set_ylabel('Execution Time in Nanoseconds (10 iterations)')
+ax.set_ylabel('TFLOPs (10 iterations)')
 ax.set_title('Sparse Algorithms Runtime Comparison')
 ax.set_xticks(x + bar_width)
 ax.set_xticklabels(group_labels, rotation=45, ha='right')
@@ -182,4 +183,4 @@ ax.legend()
 plt.tight_layout()
 plt.show()
 
-plt.savefig(png_output_dir + "fig2_updated.png")
+plt.savefig(png_output_dir + "fig2_tflops.png")

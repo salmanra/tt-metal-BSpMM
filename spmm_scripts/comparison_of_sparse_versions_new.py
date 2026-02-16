@@ -106,6 +106,7 @@ for i, csv_data_dir in enumerate(csv_data_dirs):
 
         nnz_elts = nblocks * R * C
         total_ops = nnz_elts * N * 2 # 1 add and 1 mul for each nz elt for each column of the dense matrix
+        tflop_count = total_ops / 1e12
 
         # print(f'We are in the {j}th csv file of the {i}th host')
         # print(df[df["name"] == "Program Loop"].size) # what do you mean not all of these dfs have a Program Loop?
@@ -122,7 +123,7 @@ for i, csv_data_dir in enumerate(csv_data_dirs):
         # print(type(df[df["name"] == "Program Loop"]["total_ns"]))
         # total_ns = df.get("total_ns")["Program Loop"]
         # zones_data["Program Loop total ns"] = total_ns
-        zones_data["FLOP count"] = total_ops
+        zones_data["FLOP count"] = tflop_count
         data_dicts[i][test_cases_short[j]] = zones_data
 
 # pprint.pp(data_dicts)
@@ -168,7 +169,7 @@ for i in range(n_dicts):
             ax.plot(xpos, ypos, marker='x', color='red', markersize=12, markeredgewidth=3, label=None if i != 0 or idx != np.where(mask_nan)[0][0] else 'Missing')
 
 ax.set_xlabel('Test Case')
-ax.set_ylabel('TFLOPs (10 iterations)')
+ax.set_ylabel('TFLOPs (Peak is 74 TFLOPs)')
 ax.set_title('Sparse Algorithms Runtime Comparison')
 ax.set_xticks(x + bar_width)
 ax.set_xticklabels(group_labels, rotation=45, ha='right')

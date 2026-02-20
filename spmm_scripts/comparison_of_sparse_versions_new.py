@@ -5,6 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import json
 
+# Wormhole hardware specs
+PEAK_TFLOPS = 74          # HiFi4, 80 Tensix cores
+DRAM_BW_GB_S = 256        # GB/s (from roofline_utils.py WH_DRAM_THROUGHPUT)
+
 snf_profiles_dir = "/home/user/tt-metal/profiles_noc_flipped/"
 naive_profiles_dir = "/home/user/tt-metal/profiles_new/"
 snf_csv_dir = snf_profiles_dir + "csvs/"
@@ -86,6 +90,7 @@ v5_data = {}
 v4_data = {}
 
 data_dicts = [v6_data, v5_data, v4_data]
+num_iters = 10  # TODO : coordinate num iters
 
 for i, csv_data_dir in enumerate(csv_data_dirs):
     # csv_file_names = sorted(os.listdir(csv_data_dir))
@@ -116,18 +121,38 @@ for i, csv_data_dir in enumerate(csv_data_dirs):
         # print(df[df["name"] == "Program Loop"].size) # what do you mean not all of these dfs have a Program Loop?
         # print(df.shape)
         
+        # Memory traffic common to both OI models
+        sparse_values_bytes = nblocks * R * C * 2                  # bfloat16
+        sparse_indices_bytes = nblocks * 4 + (M // R + 1) * 4     # col_indices + indptr
+        output_bytes = M * N * 2                                   # bfloat16
+
+        # Ideal model: dense matrix read once
+        dense_bytes_ideal = K * N * 2
+        total_bytes_ideal = sparse_values_bytes + sparse_indices_bytes + dense_bytes_ideal + output_bytes
+        oi_ideal = total_ops / total_bytes_ideal
+
+        # Pessimistic model: dense column-strip re-read per sparse block
+        dense_bytes_pessimistic = nblocks * C * N * 2
+        total_bytes_pessimistic = sparse_values_bytes + sparse_indices_bytes + dense_bytes_pessimistic + output_bytes
+        oi_pessimistic = total_ops / total_bytes_pessimistic
+
         zones_data = {}
         if df[df["name"] == "Device program Loop"].size == 0:
             zones_data["Program Loop total ns"] = np.nan
         else:
             nanosec = int(df.loc[df["name"] == "Device program Loop", "total_ns"].array[0])
-            zones_data["Program Loop total seconds"] = nanosec / 1e9 
+            zones_data["Program Loop total seconds"] = nanosec / 1e9
 
-        # print(type(df[df["name"] == "Program Loop"]))
-        # print(type(df[df["name"] == "Program Loop"]["total_ns"]))
-        # total_ns = df.get("total_ns")["Program Loop"]
-        # zones_data["Program Loop total ns"] = total_ns
         zones_data["FLOP count"] = tflop_count
+        zones_data["oi_ideal"] = oi_ideal
+        zones_data["oi_pessimistic"] = oi_pessimistic
+
+        # Compute TFLOP/s (used for roofline y-axis)
+        if "Program Loop total seconds" in zones_data:
+            zones_data["TFLOP/s"] = tflop_count / (zones_data["Program Loop total seconds"] / num_iters)
+        else:
+            zones_data["TFLOP/s"] = np.nan
+
         data_dicts[i][test_cases_short[j]] = zones_data
 
 # pprint.pp(data_dicts)
@@ -140,10 +165,9 @@ n_groups = len(group_labels)
 n_dicts = len(data_dicts)
 
 # Prepare data for plotting
-num_iters = 10 # TODO : coordinate num iters
 bar_values = []
 for d in data_dicts:
-    bar_values.append([d[k]["FLOP count"] / (d[k]["Program Loop total seconds"] / num_iters) for k in group_labels])
+    bar_values.append([d[k]["TFLOP/s"] for k in group_labels])
 
 bar_values = np.array(bar_values)  # shape: (n_dicts, n_groups)
 # print(bar_values)
@@ -189,3 +213,56 @@ plt.tight_layout()
 plt.show()
 
 plt.savefig(png_output_dir + "fig2_tflops_opt_nocs.png")
+
+# --- Roofline Analysis ---
+
+def plot_roofline(data_dicts, group_labels, oi_key, title, output_path):
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # Roofline envelope
+    oi_range = np.logspace(-1, 4, 500)
+    bw_ceiling = DRAM_BW_GB_S * oi_range / 1e3   # TFLOP/s = GB/s * FLOPs/byte / 1e3
+    roofline = np.minimum(bw_ceiling, PEAK_TFLOPS)
+    ax.plot(oi_range, roofline, 'k-', linewidth=2, label='Roofline')
+
+    # Ridge point annotation
+    ridge_oi = PEAK_TFLOPS / (DRAM_BW_GB_S / 1e3)
+    ax.axvline(ridge_oi, color='gray', linestyle='--', linewidth=0.8, alpha=0.5)
+    ax.annotate(f'Ridge: {ridge_oi:.0f} F/B', xy=(ridge_oi, PEAK_TFLOPS),
+                xytext=(ridge_oi * 1.5, PEAK_TFLOPS * 0.5),
+                arrowprops=dict(arrowstyle='->', color='gray'), fontsize=8, color='gray')
+
+    # Data points per algorithm version
+    for i, d in enumerate(data_dicts):
+        ois = [d[k][oi_key] for k in group_labels]
+        perfs = [d[k]["TFLOP/s"] for k in group_labels]
+        ax.scatter(ois, perfs, color=group_colors[i], label=csv_data_labels[i], s=80, zorder=5)
+
+    # Annotate each group (test case) label below its bottom-most point
+    for k in group_labels:
+        oi_val = data_dicts[0][k][oi_key]  # OI is problem-dependent, same across algorithm versions
+        perfs = [d[k]["TFLOP/s"] for d in data_dicts if not np.isnan(d[k]["TFLOP/s"])]
+        if perfs:
+            y_bottom = min(perfs)
+            ax.annotate(k, xy=(oi_val, y_bottom),
+                        xytext=(0, 6), textcoords='offset points',
+                        ha='center', fontsize=7, rotation=0)
+
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.set_xlabel('Operational Intensity (FLOPs/byte)')
+    ax.set_ylabel('Performance (TFLOP/s)')
+    ax.set_title(title)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.show()
+
+
+plot_roofline(data_dicts, group_labels, "oi_ideal",
+              "Roofline (Ideal: Dense Matrix Read Once)",
+              png_output_dir + "roofline_ideal.png")
+
+plot_roofline(data_dicts, group_labels, "oi_pessimistic",
+              "Roofline (Pessimistic: Dense Re-read Per Block)",
+              png_output_dir + "roofline_pessimistic.png")

@@ -86,17 +86,7 @@ void bsr_spmm_multicore_snf(
     uint32_t Rt = R / TILE_HEIGHT;
     uint32_t Ct = C / TILE_WIDTH;
 
-    uint32_t in0_block_h = Rt;
-    uint32_t in0_block_w = Ct;
-    uint32_t in1_block_w = get_Npc_from_BSR_block_size(Nt, in0_block_h, in0_block_w, num_cores_x, num_tiles_indexing);
 
-    TT_ASSERT(Mt % in0_block_h == 0);
-    TT_ASSERT(Nt % in1_block_w == 0);
-    TT_ASSERT(Kt % in0_block_w == 0);
-
-    if constexpr (verbose) {
-        log_info(tt::LogVerif, "Rt={}, Ct={}, NpC={}", Rt, Ct, in1_block_w);
-    }
     // Core grid assignment
     std::vector<uint32_t> folded_bsr_matrix_indices;
     uint32_t nnz_rows = 0;
@@ -110,6 +100,30 @@ void bsr_spmm_multicore_snf(
     }
     folded_bsr_matrix_indices.push_back(folded_index);
     uint32_t height_of_folded_matrix = Rt * nnz_rows;
+
+    if constexpr (verbose) {
+        log_info(tt::LogVerif, " -- folded_bsr_matrix_indices (size={}) --", folded_bsr_matrix_indices.size());
+        for (uint32_t i = 0; i < folded_bsr_matrix_indices.size(); i++) {
+            log_info(tt::LogVerif, "   folded_bsr_matrix_indices[{}] = {}", i, folded_bsr_matrix_indices[i]);
+        }
+        log_info(tt::LogVerif, " -- indptr (size={}) --", a.indptr.size());
+        for (uint32_t i = 0; i < a.indptr.size(); i++) {
+            log_info(tt::LogVerif, "   indptr[{}] = {}", i, a.indptr[i]);
+        }
+        log_info(tt::LogVerif, " -- nnz_rows={}, num_block_rows={} --", nnz_rows, (uint32_t)(a.indptr.size() - 1));
+    }
+
+    uint32_t in0_block_h = Rt;
+    uint32_t in0_block_w = Ct;
+    uint32_t in1_block_w = get_Npc_from_BSR_block_size(Nt, in0_block_h, in0_block_w, num_cores_x, num_cores_y, num_tiles_indexing, nnz_rows);
+
+    TT_ASSERT(Mt % in0_block_h == 0);
+    TT_ASSERT(Nt % in1_block_w == 0);
+    TT_ASSERT(Kt % in0_block_w == 0);
+
+    if constexpr (verbose) {
+        log_info(tt::LogVerif, "Rt={}, Ct={}, NpC={}", Rt, Ct, in1_block_w);
+    }
 
     uint32_t num_blocks_x = Nt / in1_block_w;
     uint32_t num_blocks_y = nnz_rows;
@@ -528,18 +542,29 @@ void bsr_spmm_multicore_snf(
                 .compile_args = in0_receiver_compile_time_args});
     }
 
-    // Find Perms. No changes from LB
-    uint32_t num_empty_rows = (M / R) - nnz_rows;
-    std::vector<int> row_diffs;
+    // Find Perms — sort only the nnz rows so perm values are folded indices
+    // (indices into folded_bsr_matrix_indices), not original row indices.
+    std::vector<int> nnz_row_diffs;
     for (int i = 0; i < a.indptr.size() - 1; i++){
-        row_diffs.push_back(a.indptr[i+1] - a.indptr[i]);
+        int diff = a.indptr[i+1] - a.indptr[i];
+        if (diff > 0) {
+            nnz_row_diffs.push_back(diff);
+        }
     }
-    std::vector<int> perm(row_diffs.size());
-    sortingPermutation(row_diffs, perm);
+    std::vector<int> perm(nnz_row_diffs.size());
+    sortingPermutation(nnz_row_diffs, perm);
 
-    // remove last num_empty_rows elements from perm
-    perm.resize(nnz_rows);
-
+    if constexpr (verbose) {
+        log_info(tt::LogVerif, " -- nnz_row_diffs (size={}) --", nnz_row_diffs.size());
+        for (uint32_t i = 0; i < nnz_row_diffs.size(); i++) {
+            log_info(tt::LogVerif, "   nnz_row_diffs[{}] = {}", i, nnz_row_diffs[i]);
+        }
+        log_info(tt::LogVerif, " -- perm (size={}) --", perm.size());
+        for (uint32_t i = 0; i < perm.size(); i++) {
+            log_info(tt::LogVerif, "   perm[{}] = {} (folded row index -> original row {})",
+                i, perm[i], folded_bsr_matrix_indices[perm[i]]);
+        }
+    }
 
     // 1. initialize a vector for each row of cores
     std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
@@ -565,6 +590,23 @@ void bsr_spmm_multicore_snf(
             subarray_iter++;
         }
         iter_count++;
+    }
+
+    if constexpr (verbose) {
+        log_info(tt::LogVerif, " -- output_y_indices (num_cores_r={}) --", num_cores_r);
+        for (uint32_t r = 0; r < num_cores_r; r++) {
+            for (uint32_t j = 0; j < output_y_indices[r].size(); j++) {
+                uint32_t perm_val = output_y_indices[r][j];
+                log_info(tt::LogVerif, "   output_y_indices[core_row={}][{}] = {} (used as index into folded_bsr_matrix_indices, max valid index={})",
+                    r, j, perm_val, folded_bsr_matrix_indices.size() - 2);
+                if (perm_val < folded_bsr_matrix_indices.size()) {
+                    log_info(tt::LogVerif, "     -> folded_bsr_matrix_indices[{}] = {} (output_idx_y, max valid for indptr={})",
+                        perm_val, folded_bsr_matrix_indices[perm_val], (uint32_t)(a.indptr.size() - 2));
+                } else {
+                    log_info(tt::LogVerif, "     -> OUT OF BOUNDS for folded_bsr_matrix_indices!");
+                }
+            }
+        }
     }
 
     // Assign runtime args
@@ -596,6 +638,19 @@ void bsr_spmm_multicore_snf(
             for (int iter_y = 0; iter_y < num_iters_y_this_core; iter_y++) {
                 uint32_t folded_output_idx_y = output_y_indices[core_idx_y][iter_y];
                 uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y];
+                if constexpr (verbose) {
+                    log_info(tt::LogVerif, " -- Core ({},{}) iter_y={}: folded_output_idx_y={} -> output_idx_y={} --",
+                        core_idx_x, core_idx_y, iter_y, folded_output_idx_y, output_idx_y);
+                    if (output_idx_y + 1 < a.indptr.size()) {
+                        log_info(tt::LogVerif, "     indptr[{}]={}, indptr[{}]={}, row_nnz={}",
+                            output_idx_y, a.indptr[output_idx_y],
+                            output_idx_y + 1, a.indptr[output_idx_y + 1],
+                            a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
+                    } else {
+                        log_info(tt::LogVerif, "     *** BUG: output_idx_y+1={} >= indptr.size()={}, would access out-of-bounds! ***",
+                            output_idx_y + 1, a.indptr.size());
+                    }
+                }
                 in0_snf_reader_runtime_args.push_back(output_idx_y); // for reading
                 in0_snf_reader_runtime_args.push_back(folded_output_idx_y); // for writing
                 in1_reader_runtime_args.push_back(output_idx_y);
@@ -679,6 +734,7 @@ void bsr_spmm_multicore_snf(
         }
     }
     else if constexpr (verbose){
+        log_info(tt::LogVerif, " -- Entering Program --");
         EnqueueProgram(cq, program, true); // block on this call so we can determine the order of print statements
     }
     else {

@@ -57,13 +57,7 @@ void bsr_spmm_multicore_load_balanced(
     uint32_t Rt = R / TILE_HEIGHT;
     uint32_t Ct = C / TILE_WIDTH;
 
-    uint32_t in0_block_h = Rt;
-    uint32_t in0_block_w = Ct;
-    uint32_t in1_block_w = get_Npc_from_BSR_block_size(Nt, in0_block_h, in0_block_w, num_cores_x, num_tiles_for_indexing);
 
-    TT_ASSERT(Mt % in0_block_h == 0);
-    TT_ASSERT(Nt % in1_block_w == 0);
-    TT_ASSERT(Kt % in0_block_w == 0);
 
     // Core grid assignment
    std::deque<uint32_t> folded_bsr_matrix_indices;
@@ -78,6 +72,14 @@ void bsr_spmm_multicore_load_balanced(
     }
     folded_bsr_matrix_indices.push_back(folded_index);
     uint32_t height_of_folded_matrix = Rt * nnz_rows;
+
+    uint32_t in0_block_h = Rt;
+    uint32_t in0_block_w = Ct;
+    uint32_t in1_block_w = get_Npc_from_BSR_block_size(Nt, in0_block_h, in0_block_w, num_cores_x, num_cores_y, num_tiles_for_indexing, nnz_rows);
+
+    TT_ASSERT(Mt % in0_block_h == 0);
+    TT_ASSERT(Nt % in1_block_w == 0);
+    TT_ASSERT(Kt % in0_block_w == 0);
 
     uint32_t num_blocks_x = Nt / in1_block_w;
     uint32_t num_blocks_y = nnz_rows;
@@ -416,16 +418,17 @@ void bsr_spmm_multicore_load_balanced(
 
     // Scanning for load-balancing
     // 0. Sort block rows by number of nonzero blocks, get perm vector
-    uint32_t num_empty_rows = (M / R) - nnz_rows;
-    std::vector<int> row_diffs;
+    // Sort only nnz rows so perm values are folded indices
+    // (indices into folded_bsr_matrix_indices), not original row indices.
+    std::vector<int> nnz_row_diffs;
     for (int i = 0; i < a.indptr.size() - 1; i++){
-        row_diffs.push_back(a.indptr[i+1] - a.indptr[i]);
+        int diff = a.indptr[i+1] - a.indptr[i];
+        if (diff > 0) {
+            nnz_row_diffs.push_back(diff);
+        }
     }
-    std::vector<int> perm(row_diffs.size());
-    sortingPermutation(row_diffs, perm);
-
-    // remove last num_empty_rows elements from perm
-    perm.resize(nnz_rows);
+    std::vector<int> perm(nnz_row_diffs.size());
+    sortingPermutation(nnz_row_diffs, perm);
 
     if constexpr (verbose){
         std::cout << "folded bsr matrix indices: ";
@@ -436,8 +439,8 @@ void bsr_spmm_multicore_load_balanced(
         std::cout << std::endl;
 
         std::cout << "row diffs: ";
-        for (int i = 0; i < row_diffs.size(); i++){
-            std::cout << row_diffs[i] << ' ';
+        for (int i = 0; i < nnz_row_diffs.size(); i++){
+            std::cout << nnz_row_diffs[i] << ' ';
         }
         std::cout << std::endl;
         std::cout << std::endl;

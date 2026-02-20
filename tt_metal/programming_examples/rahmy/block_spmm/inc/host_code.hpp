@@ -213,7 +213,7 @@ CBHandle MakeCircularBufferFP32(Program& program, const CoreSpec& core, tt::CBIn
 
 uint32_t _get_maximum_block_dim_with_NoC_args(int32_t block_dim, int32_t in0_block_w, int32_t num_tiles_in_NoC_args);
 
-uint32_t get_Npc_from_BSR_block_size(uint32_t Nt, uint32_t Mpc, uint32_t in0_block_w, uint32_t num_cores_x, uint32_t num_tiles_for_indexing);
+uint32_t get_Npc_from_BSR_block_size(uint32_t Nt, uint32_t Mpc, uint32_t in0_block_w, uint32_t num_cores_x, uint32_t num_cores_y, uint32_t num_tiles_for_indexing, uint32_t nnz_rows);
 
 template<class Vals>
 void sortingPermutation(const Vals& values, std::vector<int>& v){

@@ -48,7 +48,8 @@ uint32_t _get_maximum_block_dim_with_NoC_args(int32_t block_dim, int32_t in0_blo
     return 0;
 }
 
-uint32_t get_Npc_from_BSR_block_size(uint32_t Nt, uint32_t Mpc, uint32_t in0_block_w, uint32_t num_cores_x, uint32_t num_tiles_for_indexing) {
+
+uint32_t get_Npc_from_BSR_block_size(uint32_t Nt, uint32_t Mpc, uint32_t in0_block_w, uint32_t num_cores_x, uint32_t num_cores_y, uint32_t num_tiles_for_indexing, uint32_t nnz_rows) {
     auto Nt_fac = get_prime_factors(Nt);
     uint32_t Npc_min = 1;
     for (auto it = Nt_fac.begin(); it != Nt_fac.end(); ++it) {
@@ -59,10 +60,20 @@ uint32_t get_Npc_from_BSR_block_size(uint32_t Nt, uint32_t Mpc, uint32_t in0_blo
             --it;
         }
     }
+    uint32_t num_iters_y = (nnz_rows + num_cores_y - 1) / num_cores_y;
+    uint32_t num_cores_total = num_cores_x * num_cores_y;
     uint32_t Npc = Npc_min;
     auto Npc_choices = get_possible_products(Nt_fac);
     auto Npc_max = _get_maximum_block_dim_with_NoC_args(Mpc, in0_block_w, num_tiles_for_indexing);
     for (auto& ele : Npc_choices) {
+        uint32_t candidate_NpC = ele * Npc_min;
+        uint32_t num_blocks_x = Nt / candidate_NpC;
+        uint32_t num_iters_x = (num_blocks_x + num_cores_x - 1) / num_cores_x;
+        uint32_t num_blocks_total = nnz_rows * num_blocks_x;
+        uint32_t num_work_regions = (num_blocks_total + num_iters_x * num_iters_y - 1)/ (num_iters_x * num_iters_y);
+        if (num_work_regions < num_cores_total){
+            break;
+        }
         if (ele * Npc_min <= Npc_max) {
             Npc = ele * Npc_min;
         } else {

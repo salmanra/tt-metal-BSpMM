@@ -114,10 +114,10 @@ void kernel_main(){
     uint32_t* col_indices;
     uint32_t* indptr;
     if constexpr (is_output_writer){
-        col_indices = spmm::load_indexing_contiguous<col_indices_is_dram>(
+        col_indices = spmm::load_indexing_tiled<col_indices_is_dram>(
             spmm::cb_id_col_indices, col_indices_addr,
             tile_info.col_indices_tile_size, tile_info.col_indices_format, col_indices_num_tiles);
-        indptr = spmm::load_indexing_contiguous<indptr_is_dram>(
+        indptr = spmm::load_indexing_tiled<indptr_is_dram>(
             spmm::cb_id_indptr, indptr_addr,
             tile_info.indptr_tile_size, tile_info.indptr_format, indptr_num_tiles);
     }
@@ -125,9 +125,6 @@ void kernel_main(){
         indptr = spmm::wait_for_indexing(spmm::cb_id_indptr, indptr_num_tiles);
         col_indices = spmm::wait_for_indexing(spmm::cb_id_col_indices, col_indices_num_tiles);
     }
-
-    DPRINT_DATA0(DPRINT << "RK got all args" << ENDL());
-
 
     // Writer setup
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
@@ -164,7 +161,6 @@ void kernel_main(){
 
                 if constexpr (is_injector_core){
                     // Read in0 block from DRAM
-                    
                     DeviceZoneScopedN("Reading nonzero block from in0 from DRAM");
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
                     spmm::read_block_by_tile(
@@ -173,15 +169,12 @@ void kernel_main(){
                         tile_info.in0_tile_size, in0_block_h, in0_block_w,
                         in0_tensor_stride_h, in0_tensor_stride_w);
                     noc_async_read_barrier();
-                    DPRINT_DATA0(DPRINT << " done injecting" << ENDL());
                 }
                 else {
                     DeviceZoneScopedN("Waiting on nonzero block from in0 from neighbor");
                     noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
                     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
                     noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
-                    DPRINT_DATA0(DPRINT << " done receiving" << ENDL());
-
                 }
                 cb_push_back(spmm::cb_id_in0, in0_block_num_tiles);
 
@@ -201,8 +194,6 @@ void kernel_main(){
                 uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
 
                 cb_wait_front(spmm::cb_id_out, out_block_num_tiles);
-                DPRINT_DATA0(DPRINT << "writing" << ENDL());
-
                 {
 
                     DeviceZoneScopedN("Writing Block back to DRAM");
@@ -223,8 +214,6 @@ void kernel_main(){
                         
                 }
                 noc_async_write_barrier();
-                DPRINT_DATA0(DPRINT << "done writing" << ENDL());
-
                 cb_pop_front(spmm::cb_id_out, out_block_num_tiles);
                 out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
             }

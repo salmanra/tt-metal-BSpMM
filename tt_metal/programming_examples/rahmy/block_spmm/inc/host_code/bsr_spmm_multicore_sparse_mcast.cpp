@@ -63,13 +63,7 @@ void bsr_spmm_multicore_sparse_mcast(
     uint32_t Rt = R / TILE_HEIGHT;
     uint32_t Ct = C / TILE_WIDTH;
 
-    uint32_t in0_block_h = Rt;
-    uint32_t in0_block_w = Ct;
-    uint32_t in1_block_w = get_Npc_from_BSR_block_size(Nt, in0_block_h, in0_block_w, num_cores_x, num_tiles_indexing);
 
-    TT_ASSERT(Mt % in0_block_h == 0);
-    TT_ASSERT(Nt % in1_block_w == 0);
-    TT_ASSERT(Kt % in0_block_w == 0);
 
     // Core grid assignment
    std::deque<uint32_t> folded_bsr_matrix_indices;
@@ -84,6 +78,14 @@ void bsr_spmm_multicore_sparse_mcast(
     }
     folded_bsr_matrix_indices.push_back(folded_index);
     uint32_t height_of_folded_matrix = Rt * nnz_rows;
+
+    uint32_t in0_block_h = Rt;
+    uint32_t in0_block_w = Ct;
+    uint32_t in1_block_w = get_Npc_from_BSR_block_size(Nt, in0_block_h, in0_block_w, num_cores_x, num_cores_y, num_tiles_indexing, nnz_rows);
+
+    TT_ASSERT(Mt % in0_block_h == 0);
+    TT_ASSERT(Nt % in1_block_w == 0);
+    TT_ASSERT(Kt % in0_block_w == 0);
 
     uint32_t num_blocks_x = Nt / in1_block_w;
     uint32_t num_blocks_y = nnz_rows;

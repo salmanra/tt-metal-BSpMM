@@ -114,10 +114,10 @@ void kernel_main(){
     uint32_t* col_indices;
     uint32_t* indptr;
     if constexpr (is_output_writer){
-        col_indices = spmm::load_indexing_contiguous<col_indices_is_dram>(
+        col_indices = spmm::load_indexing_tiled<col_indices_is_dram>(
             spmm::cb_id_col_indices, col_indices_addr,
             tile_info.col_indices_tile_size, tile_info.col_indices_format, col_indices_num_tiles);
-        indptr = spmm::load_indexing_contiguous<indptr_is_dram>(
+        indptr = spmm::load_indexing_tiled<indptr_is_dram>(
             spmm::cb_id_indptr, indptr_addr,
             tile_info.indptr_tile_size, tile_info.indptr_format, indptr_num_tiles);
     }

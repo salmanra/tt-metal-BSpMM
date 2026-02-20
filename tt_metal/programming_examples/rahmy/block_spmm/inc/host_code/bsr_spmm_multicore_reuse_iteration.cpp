@@ -429,7 +429,7 @@ void bsr_spmm_multicore_reuse_iteration(
     }
 
     // Create Kernels
-    bool transpose_NoCs = true;
+    bool transpose_NoCs = false;
     auto noc_riscv_0 = transpose_NoCs ? NOC::RISCV_1_default : NOC::RISCV_0_default;
     auto noc_riscv_1 = transpose_NoCs ? NOC::RISCV_0_default : NOC::RISCV_1_default;
     auto reader_id = tt_metal::CreateKernel(

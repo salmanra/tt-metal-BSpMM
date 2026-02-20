@@ -554,17 +554,17 @@ void bsr_spmm_multicore_snf(
     std::vector<int> perm(nnz_row_diffs.size());
     sortingPermutation(nnz_row_diffs, perm);
 
-    if constexpr (verbose) {
-        log_info(tt::LogVerif, " -- nnz_row_diffs (size={}) --", nnz_row_diffs.size());
-        for (uint32_t i = 0; i < nnz_row_diffs.size(); i++) {
-            log_info(tt::LogVerif, "   nnz_row_diffs[{}] = {}", i, nnz_row_diffs[i]);
-        }
-        log_info(tt::LogVerif, " -- perm (size={}) --", perm.size());
-        for (uint32_t i = 0; i < perm.size(); i++) {
-            log_info(tt::LogVerif, "   perm[{}] = {} (folded row index -> original row {})",
-                i, perm[i], folded_bsr_matrix_indices[perm[i]]);
-        }
-    }
+    // if constexpr (verbose) {
+    //     log_info(tt::LogVerif, " -- nnz_row_diffs (size={}) --", nnz_row_diffs.size());
+    //     for (uint32_t i = 0; i < nnz_row_diffs.size(); i++) {
+    //         log_info(tt::LogVerif, "   nnz_row_diffs[{}] = {}", i, nnz_row_diffs[i]);
+    //     }
+    //     log_info(tt::LogVerif, " -- perm (size={}) --", perm.size());
+    //     for (uint32_t i = 0; i < perm.size(); i++) {
+    //         log_info(tt::LogVerif, "   perm[{}] = {} (folded row index -> original row {})",
+    //             i, perm[i], folded_bsr_matrix_indices[perm[i]]);
+    //     }
+    // }
 
     // 1. initialize a vector for each row of cores
     std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());

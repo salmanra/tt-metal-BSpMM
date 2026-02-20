@@ -128,10 +128,10 @@ function get_trace {
     local host_code="$2"
     local registry="$3"
 
-    # build_with_profiling_enabled
-    # pkill capture-release 2>/dev/null || true
-    # TT_METAL_DEVICE_PROFILER=1 "$TT_METAL_DIR/build/programming_examples/rahmy/profile_block" \
-    #     "$profile_case" "$host_code" "$registry"
+    build_with_profiling_enabled
+    pkill capture-release 2>/dev/null || true
+    TT_METAL_DEVICE_PROFILER=1 "$TT_METAL_DIR/build/programming_examples/rahmy/profile_block" \
+        "$profile_case" "$host_code" "$registry"
     "$TT_METAL_DIR/build/programming_examples/rahmy/export_to_csv" \
         "$profile_case" "$host_code" "$registry"
 }
@@ -152,7 +152,7 @@ function main {
     fi
 
     # Getting weird profiling errors, I think it will resolve  if we instead rebuild every time
-    # build_with_profiling_enabled
+    build_with_profiling_enabled
 
 
     # Determine which profile registries to iterate over

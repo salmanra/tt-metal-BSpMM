@@ -9,8 +9,8 @@ import json
 PEAK_TFLOPS = 74          # HiFi4, 80 Tensix cores
 DRAM_BW_GB_S = 256        # GB/s (from roofline_utils.py WH_DRAM_THROUGHPUT)
 
-snf_profiles_dir = "/home/user/tt-metal/profiles_noc_flipped/"
-naive_profiles_dir = "/home/user/tt-metal/profiles_new/"
+snf_profiles_dir = "/home/user/tt-metal/profiles_opt_noc/"
+naive_profiles_dir = "/home/user/tt-metal/profiles_opt_noc/"
 snf_csv_dir = snf_profiles_dir + "csvs/"
 naive_csv_dir = naive_profiles_dir + "csvs/"
 
@@ -212,7 +212,7 @@ ax.legend()
 plt.tight_layout()
 plt.show()
 
-plt.savefig(png_output_dir + "fig2_tflops_opt_nocs.png")
+plt.savefig(png_output_dir + "fig2_tflops_opt_nocsv2.png")
 
 # --- Roofline Analysis ---
 
@@ -261,8 +261,8 @@ def plot_roofline(data_dicts, group_labels, oi_key, title, output_path):
 
 plot_roofline(data_dicts, group_labels, "oi_ideal",
               "Roofline (Ideal: Dense Matrix Read Once)",
-              png_output_dir + "roofline_ideal.png")
+              png_output_dir + "roofline_idealv2.png")
 
 plot_roofline(data_dicts, group_labels, "oi_pessimistic",
               "Roofline (Pessimistic: Dense Re-read Per Block)",
-              png_output_dir + "roofline_pessimistic.png")
+              png_output_dir + "roofline_pessimisticv2.png")

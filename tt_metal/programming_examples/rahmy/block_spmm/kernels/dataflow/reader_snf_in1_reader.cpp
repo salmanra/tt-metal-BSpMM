@@ -85,7 +85,7 @@ void kernel_main(){
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
                 cb_reserve_back(spmm::cb_id_in1, in1_block_num_tiles);
                 {
-                    DeviceZoneScopedN("Reading dense block of in1 from DRAM");
+                    DeviceZoneScopedN("SpMM Zone: Reading dense block of in1 from DRAM");
                     uint32_t l1_write_addr_in1 = get_write_ptr(spmm::cb_id_in1);
 
                     // Read in1 block (row selected by BSR col_indices)

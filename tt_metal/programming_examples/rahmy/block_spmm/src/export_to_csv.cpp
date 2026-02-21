@@ -41,9 +41,14 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
 
     n = sprintf(buf, "./csvexport-release %s > %s", trace_file_location.c_str(), csv_file_location.c_str());
     std::string csvexport_command(buf);
+  
+    std::string device_csv_file_location = csv_directory + test_name + ".device.csv";
+    n = sprintf(buf, "./tracy-csvexport --gpu %s > %s", trace_file_location.c_str(), device_csv_file_location.c_str());
+    std::string device_csvexport_command(buf);
 
     std::system(csv_mkdir_command.c_str());
     std::system(csvexport_command.c_str());
+    std::system(device_csvexport_command.c_str());
 
     // create two output ostreams to two new files in the same dir as the CSV file,
     //  of the same name as the csv file, append {_sparse, _dense} and swap the extension to .log 

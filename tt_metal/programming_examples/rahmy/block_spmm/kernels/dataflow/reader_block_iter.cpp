@@ -95,7 +95,7 @@ void kernel_main(){
 
                 // Read in0 block
                 {
-                    DeviceZoneScopedN("RK reading in0.");
+                    DeviceZoneScopedN("SpMM Zone: RK reading in0.");
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
                     spmm::read_block_by_tile(
                         in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
@@ -106,7 +106,7 @@ void kernel_main(){
                 }
                 // Read in1 block (row selected by BSR col_indices)
                 {
-                    DeviceZoneScopedN("RK reading in1.");
+                    DeviceZoneScopedN("SpMM Zone: RK reading in1.");
                     uint32_t bsr_col_index = col_indices[reduction_iter];
                     uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
                     spmm::read_block_by_tile(

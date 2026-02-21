@@ -165,7 +165,7 @@ void kernel_main(){
                 if constexpr (is_injector_core){
                     // Read in0 block from DRAM
                     
-                    DeviceZoneScopedN("Reading nonzero block from in0 from DRAM");
+                    DeviceZoneScopedN("SpMM Zone: Reading nonzero block from in0 from DRAM");
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
                     spmm::read_block_by_tile(
                         in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
@@ -176,7 +176,7 @@ void kernel_main(){
                     DPRINT_DATA0(DPRINT << " done injecting" << ENDL());
                 }
                 else {
-                    DeviceZoneScopedN("Waiting on nonzero block from in0 from neighbor");
+                    DeviceZoneScopedN("SpMM Zone: Waiting on nonzero block from in0 from neighbor");
                     noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
                     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
                     noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
@@ -205,7 +205,7 @@ void kernel_main(){
 
                 {
 
-                    DeviceZoneScopedN("Writing Block back to DRAM");
+                    DeviceZoneScopedN("SpMM Zone: Writing Block back to DRAM");
                     uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
                     
                     for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {

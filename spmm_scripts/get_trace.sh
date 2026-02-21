@@ -113,6 +113,7 @@ function list_registries {
 
 function build_with_profiling_enabled {
     pushd "$TT_METAL_DIR" > /dev/null
+    tt-smi -r
     ./build_metal.sh --enable-profiler --build-programming-examples > build.log 2> build_err.log
     local rc=$?
     popd > /dev/null

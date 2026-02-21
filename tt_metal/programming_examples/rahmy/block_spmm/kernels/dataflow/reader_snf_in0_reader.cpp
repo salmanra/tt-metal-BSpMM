@@ -203,25 +203,25 @@ void kernel_main(){
                 cb_wait_front(spmm::cb_id_out, out_block_num_tiles);
                 DPRINT_DATA0(DPRINT << "writing" << ENDL());
 
-                {
+                
 
-                    DeviceZoneScopedN("SpMM Zone: Writing Block back to DRAM");
-                    uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
-                    
-                    for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
-                        uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
-                        for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
-                            spmm::write_subblock_by_tile(
-                                out_tensor_sbw_start_tile_id,
-                                out_s, l1_read_addr,
-                                output_tile_size, out_subblock_h, out_subblock_w,
-                                out_tensor_stride_h, out_tensor_stride_w);
-                                out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
-                        }
-                        out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
+                DeviceZoneScopedN("SpMM Zone: Writing Block back to DRAM");
+                uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
+                
+                for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
+                    uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
+                    for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
+                        spmm::write_subblock_by_tile(
+                            out_tensor_sbw_start_tile_id,
+                            out_s, l1_read_addr,
+                            output_tile_size, out_subblock_h, out_subblock_w,
+                            out_tensor_stride_h, out_tensor_stride_w);
+                            out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
                     }
-                        
+                    out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
                 }
+                        
+                
                 noc_async_write_barrier();
                 DPRINT_DATA0(DPRINT << "done writing" << ENDL());
 

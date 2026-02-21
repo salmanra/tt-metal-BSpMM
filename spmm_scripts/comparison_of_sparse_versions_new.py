@@ -47,6 +47,7 @@ def discover_files(algorithm_dirs):
         )))
 
     csv_files = [f for f in union_by_suffix(".csv") if not f.endswith(".device.csv")]
+    device_csv_files = union_by_suffix(".device.csv")
     sparse_logs = union_by_suffix("sparse.log")
     dense_logs = union_by_suffix("dense.log")
 
@@ -54,7 +55,7 @@ def discover_files(algorithm_dirs):
         name.replace("profile_case_sparse_", "").replace(".csv", "").replace("fill_", "")
         for name in csv_files
     ]
-    return csv_files, sparse_logs, dense_logs, short_names
+    return csv_files, device_csv_files, sparse_logs, dense_logs, short_names
 
 
 # ── Log / metadata parsing ──────────────────────────────────────────
@@ -143,6 +144,29 @@ def collect_metrics(algorithm_dirs, csv_files, sparse_logs, dense_logs, short_na
     return data_dicts
 
 
+def collect_device_zones(algorithm_dirs, device_csv_files, short_names):
+    """Parse .device.csv files and aggregate GPU execution time for SpMM zones.
+
+    Returns a list (one per algorithm) of dicts:
+        { test_case_short_name: { zone_name: total_gpu_time, ... }, ... }
+    """
+    zone_dicts = [{} for _ in algorithm_dirs]
+
+    for alg_idx, alg_dir in enumerate(algorithm_dirs):
+        for case_idx, dev_csv in enumerate(device_csv_files):
+            path = os.path.join(alg_dir, dev_csv)
+            if not os.path.exists(path):
+                continue
+
+            df = pd.read_csv(path)
+            spmm = df[df["name"].str.startswith("SpMM")]
+            agg = spmm.groupby("name")["GPU execution time"].sum()
+
+            zone_dicts[alg_idx][short_names[case_idx]] = agg.to_dict()
+
+    return zone_dicts
+
+
 # ── Plotting ─────────────────────────────────────────────────────────
 
 def plot_tflops_bar_chart(data_dicts, algorithm_labels, group_labels, output_path):
@@ -225,13 +249,92 @@ def plot_roofline(data_dicts, algorithm_labels, group_labels, oi_key, title, out
     plt.show()
 
 
+# ── Device zone plotting ─────────────────────────────────────────────
+
+ZONE_COLORS = plt.cm.tab10.colors
+
+
+def _strip_spmm_prefix(name):
+    """Remove the 'SpMM Zone: ' prefix for shorter legend labels."""
+    prefix = "SpMM Zone: "
+    return name[len(prefix):] if name.startswith(prefix) else name
+
+
+def plot_zone_pie_charts(zone_dicts, algorithm_labels, short_names, output_dir):
+    """One pie chart per (algorithm, test case) showing time share of each SpMM zone."""
+    for alg_idx, alg_label in enumerate(algorithm_labels):
+        for case_name in short_names:
+            zones = zone_dicts[alg_idx].get(case_name, {})
+            if not zones:
+                continue
+
+            labels = [_strip_spmm_prefix(z) for z in zones]
+            values = list(zones.values())
+
+            fig, ax = plt.subplots(figsize=(8, 8))
+            ax.pie(values, labels=labels, autopct="%1.1f%%",
+                   colors=ZONE_COLORS[:len(values)])
+            ax.set_title(f"{alg_label}\n{case_name}")
+            plt.tight_layout()
+            fname = f"zones_pie_{alg_label}_{case_name}.png"
+            plt.savefig(os.path.join(output_dir, fname))
+            plt.show()
+            plt.close(fig)
+
+
+def plot_zone_stacked_bars(zone_dicts, algorithm_labels, short_names, output_dir):
+    """Stacked bar chart: one bar per test case, segments colored by zone, one figure per algorithm."""
+    for alg_idx, alg_label in enumerate(algorithm_labels):
+        # Collect all zone names that appear for this algorithm
+        all_zones = []
+        for case_name in short_names:
+            for z in zone_dicts[alg_idx].get(case_name, {}):
+                if z not in all_zones:
+                    all_zones.append(z)
+
+        if not all_zones:
+            continue
+
+        # Build matrix: rows = test cases, cols = zones
+        cases_with_data = [c for c in short_names if zone_dicts[alg_idx].get(c)]
+        n_cases = len(cases_with_data)
+        n_zones = len(all_zones)
+        matrix = np.zeros((n_cases, n_zones))
+        for i, case_name in enumerate(cases_with_data):
+            zones = zone_dicts[alg_idx][case_name]
+            for j, z in enumerate(all_zones):
+                matrix[i, j] = zones.get(z, 0)
+
+        fig, ax = plt.subplots(figsize=(max(10, n_cases * 0.8), 8))
+        x = np.arange(n_cases)
+        bottoms = np.zeros(n_cases)
+
+        for j, zone_name in enumerate(all_zones):
+            ax.bar(x, matrix[:, j], bottom=bottoms, width=0.6,
+                   color=ZONE_COLORS[j % len(ZONE_COLORS)],
+                   label=_strip_spmm_prefix(zone_name))
+            bottoms += matrix[:, j]
+
+        ax.set_xlabel("Test Case")
+        ax.set_ylabel("Total GPU Execution Time")
+        ax.set_title(f"SpMM Zone Breakdown — {alg_label}")
+        ax.set_xticks(x)
+        ax.set_xticklabels(cases_with_data, rotation=45, ha="right")
+        ax.legend(bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=8)
+        plt.tight_layout()
+        fname = f"zones_stacked_{alg_label}.png"
+        plt.savefig(os.path.join(output_dir, fname), bbox_inches="tight")
+        plt.show()
+        plt.close(fig)
+
+
 # ── Main ─────────────────────────────────────────────────────────────
 
 def main():
     profiles_dir = "/home/user/tt-metal/profiles_opt_noc/"
     algorithm_dirs, algorithm_labels, json_dir, png_dir = build_config(profiles_dir)
 
-    csv_files, sparse_logs, dense_logs, short_names = discover_files(algorithm_dirs)
+    csv_files, device_csv_files, sparse_logs, dense_logs, short_names = discover_files(algorithm_dirs)
     data_dicts = collect_metrics(algorithm_dirs, csv_files, sparse_logs, dense_logs, short_names)
 
     # Dump raw metrics to JSON
@@ -252,6 +355,11 @@ def main():
     plot_roofline(data_dicts, algorithm_labels, group_labels, "oi_pessimistic",
                   "Roofline (Pessimistic: Dense Re-read Per Block)",
                   os.path.join(png_dir, "roofline_pessimisticv2.png"))
+
+    # Device zone breakdown
+    zone_dicts = collect_device_zones(algorithm_dirs, device_csv_files, short_names)
+    plot_zone_pie_charts(zone_dicts, algorithm_labels, short_names, png_dir)
+    plot_zone_stacked_bars(zone_dicts, algorithm_labels, short_names, png_dir)
 
 
 if __name__ == "__main__":

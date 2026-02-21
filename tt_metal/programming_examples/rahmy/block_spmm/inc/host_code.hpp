@@ -148,6 +148,36 @@ void bsr_spmm_multicore_snf(
     uint32_t B,
     IDevice* device);
 
+template<bool verbose = false, bool is_profiling = false>
+void bsr_spmm_multicore_naive_new_DM(
+    bsr_matrix<bfloat16>& a,
+    dense_matrix<bfloat16>& b,
+    dense_matrix<bfloat16>& output,
+    bool bcast_batch,
+    uint32_t nnz_blocks,
+    uint32_t M,
+    uint32_t N,
+    uint32_t K,
+    uint32_t R,
+    uint32_t C,
+    uint32_t B,
+    IDevice* device);
+
+template<bool verbose = false, bool is_profiling = false>
+void bsr_spmm_multicore_load_balanced_new_DM(
+    bsr_matrix<bfloat16>& a,
+    dense_matrix<bfloat16>& b,
+    dense_matrix<bfloat16>& output,
+    bool bcast_batch,
+    uint32_t nnz_blocks,
+    uint32_t M,
+    uint32_t N,
+    uint32_t K,
+    uint32_t R,
+    uint32_t C,
+    uint32_t B,
+    IDevice* device);
+
 
 using HostCodeFunctionPtr = void (*)(
     bsr_matrix<bfloat16>& a,
@@ -169,6 +199,8 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
     // {bsr_spmm_multicore_sparse_mcast<false, false>, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced<false, false>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<false, false>, "bsr_spmm_multicore_reuse_iteration"},
+    {bsr_spmm_multicore_naive_new_DM<false, false>, "bsr_spmm_multicore_naive_new_DM"},
+    {bsr_spmm_multicore_load_balanced_new_DM<false, false>, "bsr_spmm_multicore_load_balanced_new_DM"},
     // {bsr_spmm_multicore_reuse_many_blocks_per_core<false, false>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
     // {bsr_spmm_multicore_reuse<false, false>, "bsr_spmm_multicore_reuse"},
     // {bsr_spmm_multicore_reuse_naive<false, false>, "bsr_spmm_multicore_reuse_naive"},
@@ -180,6 +212,8 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryVerbose[] = {
     // {bsr_spmm_multicore_sparse_mcast<true, false>, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced<true, false>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<true, false>, "bsr_spmm_multicore_reuse_iteration"},
+    {bsr_spmm_multicore_naive_new_DM<true, false>, "bsr_spmm_multicore_naive_new_DM"},
+    {bsr_spmm_multicore_load_balanced_new_DM<true, false>, "bsr_spmm_multicore_load_balanced_new_DM"},
     // // {bsr_spmm_multicore_reuse_many_blocks_per_core<true, false>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
     // {bsr_spmm_multicore_reuse<true, false>, "bsr_spmm_multicore_reuse"},
     // {bsr_spmm_multicore_reuse_naive<true, false>, "bsr_spmm_multicore_reuse_naive"},
@@ -191,6 +225,8 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryProfiling[] =
     // {bsr_spmm_multicore_sparse_mcast<false, true>, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced<false, true>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<false, true>, "bsr_spmm_multicore_reuse_iteration"},
+    {bsr_spmm_multicore_naive_new_DM<false, true>, "bsr_spmm_multicore_naive_new_DM"},
+    {bsr_spmm_multicore_load_balanced_new_DM<false, true>, "bsr_spmm_multicore_load_balanced_new_DM"},
     // {bsr_spmm_multicore_reuse_many_blocks_per_core<false, true>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
     // {bsr_spmm_multicore_reuse<false, true>, "bsr_spmm_multicore_reuse"},
     // {bsr_spmm_multicore_reuse_naive<false, true>, "bsr_spmm_multicore_reuse_naive"},

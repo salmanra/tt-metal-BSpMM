@@ -25,6 +25,8 @@ def build_config(profiles_dir):
         os.path.join(suite, "bsr_spmm_multicore_snf"),
         os.path.join(suite, "bsr_spmm_multicore_load_balanced"),
         os.path.join(suite, "bsr_spmm_multicore_reuse_iteration"),
+        os.path.join(suite, "bsr_spmm_multicore_naive_new_DM"),
+        os.path.join(suite, "bsr_spmm_multicore_load_balanced_new_DM"),
     ]
     algorithm_labels = [os.path.basename(d) for d in algorithm_dirs]
 

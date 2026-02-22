@@ -279,7 +279,7 @@ void bsr_spmm_multicore_load_balanced_new_DM(
     };
 
     // Create Kernels
-    bool transpose_NoCs = false;
+    bool transpose_NoCs = true;
     auto noc_riscv_0 = transpose_NoCs ? NOC::RISCV_1_default : NOC::RISCV_0_default;
     auto noc_riscv_1 = transpose_NoCs ? NOC::RISCV_0_default : NOC::RISCV_1_default;
     auto reader_in0_id = tt_metal::CreateKernel(

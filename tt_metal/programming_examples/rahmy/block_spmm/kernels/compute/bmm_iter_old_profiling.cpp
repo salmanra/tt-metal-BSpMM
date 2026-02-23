@@ -7,10 +7,6 @@ CK is neutral to order, but it's probably worth naming loop vars
 #include <tools/profiler/kernel_profiler.hpp>
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_profiling.hpp"
 
-// Compile-time profiling zone toggle (override to 0 via CreateKernel defines)
-#ifndef PROFILE_COMPUTE
-#define PROFILE_COMPUTE 1
-#endif
 
 #include <cstdint>
 #include "hostdevcommon/kernel_structs.h"
@@ -18,6 +14,10 @@ CK is neutral to order, but it's probably worth naming loop vars
 #include "compute_kernel_api/matmul.h"
 #include "circular_buffer.h"
 
+// Compile-time profiling zone toggle (override to 0 via CreateKernel defines)
+#ifndef PROFILE_COMPUTE
+#define PROFILE_COMPUTE 1
+#endif
 
 namespace NAMESPACE {
 void MAIN {
@@ -73,8 +73,9 @@ void MAIN {
                 bool last_out = input_block == (num_blocks - 1);
                 cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
                 cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
-
+#if PROFILE_COMPUTE == 1
                 DeviceZoneScopedN("SpMM Zone: CK using input blocks");
+#endif
                 int in0_index_subblock_offset = 0;
                 for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
                     int in1_index_subblock_offset = 0;

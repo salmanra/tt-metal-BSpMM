@@ -4,6 +4,7 @@
 #include "../inc/include_me.hpp"
 #include "../inc/profiling_suite.hpp"
 #include "../inc/host_code.hpp"
+#include "../inc/host_code/spmm_zone_config.hpp"
 
 #include <system_error>
 #include <tracy/Tracy.hpp>
@@ -101,28 +102,25 @@ void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Re
     std::string host_function_name = HostCodeRegistryProfiling[host_code_num].second;
     auto [a, b, test_name] = Registry[test_num]();
 
+    auto zone_defines = spmm_zone_config::get_zone_defines();
+    
+    std::string disabled_zones = zone_defines.empty() ? "" : "_Disable_";
+    for (auto it = zone_defines.begin(); it != zone_defines.end(); it++){
+        std::string zone_name = it->first;
+        disabled_zones += "_" + zone_name;
+    }
 
     // set up command strings to direct and capture the trace (and its csv file)
     char buf[1000];
     size_t n = sprintf(buf, "/home/user/tt-metal/profiles_opt_noc/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
-    std::string trace_file_location = trace_directory + test_name + ".tracy";
+    std::string trace_file_location = trace_directory + test_name + disabled_zones + ".tracy";
 
     n = sprintf(buf, "mkdir -p %s", trace_directory.c_str());
     std::string mkdir_command(buf, n);
 
     n = sprintf(buf, "./capture-release -f -o %s &", trace_file_location.c_str());
     std::string capture_trace_command(buf, n);
-
-    n = sprintf(buf, "/home/user/tt-metal/profiles_opt_noc/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
-    std::string csv_directory(buf);
-    std::string csv_file_location = csv_directory + test_name + ".csv";
-
-    n = sprintf(buf, "mkdir -p %s", csv_directory.c_str());
-    std::string csv_mkdir_command(buf, n);
-
-    n = sprintf(buf, "./csvexport-release %s > %s", trace_file_location.c_str(), csv_file_location.c_str());
-    std::string csvexport_command(buf);
 
     // run ./capture-release to allow the profiler to listen for the program
     std::system(mkdir_command.c_str());

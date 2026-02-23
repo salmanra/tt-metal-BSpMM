@@ -4,6 +4,7 @@
 #include "../inc/include_me.hpp"
 #include "../inc/profiling_suite.hpp"
 #include "../inc/host_code.hpp"
+#include "../inc/host_code/spmm_zone_config.hpp"
 
 #include <system_error>
 #include <tracy/Tracy.hpp>
@@ -25,16 +26,26 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
     std::string host_function_name = HostCodeRegistry[host_code_num].second;
     auto [a, b, test_name] = Registry[test_num]();
 
+    auto zone_defines = spmm_zone_config::get_zone_defines();
+    
+    std::string disabled_zones = zone_defines.empty() ? "" : "_Disable_";
+    for (auto it = zone_defines.begin(); it != zone_defines.end(); it++){
+        std::string zone_name = it->first;
+        disabled_zones += "_" + zone_name;
+    }
+
+
+    std::string test_file_name = test_name + disabled_zones;
 
     // set up command strings to direct and capture the trace (and its csv file)
     char buf[1000];
     size_t n = sprintf(buf, "/home/user/tt-metal/profiles_opt_noc/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
-    std::string trace_file_location = trace_directory + test_name + ".tracy";
+    std::string trace_file_location = trace_directory + test_file_name + ".tracy";
 
     n = sprintf(buf, "/home/user/tt-metal/profiles_opt_noc/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string csv_directory(buf);
-    std::string csv_file_location = csv_directory + test_name + ".csv";
+    std::string csv_file_location = csv_directory + test_file_name + ".csv";
 
     n = sprintf(buf, "mkdir -p %s", csv_directory.c_str());
     std::string csv_mkdir_command(buf, n);
@@ -42,7 +53,7 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
     n = sprintf(buf, "./csvexport-release %s > %s", trace_file_location.c_str(), csv_file_location.c_str());
     std::string csvexport_command(buf);
   
-    std::string device_csv_file_location = csv_directory + test_name + ".device.csv";
+    std::string device_csv_file_location = csv_directory + test_file_name + ".device.csv";
     n = sprintf(buf, "./tracy-csvexport --gpu %s > %s", trace_file_location.c_str(), device_csv_file_location.c_str());
     std::string device_csvexport_command(buf);
 
@@ -54,10 +65,10 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
     //  of the same name as the csv file, append {_sparse, _dense} and swap the extension to .log 
     // pipe the output of a.pretty_print() to the sparse file
     // pipe the output of b.pretty_print() to the sparse file
-    std::string sparse_log_file = csv_directory + test_name + "_sparse.log";
+    std::string sparse_log_file = csv_directory + test_file_name + "_sparse.log";
     std::ofstream os_sparse(sparse_log_file);
 
-    std::string dense_log_file = csv_directory + test_name + "_dense.log";
+    std::string dense_log_file = csv_directory + test_file_name + "_dense.log";
     std::ofstream os_dense(dense_log_file);
 
     a.pretty_print(os_sparse);

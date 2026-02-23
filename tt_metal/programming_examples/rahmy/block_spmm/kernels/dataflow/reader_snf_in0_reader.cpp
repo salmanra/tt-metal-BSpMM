@@ -174,27 +174,30 @@ void kernel_main(){
                 uint32_t l1_write_addr_in0_start = l1_write_addr_in0;  // Save start address for forwarding
 
                 if constexpr (is_injector_core){
+#if PROFILE_READ_IN0 == 1
+                    DeviceZoneScopedN("SpMM Zone: Reading nonzero block from in0 from DRAM");
+#endif
                     // Read in0 block from DRAM
-                    SPMM_PROFILE_ZONE(PROFILE_READ_IN0, "SpMM Zone: Reading nonzero block from in0 from DRAM", [&]() {
-                        uint32_t num_blocks_in = reduction_iter - block_row_start;
-                        spmm::read_block_by_tile(
-                            in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
-                            s0, l1_write_addr_in0,
-                            tile_info.in0_tile_size, in0_block_h, in0_block_w,
-                            in0_tensor_stride_h, in0_tensor_stride_w);
-                        noc_async_read_barrier();
-                    });
+                    uint32_t num_blocks_in = reduction_iter - block_row_start;
+                    spmm::read_block_by_tile(
+                        in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
+                        s0, l1_write_addr_in0,
+                        tile_info.in0_tile_size, in0_block_h, in0_block_w,
+                        in0_tensor_stride_h, in0_tensor_stride_w);
+                    noc_async_read_barrier();
                     DPRINT_DATA0(DPRINT << " done injecting" << ENDL());
                 }
                 else {
-                    SPMM_PROFILE_ZONE(PROFILE_WAIT_IN0, "SpMM Zone: Waiting on nonzero block from in0 from neighbor", [&]() {
-                        noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
-                        noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
-                        noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
-                    });
+#if PROFILE_WAIT_IN0 == 1
+                    DeviceZoneScopedN("SpMM Zone: Waiting on nonzero block from in0 from neighbor");;
+#endif
+                    // Read in0 block from neighbor
+                    noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
+                    noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
+                    noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
                     DPRINT_DATA0(DPRINT << " done receiving" << ENDL());
-
                 }
+                
                 cb_push_back(spmm::cb_id_in0, in0_block_num_tiles);
 
                 if (!is_sink_core) {
@@ -218,20 +221,21 @@ void kernel_main(){
                 
 
                 uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
-                SPMM_PROFILE_ZONE(PROFILE_WRITE_OUT, "SpMM Zone: Writing Block back to DRAM", [&]() {
-                    for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
-                        uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
-                        for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
-                            spmm::write_subblock_by_tile(
-                                out_tensor_sbw_start_tile_id,
-                                out_s, l1_read_addr,
-                                output_tile_size, out_subblock_h, out_subblock_w,
-                                out_tensor_stride_h, out_tensor_stride_w);
-                                out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
-                        }
-                        out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
+#if PROFILE_WRITE_OUT == 1
+                DeviceZoneScopedN("SpMM Zone: Writing Block back to DRAM");
+#endif
+                for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
+                    uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
+                    for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
+                        spmm::write_subblock_by_tile(
+                            out_tensor_sbw_start_tile_id,
+                            out_s, l1_read_addr,
+                            output_tile_size, out_subblock_h, out_subblock_w,
+                            out_tensor_stride_h, out_tensor_stride_w);
+                            out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
                     }
-                });
+                    out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
+                }
                         
                 
                 noc_async_write_barrier();

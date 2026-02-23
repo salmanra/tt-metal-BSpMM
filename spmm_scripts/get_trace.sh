@@ -113,7 +113,7 @@ function list_registries {
 
 function build_with_profiling_enabled {
     pushd "$TT_METAL_DIR" > /dev/null
-    export TT_METAL_KERNEL_MAP=1
+    echo "Building with profiling enabled..."
     ./build_metal.sh --enable-profiler --build-programming-examples > build.log 2> build_err.log
     local rc=$?
     popd > /dev/null
@@ -135,7 +135,6 @@ function get_trace {
     rm -f "$TT_METAL_DIR/generated/profiler/.logs/zone_src_locations.log"
     rm -f "$TT_METAL_DIR/generated/profiler/.logs/new_zone_src_locations.log"
     # Zone env vars (e.g. PROFILE_WRITE_OUT=0) are inherited from the parent shell
-    export TT_METAL_KERNEL_MAP=1
     TT_METAL_DEVICE_PROFILER=1 "$TT_METAL_DIR/build/programming_examples/rahmy/profile_block" \
         "$profile_case" "$host_code" "$registry"
     "$TT_METAL_DIR/build/programming_examples/rahmy/export_to_csv" \
@@ -143,7 +142,7 @@ function get_trace {
 }
 
 # Parse --disable-zones flag and export env vars.
-# Usage: parse_disable_zones "read_in0,write_out,compute"
+# Usage: parse_disable_zones "read_in0,wait_in0,read_in1,write_out,compute"
 function parse_disable_zones {
     IFS=',' read -ra zones <<< "$1"
     for z in "${zones[@]}"; do
@@ -170,6 +169,7 @@ function main {
     fi
 
     # Parse optional --disable-zones flag (can appear as 4th positional arg)
+    # What I want now is for the set of disabled zones to define their own output trace
     if [[ "${4:-}" == "--disable-zones" && -n "${5:-}" ]]; then
         parse_disable_zones "$5"
     fi
@@ -179,7 +179,7 @@ function main {
     rm -f "$TT_METAL_DIR/generated/profiler/.logs/zone_src_locations.log"
     rm -f "$TT_METAL_DIR/generated/profiler/.logs/new_zone_src_locations.log"
 
-    tt-smi -r
+    tt-smi -r > /dev/null
     build_with_profiling_enabled
 
 

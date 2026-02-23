@@ -94,15 +94,15 @@ void kernel_main(){
                 // Read in1 block (row selected by BSR col_indices)
                 uint32_t bsr_col_index = col_indices[reduction_iter];
                 uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
-                SPMM_PROFILE_ZONE(PROFILE_READ_IN1, "SpMM Zone: Reading dense block of in1 from DRAM", [&]() {
-                    spmm::read_block_by_tile(
-                        in1_tensor_start_tile_id + bsr_col_index * in1_block_stride,
-                        s1, l1_write_addr_in1,
-                        ti.in1_tile_size, in1_block_h, in1_block_w,
-                        in1_tensor_stride_h, in1_tensor_stride_w);
-                    noc_async_read_barrier();
-                });
-
+#if PROFILE_READ_IN1 == 1
+                DeviceZoneScopedN("SpMM Zone: Reading dense block of in1 from DRAM");
+#endif
+                spmm::read_block_by_tile(
+                    in1_tensor_start_tile_id + bsr_col_index * in1_block_stride,
+                    s1, l1_write_addr_in1,
+                    ti.in1_tile_size, in1_block_h, in1_block_w,
+                    in1_tensor_stride_h, in1_tensor_stride_w);
+                noc_async_read_barrier();
                 cb_push_back(spmm::cb_id_in1, in1_block_num_tiles);
             }
         }

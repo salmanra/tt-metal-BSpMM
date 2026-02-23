@@ -1,4 +1,6 @@
 #include "../host_code.hpp"
+#include "spmm_zone_config.hpp"
+
 
 namespace bsr_host_code {
 
@@ -278,7 +280,11 @@ void bsr_spmm_multicore_load_balanced_new_DM(
         (std::uint32_t)num_iters_x,
     };
 
+    
+    
     // Create Kernels
+    auto zone_defines = spmm_zone_config::get_zone_defines();
+
     bool transpose_NoCs = true;
     auto noc_riscv_0 = transpose_NoCs ? NOC::RISCV_1_default : NOC::RISCV_0_default;
     auto noc_riscv_1 = transpose_NoCs ? NOC::RISCV_0_default : NOC::RISCV_1_default;
@@ -306,7 +312,8 @@ void bsr_spmm_multicore_load_balanced_new_DM(
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm_iter_old_profiling.cpp",
         all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity,
-                                .compile_args = compute_kernel_compile_time_args});
+                                .compile_args = compute_kernel_compile_time_args,
+                                .defines = zone_defines});
 
     // Runtime arguments
     // Load-balancing: sort nnz rows by work (descending) and distribute to core rows

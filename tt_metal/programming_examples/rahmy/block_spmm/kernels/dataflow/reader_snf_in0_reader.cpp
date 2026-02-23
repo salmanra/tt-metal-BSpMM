@@ -9,10 +9,16 @@
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_indexing.hpp"
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_profiling.hpp"
 
-// Compile-time profiling zone toggles (set to false to disable a zone)
-constexpr bool PROFILE_READ_IN0 = true;
-constexpr bool PROFILE_WAIT_IN0 = true;
-constexpr bool PROFILE_WRITE_OUT = true;
+// Compile-time profiling zone toggles (override to 0 via CreateKernel defines)
+#ifndef PROFILE_READ_IN0
+#define PROFILE_READ_IN0 1
+#endif
+#ifndef PROFILE_WAIT_IN0
+#define PROFILE_WAIT_IN0 1
+#endif
+#ifndef PROFILE_WRITE_OUT
+#define PROFILE_WRITE_OUT 1
+#endif
 
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////

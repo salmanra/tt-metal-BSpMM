@@ -17,6 +17,7 @@
 #include "hostdevcommon/profiler_common.h"
 
 #include <cstdlib> // required to start ./capture-release listening
+#include <unistd.h> // required to sleep for tracy.IsConnected()
 
 using namespace tt::constants;
 using namespace std;
@@ -126,12 +127,9 @@ void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Re
     // run ./capture-release to allow the profiler to listen for the program
     std::system(mkdir_command.c_str());
     std::system(capture_trace_command.c_str());
-    std::cout << std::endl;
 
-    // // // run the program
+    //  run the program
     profile_test(host_function, a, b, test_name, num_iters);
-
-
 }
 
 void profile_test(
@@ -143,7 +141,13 @@ void profile_test(
     // device setup
     constexpr int device_id = 0;
     IDevice* device = CreateDevice(device_id);
-    tracy::GetProfiler().IsConnected();
+    // TODO: test if this gets rid of the need to rebuild and reset every time we profile
+    std::cout << "Checking for tracy profiler connection to device" << std::endl;
+    while (!tracy::GetProfiler().IsConnected()){
+        std::cout << "Waiting for tracy profiler to connect to device" << std::endl;
+        sleep(1); // spin on this until the device is actually connected 
+    }
+    
     {
         ZoneScopedNC("Post-device setup", tracy::Color::DarkOliveGreen);
         // matmul params setup

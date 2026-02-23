@@ -303,7 +303,7 @@ void bsr_spmm_multicore_load_balanced_new_DM(
     // Create compute kernel
     auto mm_kernel_id = tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm_iter.cpp",
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm_iter_old_profiling.cpp",
         all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity,
                                 .compile_args = compute_kernel_compile_time_args});

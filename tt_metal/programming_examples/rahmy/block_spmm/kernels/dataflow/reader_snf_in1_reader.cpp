@@ -8,8 +8,10 @@
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_indexing.hpp"
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_profiling.hpp"
 
-// Compile-time profiling zone toggle (set to false to disable)
-constexpr bool PROFILE_READ_IN1 = true;
+// Compile-time profiling zone toggle (override to 0 via CreateKernel defines)
+#ifndef PROFILE_READ_IN1
+#define PROFILE_READ_IN1 1
+#endif
 
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////

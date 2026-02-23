@@ -9,6 +9,7 @@
 
 
 #include "../host_code.hpp"
+#include "spmm_zone_config.hpp"
 
 namespace bsr_host_code{
 
@@ -499,6 +500,8 @@ void bsr_spmm_multicore_snf(
     auto noc_riscv_0 = transpose_NoCs ? NOC::RISCV_1_default : NOC::RISCV_0_default;
     auto noc_riscv_1 = transpose_NoCs ? NOC::RISCV_0_default : NOC::RISCV_1_default;
 
+    auto zone_defines = spmm_zone_config::get_zone_defines();
+
     auto compute_id = tt_metal::CreateKernel(
         program,
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm_iter.cpp",
@@ -506,8 +509,9 @@ void bsr_spmm_multicore_snf(
         tt_metal::ComputeConfig{
             .math_fidelity = math_fidelity,
             // .fp32_dest_acc_en = true,
-            .compile_args = compute_kernel_compile_time_args});
-    
+            .compile_args = compute_kernel_compile_time_args,
+            .defines = zone_defines});
+
     auto in1_reader_id = tt_metal::CreateKernel(
         program,
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_snf_in1_reader.cpp",
@@ -515,7 +519,8 @@ void bsr_spmm_multicore_snf(
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_1,
             .noc = noc_riscv_1,
-            .compile_args = in1_reader_compile_time_args});
+            .compile_args = in1_reader_compile_time_args,
+            .defines = zone_defines});
 
 
     auto in0_injector_and_writer_id = tt_metal::CreateKernel(
@@ -525,7 +530,8 @@ void bsr_spmm_multicore_snf(
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_0,
             .noc = noc_riscv_0,
-            .compile_args = in0_injector_compile_time_args});
+            .compile_args = in0_injector_compile_time_args,
+            .defines = zone_defines});
 
     KernelHandle in0_receiver_and_writer_id = 0;
     if (num_cores_c > 1){
@@ -539,7 +545,8 @@ void bsr_spmm_multicore_snf(
             tt_metal::DataMovementConfig{
                 .processor = DataMovementProcessor::RISCV_0,
                 .noc = noc_riscv_0,
-                .compile_args = in0_receiver_compile_time_args});
+                .compile_args = in0_receiver_compile_time_args,
+                .defines = zone_defines});
     }
 
     // Find Perms — sort only the nnz rows so perm values are folded indices

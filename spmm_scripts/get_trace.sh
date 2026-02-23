@@ -113,7 +113,7 @@ function list_registries {
 
 function build_with_profiling_enabled {
     pushd "$TT_METAL_DIR" > /dev/null
-    tt-smi -r
+    export TT_METAL_KERNEL_MAP=1
     ./build_metal.sh --enable-profiler --build-programming-examples > build.log 2> build_err.log
     local rc=$?
     popd > /dev/null
@@ -131,10 +131,27 @@ function get_trace {
 
     build_with_profiling_enabled
     pkill capture-release 2>/dev/null || true
+    # Clear stale profiler zone mappings (they accumulate across JIT compilations)
+    rm -f "$TT_METAL_DIR/generated/profiler/.logs/zone_src_locations.log"
+    rm -f "$TT_METAL_DIR/generated/profiler/.logs/new_zone_src_locations.log"
+    # Zone env vars (e.g. PROFILE_WRITE_OUT=0) are inherited from the parent shell
+    export TT_METAL_KERNEL_MAP=1
     TT_METAL_DEVICE_PROFILER=1 "$TT_METAL_DIR/build/programming_examples/rahmy/profile_block" \
         "$profile_case" "$host_code" "$registry"
     "$TT_METAL_DIR/build/programming_examples/rahmy/export_to_csv" \
         "$profile_case" "$host_code" "$registry"
+}
+
+# Parse --disable-zones flag and export env vars.
+# Usage: parse_disable_zones "read_in0,write_out,compute"
+function parse_disable_zones {
+    IFS=',' read -ra zones <<< "$1"
+    for z in "${zones[@]}"; do
+        local upper_z
+        upper_z="PROFILE_$(echo "$z" | tr '[:lower:]' '[:upper:]')"
+        export "${upper_z}=0"
+        echo "  Zone disabled: ${upper_z}=0"
+    done
 }
 
 ###############################################################################
@@ -142,7 +159,7 @@ function get_trace {
 ###############################################################################
 
 function main {
-    local profile_arg="${1:?Usage: $0 <profile_case|all|--list> <host_code|all> [registry|all]}"
+    local profile_arg="${1:?Usage: $0 <profile_case|all|--list> <host_code|all> [registry|all] [--disable-zones zone1,zone2,...]}"
     local host_code_arg="${2:-all}"
     local registry_arg="${3:-2}"
 
@@ -152,7 +169,17 @@ function main {
         return
     fi
 
-    # Getting weird profiling errors, I think it will resolve  if we instead rebuild every time
+    # Parse optional --disable-zones flag (can appear as 4th positional arg)
+    if [[ "${4:-}" == "--disable-zones" && -n "${5:-}" ]]; then
+        parse_disable_zones "$5"
+    fi
+
+    # Clear stale profiler zone source location logs (they accumulate across JIT
+    # compilations and can cause hash mismatches when kernel files are edited)
+    rm -f "$TT_METAL_DIR/generated/profiler/.logs/zone_src_locations.log"
+    rm -f "$TT_METAL_DIR/generated/profiler/.logs/new_zone_src_locations.log"
+
+    tt-smi -r
     build_with_profiling_enabled
 
 

@@ -9,8 +9,8 @@
         },
         "diagonal_large_R32_C32": {
             "FLOP count": 0.004294967296,
-            "Program Loop total seconds": 0.013861786,
-            "TFLOP/s": 3.0984227400423006,
+            "Program Loop total seconds": 0.014047734,
+            "TFLOP/s": 3.0574093273690974,
             "oi_ideal": 15.968689084750164,
             "oi_pessimistic": 15.968689084750164
         },
@@ -116,8 +116,8 @@
         },
         "diagonal_large_R32_C32": {
             "FLOP count": 0.004294967296,
-            "Program Loop total seconds": 0.014233627,
-            "TFLOP/s": 3.0174791681698556,
+            "Program Loop total seconds": 0.014320023,
+            "TFLOP/s": 2.999274020719101,
             "oi_ideal": 15.968689084750164,
             "oi_pessimistic": 15.968689084750164
         },

@@ -1,0 +1,1 @@
+./spmm_scripts/get_trace.sh all all 2 --disable-zones read_in0,wait_in0,read_in1

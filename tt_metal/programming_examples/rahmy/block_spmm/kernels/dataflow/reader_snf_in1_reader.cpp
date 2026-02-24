@@ -12,6 +12,9 @@
 #ifndef PROFILE_READ_IN1
 #define PROFILE_READ_IN1 1
 #endif
+#ifndef PROFILE_WRITE_OUT
+#define PROFILE_WRITE_OUT 1
+#endif
 
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
@@ -44,6 +47,16 @@ void kernel_main(){
     constexpr uint32_t col_indices_num_tiles = get_compile_time_arg_val(18);
     constexpr uint32_t indptr_num_tiles = get_compile_time_arg_val(19);
 
+    constexpr uint32_t is_output_writer = get_compile_time_arg_val(20);
+
+    // writer args (only used when is_output_writer == 1)
+    constexpr uint32_t out_tensor_addr = get_compile_time_arg_val(21);
+    constexpr uint32_t RtNt = get_compile_time_arg_val(22);
+    constexpr uint32_t Nt = get_compile_time_arg_val(23);
+    constexpr uint32_t out_subblock_w = get_compile_time_arg_val(24);
+    constexpr uint32_t out_subblock_h = get_compile_time_arg_val(25);
+
+
     ///////////////////////////////////////////////////////////////////////
     /// END COMPILETIME ARGS //////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
@@ -56,8 +69,16 @@ void kernel_main(){
     const uint32_t num_iters_y = get_arg_val<uint32_t>(arg_index++);
     const uint32_t output_idx_x_start = get_arg_val<uint32_t>(arg_index++);
     uint32_t y_coords[num_iters_y];
+    uint32_t folded_y_coords[num_iters_y];
     for (uint32_t i = 0; i < num_iters_y; i++){
         y_coords[i] = get_arg_val<uint32_t>(arg_index++);
+        if constexpr (is_output_writer) {
+            folded_y_coords[i] = get_arg_val<uint32_t>(arg_index++);
+        }
+    }
+    uint32_t out_tensor_start_tile_id = 0;
+    if constexpr (is_output_writer) {
+        out_tensor_start_tile_id = get_arg_val<uint32_t>(arg_index++);
     }
 
     ///////////////////////////////////////////////////////////////////////
@@ -65,17 +86,42 @@ void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
 
     const auto ti = spmm::get_tile_info();
+    const uint32_t output_tile_size = get_tile_size(spmm::cb_id_out);
+    const DataFormat output_format = get_dataformat(spmm::cb_id_out);
 
     const InterleavedAddrGenFast<in1_is_dram> s1 = {
         .bank_base_address = in1_tensor_addr, .page_size = ti.in1_tile_size, .data_format = ti.in1_format};
+    const InterleavedAddrGenFast<true> out_s = {
+        .bank_base_address = out_tensor_addr, .page_size = output_tile_size, .data_format = output_format};
 
-    // Wait for indexing data loaded by in0_reader on the other RISC
-    uint32_t* indptr = spmm::wait_for_indexing(spmm::cb_id_indptr, indptr_num_tiles);
-    uint32_t* col_indices = spmm::wait_for_indexing(spmm::cb_id_col_indices, col_indices_num_tiles);
+    // Load or wait for sparse indexing data
+    uint32_t* col_indices;
+    uint32_t* indptr;
+    if constexpr (is_output_writer){
+        col_indices = spmm::load_indexing_tiled<col_indices_is_dram>(
+            spmm::cb_id_col_indices, col_indices_addr,
+            ti.col_indices_tile_size, ti.col_indices_format, col_indices_num_tiles);
+        indptr = spmm::load_indexing_tiled<indptr_is_dram>(
+            spmm::cb_id_indptr, indptr_addr,
+            ti.indptr_tile_size, ti.indptr_format, indptr_num_tiles);
+    }
+    else {
+        indptr = spmm::wait_for_indexing(spmm::cb_id_indptr, indptr_num_tiles);
+        col_indices = spmm::wait_for_indexing(spmm::cb_id_col_indices, col_indices_num_tiles);
+    }
+
+    // Writer setup (computed unconditionally; values are only used when is_output_writer == 1)
+    uint32_t out_num_subblocks_w = in1_block_w / out_subblock_w;
+    uint32_t out_num_subblocks_h = in0_block_h / out_subblock_h;
+    uint32_t out_tensor_next_subblock_stride_w = out_subblock_w;
+    uint32_t out_tensor_next_subblock_stride_h = out_subblock_h * Nt;
+    uint32_t out_tensor_stride_w = 1;
+    uint32_t out_tensor_stride_h = Nt;
 
     ///////////////////////////////////////////////////////////////////////
     /// PROGRAM BODY //////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
+    uint32_t out_tensor_x_coord_offset = 0;
     uint32_t output_idx_y, output_idx_x;
     for (uint32_t iter_y = 0; iter_y < num_iters_y; iter_y++){
         // Get y_coord for this iter
@@ -105,7 +151,42 @@ void kernel_main(){
                 noc_async_read_barrier();
                 cb_push_back(spmm::cb_id_in1, in1_block_num_tiles);
             }
+
+            if constexpr (is_output_writer) {
+                uint32_t out_tensor_y_coord_offset = RtNt * folded_y_coords[iter_y];
+                uint32_t out_block_num_tiles = in0_block_h * in1_block_w;
+                uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
+
+                cb_wait_front(spmm::cb_id_out, out_block_num_tiles);
+
+                uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
+#if PROFILE_WRITE_OUT == 1
+                DeviceZoneScopedN("SpMM Zone: Writing Block back to DRAM");
+#endif
+                for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
+                    uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
+                    for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
+                        spmm::write_subblock_by_tile(
+                            out_tensor_sbw_start_tile_id,
+                            out_s, l1_read_addr,
+                            output_tile_size, out_subblock_h, out_subblock_w,
+                            out_tensor_stride_h, out_tensor_stride_w);
+                        out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
+                    }
+                    out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
+                }
+
+                noc_async_write_barrier();
+                cb_pop_front(spmm::cb_id_out, out_block_num_tiles);
+                out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
+            }
         }
+        out_tensor_x_coord_offset = 0;
+    }
+
+    if constexpr (is_output_writer) {
+        cb_pop_front(spmm::cb_id_col_indices, col_indices_num_tiles);
+        cb_pop_front(spmm::cb_id_indptr, indptr_num_tiles);
     }
     DPRINT_DATA1(DPRINT << "in1 kernel complete" << ENDL());
 

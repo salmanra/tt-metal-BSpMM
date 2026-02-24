@@ -334,6 +334,8 @@ void bsr_spmm_multicore_snf(
 
     */
 
+    bool in1_is_writer = true;  // flip to switch which RISC writes output to DRAM
+
     bool src0_is_dram = src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool src1_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool col_indices_is_dram = column_indices_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
@@ -370,7 +372,7 @@ void bsr_spmm_multicore_snf(
         in0_sender_semaphore_id, 
         in0_receiver_semaphore_id,
         (std::uint32_t)true,                            // is_injector_core
-        (std::uint32_t)true,                            // is_output_writer
+        (std::uint32_t)!in1_is_writer,                  // is_output_writer
         (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
 
         (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
@@ -418,7 +420,7 @@ void bsr_spmm_multicore_snf(
         in0_sender_semaphore_id, 
         in0_receiver_semaphore_id,
         (std::uint32_t)false,                    // is_injector_core
-        (std::uint32_t)true,                    // is_output_writer
+        (std::uint32_t)!in1_is_writer,           // is_output_writer
         (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
 
         (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
@@ -463,10 +465,12 @@ void bsr_spmm_multicore_snf(
         (std::uint32_t)num_tiles_for_col_indices,
         (std::uint32_t)num_tiles_for_indptr,
 
-        // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
-        // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x
-        // col indices start of row obtained by // a.indptr[output_idx_y],
-        // col indices end of row obtained by //  a.indptr[output_idx_y + 1],
+        (std::uint32_t)in1_is_writer,                            // is_output_writer [20]
+        (std::uint32_t)dst_dram_buffer->address(),               // out_tensor_addr [21]
+        (std::uint32_t)Rt * Nt,                                  // RtNt [22]
+        (std::uint32_t)Nt,                                       // Nt [23]
+        (std::uint32_t)out_subblock_w,                           // out_subblock_w [24]
+        (std::uint32_t)out_subblock_h,                           // out_subblock_h [25]
     };
 
     std::vector<uint32_t> compute_kernel_compile_time_args = {
@@ -496,11 +500,11 @@ void bsr_spmm_multicore_snf(
        3. in0 injector cores in0 reader w/ injector comp args
        4. in0 receiver cores in0 reader w/ receiver comp args
     */
+    auto zone_defines = spmm_zone_config::get_zone_defines();
+
     bool transpose_NoCs = true;
     auto noc_riscv_0 = transpose_NoCs ? NOC::RISCV_1_default : NOC::RISCV_0_default;
     auto noc_riscv_1 = transpose_NoCs ? NOC::RISCV_0_default : NOC::RISCV_1_default;
-
-    auto zone_defines = spmm_zone_config::get_zone_defines();
 
     auto compute_id = tt_metal::CreateKernel(
         program,
@@ -659,13 +663,15 @@ void bsr_spmm_multicore_snf(
                     }
                 }
                 in0_snf_reader_runtime_args.push_back(output_idx_y); // for reading
-                in0_snf_reader_runtime_args.push_back(folded_output_idx_y); // for writing
+                in0_snf_reader_runtime_args.push_back(folded_output_idx_y); // always parsed by in0 kernel
                 in1_reader_runtime_args.push_back(output_idx_y);
+                if (in1_is_writer) in1_reader_runtime_args.push_back(folded_output_idx_y);
                 compute_runtime_args.push_back(a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
             }
 
 
-            in0_snf_reader_runtime_args.push_back(output_idx_x_start * in1_block_w);
+            in0_snf_reader_runtime_args.push_back(output_idx_x_start * in1_block_w); // always parsed by in0 kernel
+            if (in1_is_writer) in1_reader_runtime_args.push_back(output_idx_x_start * in1_block_w);
             in0_snf_reader_runtime_args.push_back(num_iters_y_this_core);
             // dest_nocx/y and sender_nocx/y
             //      these are pretty simple?

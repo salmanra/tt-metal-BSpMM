@@ -1,4 +1,6 @@
 #include "../host_code.hpp"
+#include "spmm_zone_config.hpp"
+
 namespace bsr_host_code {
 
 template<bool verbose, bool is_profiling>
@@ -429,6 +431,8 @@ void bsr_spmm_multicore_reuse_iteration(
     }
 
     // Create Kernels
+    auto zone_defines = spmm_zone_config::get_zone_defines();
+
     bool transpose_NoCs = false;
     auto noc_riscv_0 = transpose_NoCs ? NOC::RISCV_1_default : NOC::RISCV_0_default;
     auto noc_riscv_1 = transpose_NoCs ? NOC::RISCV_0_default : NOC::RISCV_1_default;
@@ -439,7 +443,8 @@ void bsr_spmm_multicore_reuse_iteration(
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_0,
             .noc = noc_riscv_0,
-            .compile_args = reader_compile_time_args});
+            .compile_args = reader_compile_time_args,
+            .defines = zone_defines});
 
     auto writer_id = tt_metal::CreateKernel(
         program,
@@ -448,7 +453,8 @@ void bsr_spmm_multicore_reuse_iteration(
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_1,
             .noc = noc_riscv_1,
-            .compile_args = writer_compile_time_args});
+            .compile_args = writer_compile_time_args,
+            .defines = zone_defines});
 
     // Create compute kernel
     auto mm_kernel_id = tt_metal::CreateKernel(
@@ -456,7 +462,8 @@ void bsr_spmm_multicore_reuse_iteration(
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm_iter.cpp",
         all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity,
-                                       .compile_args = compute_kernel_compile_time_args});
+                                       .compile_args = compute_kernel_compile_time_args,
+                                        .defines = zone_defines});
     // Runtime arguments
     auto core_coords_vec = corerange_to_cores(all_cores);
     uint32_t work_region = 0;

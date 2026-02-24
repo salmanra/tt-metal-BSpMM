@@ -16,6 +16,9 @@ for num_iters_x:
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_indexing.hpp"
 
+#ifndef PROFILE_WRITE_OUT
+#define PROFILE_WRITE_OUT 1
+#endif
 
 void kernel_main() {
     ///////////////////////////////////////////////////////////////////////
@@ -67,7 +70,9 @@ void kernel_main() {
     uint32_t out_tensor_x_coord_offset = 0;
     for (uint32_t y = 0; y < num_iters_y; y++){
         for (uint32_t x = 0; x < num_iters_x; x++){
+#if PROFILE_WRITE_OUT == 1
             DeviceZoneScopedN("SpMM Zone Writing Block back to DRAM");
+#endif
             uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_x_coord_offset;
             for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
                 uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;

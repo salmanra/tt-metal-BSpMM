@@ -1,7 +1,6 @@
 #include "../host_code.hpp"
 #include "spmm_zone_config.hpp"
 
-
 namespace bsr_host_code {
 
 template<bool verbose, bool is_profiling>
@@ -258,13 +257,25 @@ void bsr_spmm_multicore_load_balanced_new_DM(
         (std::uint32_t)num_tiles_for_indptr,
     };
 
-    // Extend reader args with writer args for the in0 kernel (which performs writeback)
+    // Toggle: set to true to have in1 perform the writeback instead of in0.
+    bool in1_is_writer = true;
+
+    // Both in0 and in1 receive the full writer CT args; is_output_writer [20] determines who acts.
     std::vector<uint32_t> reader_in0_compile_time_args = reader_compile_time_args;
-    reader_in0_compile_time_args.push_back((std::uint32_t)dst_dram_buffer->address()); // out_tensor_addr       [20]
-    reader_in0_compile_time_args.push_back((std::uint32_t)Rt * Nt);                    // RtNt                  [21]
-    reader_in0_compile_time_args.push_back((std::uint32_t)Nt);                         // Nt                    [22]
-    reader_in0_compile_time_args.push_back((std::uint32_t)out_subblock_w);             // out_subblock_w        [23]
-    reader_in0_compile_time_args.push_back((std::uint32_t)out_subblock_h);             // out_subblock_h        [24]
+    reader_in0_compile_time_args.push_back((std::uint32_t)!in1_is_writer);             // is_output_writer      [20]
+    reader_in0_compile_time_args.push_back((std::uint32_t)dst_dram_buffer->address()); // out_tensor_addr       [21]
+    reader_in0_compile_time_args.push_back((std::uint32_t)Rt * Nt);                    // RtNt                  [22]
+    reader_in0_compile_time_args.push_back((std::uint32_t)Nt);                         // Nt                    [23]
+    reader_in0_compile_time_args.push_back((std::uint32_t)out_subblock_w);             // out_subblock_w        [24]
+    reader_in0_compile_time_args.push_back((std::uint32_t)out_subblock_h);             // out_subblock_h        [25]
+
+    std::vector<uint32_t> reader_in1_compile_time_args = reader_compile_time_args;
+    reader_in1_compile_time_args.push_back((std::uint32_t)in1_is_writer);              // is_output_writer      [20]
+    reader_in1_compile_time_args.push_back((std::uint32_t)dst_dram_buffer->address()); // out_tensor_addr       [21]
+    reader_in1_compile_time_args.push_back((std::uint32_t)Rt * Nt);                    // RtNt                  [22]
+    reader_in1_compile_time_args.push_back((std::uint32_t)Nt);                         // Nt                    [23]
+    reader_in1_compile_time_args.push_back((std::uint32_t)out_subblock_w);             // out_subblock_w        [24]
+    reader_in1_compile_time_args.push_back((std::uint32_t)out_subblock_h);             // out_subblock_h        [25]
 
     std::vector<uint32_t> compute_kernel_compile_time_args = {
         (std::uint32_t)in0_block_w,
@@ -295,7 +306,8 @@ void bsr_spmm_multicore_load_balanced_new_DM(
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_0,
             .noc = noc_riscv_0,
-            .compile_args = reader_in0_compile_time_args});
+            .compile_args = reader_in0_compile_time_args,
+            .defines = zone_defines});
 
     auto reader_in1_id = tt_metal::CreateKernel(
         program,
@@ -304,7 +316,8 @@ void bsr_spmm_multicore_load_balanced_new_DM(
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_1,
             .noc = noc_riscv_1,
-            .compile_args = reader_compile_time_args});
+            .compile_args = reader_in1_compile_time_args,
+            .defines = zone_defines});
 
     // Create compute kernel
     auto mm_kernel_id = tt_metal::CreateKernel(
@@ -380,11 +393,10 @@ void bsr_spmm_multicore_load_balanced_new_DM(
             uint32_t num_iters_y_this_core = output_y_indices[core_idx_y].size();
             uint32_t num_iters_x_this_core = std::min(num_iters_x, num_blocks_x - output_idx_x_start + 1);
 
-            // in0 reader: num_iters_x, num_iters_y, output_idx_x_start, (y[i], folded_y[i]) per iter_y, out_tensor_start_tile_id
+            // Both readers: num_iters_x, num_iters_y, output_idx_x_start
             reader_in0_runtime_args.push_back(num_iters_x_this_core);
             reader_in0_runtime_args.push_back(num_iters_y_this_core);
             reader_in0_runtime_args.push_back(output_idx_x_start);
-            // in1 reader: num_iters_x, num_iters_y, output_idx_x_start, y[i] per iter_y
             reader_in1_runtime_args.push_back(num_iters_x_this_core);
             reader_in1_runtime_args.push_back(num_iters_y_this_core);
             reader_in1_runtime_args.push_back(output_idx_x_start);
@@ -393,13 +405,19 @@ void bsr_spmm_multicore_load_balanced_new_DM(
             for (int iter_y = 0; iter_y < (int)num_iters_y_this_core; iter_y++) {
                 uint32_t folded_output_idx_y = output_y_indices[core_idx_y][iter_y];
                 uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y];
-                reader_in0_runtime_args.push_back(output_idx_y);       // y_coords
-                reader_in0_runtime_args.push_back(folded_output_idx_y); // folded_y_coords
-                reader_in1_runtime_args.push_back(output_idx_y);       // y_coords
+                // The writer kernel receives interleaved (y_coord, folded_y_coord) pairs;
+                // the non-writer kernel receives only y_coords.
+                reader_in0_runtime_args.push_back(output_idx_y);
+                if (!in1_is_writer) reader_in0_runtime_args.push_back(folded_output_idx_y);
+                reader_in1_runtime_args.push_back(output_idx_y);
+                if (in1_is_writer) reader_in1_runtime_args.push_back(folded_output_idx_y);
                 compute_runtime_args.push_back(a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
             }
-            // out_tensor_start_tile_id: x base offset; y offset computed in-kernel via folded_y_coords
-            reader_in0_runtime_args.push_back(output_idx_x_start * in1_block_w);
+            // out_tensor_start_tile_id goes to the writer kernel only
+            if (!in1_is_writer)
+                reader_in0_runtime_args.push_back(output_idx_x_start * in1_block_w);
+            else
+                reader_in1_runtime_args.push_back(output_idx_x_start * in1_block_w);
 
             tt_metal::SetRuntimeArgs(program, reader_in0_id, core, reader_in0_runtime_args);
             tt_metal::SetRuntimeArgs(program, reader_in1_id, core, reader_in1_runtime_args);

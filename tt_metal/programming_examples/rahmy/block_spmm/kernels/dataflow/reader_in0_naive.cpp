@@ -39,12 +39,14 @@ void kernel_main(){
     constexpr uint32_t col_indices_num_tiles = get_compile_time_arg_val(18);
     constexpr uint32_t indptr_num_tiles = get_compile_time_arg_val(19);
 
-    // writer args
-    constexpr uint32_t out_tensor_addr = get_compile_time_arg_val(20);
-    constexpr uint32_t RtNt = get_compile_time_arg_val(21);
-    constexpr uint32_t Nt = get_compile_time_arg_val(22);
-    constexpr uint32_t out_subblock_w = get_compile_time_arg_val(23);
-    constexpr uint32_t out_subblock_h = get_compile_time_arg_val(24);
+    constexpr uint32_t is_output_writer = get_compile_time_arg_val(20);
+
+    // writer args (only used when is_output_writer == 1)
+    constexpr uint32_t out_tensor_addr = get_compile_time_arg_val(21);
+    constexpr uint32_t RtNt = get_compile_time_arg_val(22);
+    constexpr uint32_t Nt = get_compile_time_arg_val(23);
+    constexpr uint32_t out_subblock_w = get_compile_time_arg_val(24);
+    constexpr uint32_t out_subblock_h = get_compile_time_arg_val(25);
 
     ///////////////////////////////////////////////////////////////////////
     /// END COMPILETIME ARGS //////////////////////////////////////////////
@@ -61,9 +63,14 @@ void kernel_main(){
     uint32_t folded_y_coords[num_iters_y];
     for (uint32_t i = 0; i < num_iters_y; i++){
         y_coords[i] = get_arg_val<uint32_t>(arg_index++);
-        folded_y_coords[i] = get_arg_val<uint32_t>(arg_index++);
+        if constexpr (is_output_writer) {
+            folded_y_coords[i] = get_arg_val<uint32_t>(arg_index++);
+        }
     }
-    uint32_t out_tensor_start_tile_id = get_arg_val<uint32_t>(arg_index++);
+    uint32_t out_tensor_start_tile_id = 0;
+    if constexpr (is_output_writer) {
+        out_tensor_start_tile_id = get_arg_val<uint32_t>(arg_index++);
+    }
 
     ///////////////////////////////////////////////////////////////////////
     /// END RUNTIME ARGS //////////////////////////////////////////////////
@@ -78,7 +85,7 @@ void kernel_main(){
     const InterleavedAddrGenFast<true> out_s = {
         .bank_base_address = out_tensor_addr, .page_size = output_tile_size, .data_format = output_format};
 
-    // Load sparse indexing data
+    // Load sparse indexing data (in0 always owns the indexing load in the naive variant)
     uint32_t* col_indices = spmm::load_indexing_tiled<col_indices_is_dram>(
         spmm::cb_id_col_indices, col_indices_addr,
         tile_info.col_indices_tile_size, tile_info.col_indices_format, col_indices_num_tiles);
@@ -86,7 +93,7 @@ void kernel_main(){
         spmm::cb_id_indptr, indptr_addr,
         tile_info.indptr_tile_size, tile_info.indptr_format, indptr_num_tiles);
 
-    // Writer setup
+    // Writer setup (computed unconditionally; values are only used when is_output_writer == 1)
     uint32_t out_num_subblocks_w = in1_block_w / out_subblock_w;
     uint32_t out_num_subblocks_h = in0_block_h / out_subblock_h;
     uint32_t out_tensor_next_subblock_stride_w = out_subblock_w;
@@ -100,8 +107,6 @@ void kernel_main(){
     uint32_t out_tensor_x_coord_offset = 0;
     uint32_t output_idx_y, output_idx_x;
     for (uint32_t iter_y = 0; iter_y < num_iters_y; iter_y++){
-        uint32_t out_tensor_y_coord_offset = RtNt * folded_y_coords[iter_y];
-
         output_idx_y = y_coords[iter_y];
         uint32_t block_row_start = indptr[output_idx_y];
         uint32_t block_row_end = indptr[output_idx_y + 1];
@@ -127,35 +132,37 @@ void kernel_main(){
                 cb_push_back(spmm::cb_id_in0, in0_block_num_tiles);
             }
 
-            // Writeback
-            uint32_t out_block_num_tiles = in0_block_h * in1_block_w;
-            uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
+            if constexpr (is_output_writer) {
+                uint32_t out_tensor_y_coord_offset = RtNt * folded_y_coords[iter_y];
+                uint32_t out_block_num_tiles = in0_block_h * in1_block_w;
+                uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
 
-            cb_wait_front(spmm::cb_id_out, out_block_num_tiles);
-            DPRINT_DATA0(DPRINT << "writing" << ENDL());
+                cb_wait_front(spmm::cb_id_out, out_block_num_tiles);
+                DPRINT_DATA0(DPRINT << "writing" << ENDL());
 
-            {
-                DeviceZoneScopedN("SpMM Zone: Writing Block back to DRAM");
-                uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
+                {
+                    DeviceZoneScopedN("SpMM Zone: Writing Block back to DRAM");
+                    uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
 
-                for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
-                    uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
-                    for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
-                        spmm::write_subblock_by_tile(
-                            out_tensor_sbw_start_tile_id,
-                            out_s, l1_read_addr,
-                            output_tile_size, out_subblock_h, out_subblock_w,
-                            out_tensor_stride_h, out_tensor_stride_w);
-                        out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
+                    for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
+                        uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
+                        for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {
+                            spmm::write_subblock_by_tile(
+                                out_tensor_sbw_start_tile_id,
+                                out_s, l1_read_addr,
+                                output_tile_size, out_subblock_h, out_subblock_w,
+                                out_tensor_stride_h, out_tensor_stride_w);
+                            out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
+                        }
+                        out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
                     }
-                    out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
                 }
-            }
-            noc_async_write_barrier();
-            DPRINT_DATA0(DPRINT << "done writing" << ENDL());
+                noc_async_write_barrier();
+                DPRINT_DATA0(DPRINT << "done writing" << ENDL());
 
-            cb_pop_front(spmm::cb_id_out, out_block_num_tiles);
-            out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
+                cb_pop_front(spmm::cb_id_out, out_block_num_tiles);
+                out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
+            }
         }
         out_tensor_x_coord_offset = 0;
     }

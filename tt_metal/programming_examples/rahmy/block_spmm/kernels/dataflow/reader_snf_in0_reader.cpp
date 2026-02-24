@@ -216,7 +216,6 @@ void kernel_main(){
                 uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
 
                 cb_wait_front(spmm::cb_id_out, out_block_num_tiles);
-                DPRINT_DATA0(DPRINT << "writing" << ENDL());
 
                 
 
@@ -239,7 +238,6 @@ void kernel_main(){
                         
                 
                 noc_async_write_barrier();
-                DPRINT_DATA0(DPRINT << "done writing" << ENDL());
 
                 cb_pop_front(spmm::cb_id_out, out_block_num_tiles);
                 out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;

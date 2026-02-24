@@ -49,7 +49,12 @@ def discover_files(algorithm_dirs):
         )))
 
     csv_files = [f for f in union_by_suffix(".csv") if not f.endswith(".device.csv")]
-    device_csv_files = union_by_suffix(".device.csv")
+    all_device_csv = union_by_suffix(".device.csv")
+    main_device_csv_files = sorted([f for f in all_device_csv if "Disable" not in f])
+    disable_device_csv_files = [
+        f.replace(".device.csv", "_Disable__PROFILE_READ_IN0_PROFILE_READ_IN1.device.csv")
+        for f in main_device_csv_files
+    ]
     sparse_logs = union_by_suffix("sparse.log")
     dense_logs = union_by_suffix("dense.log")
 
@@ -57,7 +62,7 @@ def discover_files(algorithm_dirs):
         name.replace("profile_case_sparse_", "").replace(".csv", "").replace("fill_", "")
         for name in csv_files
     ]
-    return csv_files, device_csv_files, sparse_logs, dense_logs, short_names
+    return csv_files, main_device_csv_files, disable_device_csv_files, sparse_logs, dense_logs, short_names
 
 
 # ── Log / metadata parsing ──────────────────────────────────────────
@@ -146,8 +151,11 @@ def collect_metrics(algorithm_dirs, csv_files, sparse_logs, dense_logs, short_na
     return data_dicts
 
 
-def collect_device_zones(algorithm_dirs, device_csv_files, short_names):
+def collect_device_zones(algorithm_dirs, main_device_csv_files, disable_device_csv_files, short_names):
     """Parse .device.csv files and aggregate GPU execution time for SpMM zones.
+
+    Merges main and Disable CSV files: main file takes priority; zones absent
+    from main are filled in from the Disable file.
 
     Returns a list (one per algorithm) of dicts:
         { test_case_short_name: { zone_name: total_gpu_time, ... }, ... }
@@ -155,16 +163,28 @@ def collect_device_zones(algorithm_dirs, device_csv_files, short_names):
     zone_dicts = [{} for _ in algorithm_dirs]
 
     for alg_idx, alg_dir in enumerate(algorithm_dirs):
-        for case_idx, dev_csv in enumerate(device_csv_files):
-            path = os.path.join(alg_dir, dev_csv)
-            if not os.path.exists(path):
-                continue
+        for case_idx, (main_csv, disable_csv) in enumerate(zip(main_device_csv_files, disable_device_csv_files)):
+            # Load SpMM zones from main file
+            main_zones = {}
+            main_path = os.path.join(alg_dir, main_csv)
+            if os.path.exists(main_path):
+                df = pd.read_csv(main_path)
+                spmm = df[df["name"].str.startswith("SpMM", na=False)]
+                main_zones = spmm.groupby("name")["GPU execution time"].sum().to_dict()
 
-            df = pd.read_csv(path)
-            spmm = df[df["name"].str.startswith("SpMM")]
-            agg = spmm.groupby("name")["GPU execution time"].sum()
+            # Load SpMM zones from Disable file; add only those absent in main
+            merged = dict(main_zones)
+            disable_path = os.path.join(alg_dir, disable_csv)
+            if os.path.exists(disable_path):
+                df2 = pd.read_csv(disable_path)
+                spmm2 = df2[df2["name"].str.startswith("SpMM", na=False)]
+                disable_zones = spmm2.groupby("name")["GPU execution time"].sum().to_dict()
+                for zone_name, time_val in disable_zones.items():
+                    if zone_name not in main_zones:
+                        merged[zone_name] = time_val
 
-            zone_dicts[alg_idx][short_names[case_idx]] = agg.to_dict()
+            if merged:
+                zone_dicts[alg_idx][short_names[case_idx]] = merged
 
     return zone_dicts
 
@@ -336,7 +356,7 @@ def main():
     profiles_dir = "/home/user/tt-metal/profiles_opt_noc/"
     algorithm_dirs, algorithm_labels, json_dir, png_dir = build_config(profiles_dir)
 
-    csv_files, device_csv_files, sparse_logs, dense_logs, short_names = discover_files(algorithm_dirs)
+    csv_files, main_device_csv_files, disable_device_csv_files, sparse_logs, dense_logs, short_names = discover_files(algorithm_dirs)
     data_dicts = collect_metrics(algorithm_dirs, csv_files, sparse_logs, dense_logs, short_names)
 
     # Dump raw metrics to JSON
@@ -359,7 +379,7 @@ def main():
                   os.path.join(png_dir, "roofline_pessimisticv2.png"))
 
     # Device zone breakdown
-    zone_dicts = collect_device_zones(algorithm_dirs, device_csv_files, short_names)
+    zone_dicts = collect_device_zones(algorithm_dirs, main_device_csv_files, disable_device_csv_files, short_names)
     plot_zone_pie_charts(zone_dicts, algorithm_labels, short_names, png_dir)
     plot_zone_stacked_bars(zone_dicts, algorithm_labels, short_names, png_dir)
 

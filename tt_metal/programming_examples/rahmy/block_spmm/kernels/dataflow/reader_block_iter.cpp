@@ -6,6 +6,14 @@
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_indexing.hpp"
 
+// Compile-time profiling zone toggles (override to 0 via CreateKernel defines)
+#ifndef PROFILE_READ_IN0
+#define PROFILE_READ_IN0 1
+#endif
+#ifndef PROFILE_WAIT_IN0
+#define PROFILE_WAIT_IN0 1
+#endif
+
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
     /// COMPILETIME ARGS //////////////////////////////////////////////////
@@ -95,7 +103,9 @@ void kernel_main(){
 
                 // Read in0 block
                 {
+#if PROFILE_READ_IN0 == 1
                     DeviceZoneScopedN("SpMM Zone: RK reading in0.");
+#endif
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
                     spmm::read_block_by_tile(
                         in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
@@ -106,7 +116,9 @@ void kernel_main(){
                 }
                 // Read in1 block (row selected by BSR col_indices)
                 {
+#if PROFILE_READ_IN1 == 1 
                     DeviceZoneScopedN("SpMM Zone: RK reading in1.");
+#endif
                     uint32_t bsr_col_index = col_indices[reduction_iter];
                     uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
                     spmm::read_block_by_tile(

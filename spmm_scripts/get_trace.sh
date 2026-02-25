@@ -8,7 +8,7 @@
 # Arguments:
 #   profile_case  - index number, or "all"
 #   host_code     - index number, or "all"
-#   registry      - index number (0-2), or "all" (default: 2)
+#   registry      - index number (0-3), or "all" (default: 2)
 #
 
 set -euo pipefail
@@ -19,8 +19,8 @@ PROFILING_SUITE_HPP="$TT_METAL_DIR/tt_metal/programming_examples/rahmy/block_spm
 
 # Profile registry number -> (array name, display name)
 # Must match the switch statement in profile_block.cpp / export_to_csv.cpp
-PROFILE_REGISTRY_ARRAY_NAMES=("ProfileCaseRegistry" "ProfileDenseAblationRegistry" "ProfileLargeSparseRegistry")
-PROFILE_REGISTRY_DISPLAY_NAMES=("ProfileSuiteSparseVersioning" "DenseAblationKProfileSuite" "ProfileSuiteLargeSparseVersioning")
+PROFILE_REGISTRY_ARRAY_NAMES=("ProfileCaseRegistry" "ProfileDenseAblationRegistry" "ProfileLargeSparseRegistry" "ProfileLargeSparseLargeBlocksRegistry")
+PROFILE_REGISTRY_DISPLAY_NAMES=("ProfileSuiteSparseVersioning" "DenseAblationKProfileSuite" "ProfileSuiteLargeSparseVersioning" "ProfileSuiteLargeSparseLargeBlocksVersioning")
 NUM_PROFILE_REGISTRIES=${#PROFILE_REGISTRY_ARRAY_NAMES[@]}
 
 ###############################################################################

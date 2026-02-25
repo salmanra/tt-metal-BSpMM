@@ -19,12 +19,12 @@ ALGORITHM_COLORS = ["red", "orange", "steelblue", "mediumblue", "midnightblue"]
 def build_config(profiles_dir):
     """Return directory paths and algorithm data directories."""
     csv_dir = os.path.join(profiles_dir, "csvs")
-    suite = os.path.join(csv_dir, "ProfileSuiteLargeSparseVersioning")
+    suite = os.path.join(csv_dir, "ProfileSuiteLargeSparseLargeBlocksVersioning")
 
     algorithm_dirs = [
         os.path.join(suite, "bsr_spmm_multicore_snf"),
-        os.path.join(suite, "bsr_spmm_multicore_load_balanced"),
-        os.path.join(suite, "bsr_spmm_multicore_reuse_iteration"),
+        # os.path.join(suite, "bsr_spmm_multicore_load_balanced"),
+        # os.path.join(suite, "bsr_spmm_multicore_reuse_iteration"),
         os.path.join(suite, "bsr_spmm_multicore_load_balanced_new_DM"),
         os.path.join(suite, "bsr_spmm_multicore_naive_new_DM"),
     ]
@@ -48,7 +48,7 @@ def discover_files(algorithm_dirs):
             for d in algorithm_dirs
         )))
 
-    csv_files = [f for f in union_by_suffix(".csv") if not f.endswith(".device.csv")]
+    csv_files = [f for f in union_by_suffix(".csv") if not f.endswith(".device.csv") and "Disable" not in f]
     all_device_csv = union_by_suffix(".device.csv")
     main_device_csv_files = sorted([f for f in all_device_csv if "Disable" not in f])
     disable_device_csv_files = [
@@ -353,7 +353,7 @@ def plot_zone_stacked_bars(zone_dicts, algorithm_labels, short_names, output_dir
 # ── Main ─────────────────────────────────────────────────────────────
 
 def main():
-    profiles_dir = "/home/user/tt-metal/profiles_opt_noc/"
+    profiles_dir = "/home/user/tt-metal/profiles_opt_noc_flip_writer/"
     algorithm_dirs, algorithm_labels, json_dir, png_dir = build_config(profiles_dir)
 
     csv_files, main_device_csv_files, disable_device_csv_files, sparse_logs, dense_logs, short_names = discover_files(algorithm_dirs)

@@ -109,6 +109,10 @@ int main(int argc, char** argv) {
         case 2:
             Registry = ProfileLargeSparseRegistry;
             registry_name = "ProfileSuiteLargeSparseVersioning";
+            break;
+        case 3:
+            Registry = ProfileLargeSparseLargeBlocksRegistry;
+            registry_name = "ProfileSuiteLargeSparseLargeBlocksVersioning";
     }
 
     int num_profiles = sizeof(Registry) / sizeof(Registry[0]);

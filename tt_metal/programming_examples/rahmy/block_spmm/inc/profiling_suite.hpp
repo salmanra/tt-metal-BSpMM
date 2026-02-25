@@ -138,6 +138,24 @@ namespace profiling_suite {
         profile_case_sparse_fill_lower_triangular_large<128, 128>, // 14
     };
 
+    static ProfileCaseFunctionPtr ProfileLargeSparseLargeBlocksRegistry[] = {
+        profile_case_sparse_diagonal_large<512, 512, 25>, // 
+        // profile_case_sparse_diagonal_large<1024, 512, 25>, // 
+        // profile_case_sparse_diagonal_large<2048, 2048, 25>, // 
+        profile_case_sparse_fill_column_large<512, 512, 25>, // 5
+        // profile_case_sparse_fill_column_large<1024, 1024, 25>, // 5
+        // profile_case_sparse_fill_column_large<2048, 2048, 25>, // 5
+        profile_case_sparse_fill_row_large<512, 512, 25>, // 8
+        // profile_case_sparse_fill_row_large<1024, 1024, 25>, // 8
+        // profile_case_sparse_fill_row_large<2048, 2048, 25>, // 8
+        profile_case_sparse_fill_random_large<512, 512, 25>, // 11
+        // profile_case_sparse_fill_random_large<1024, 1024, 25>, // 11
+        // profile_case_sparse_fill_random_large<2048, 2048, 25>, // 11
+        profile_case_sparse_fill_lower_triangular_large<512, 512>, // 14
+        // profile_case_sparse_fill_lower_triangular_large<1024, 1024>, // 14
+        // profile_case_sparse_fill_lower_triangular_large<2048, 2048>, // 14
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////

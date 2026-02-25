@@ -334,7 +334,7 @@ void bsr_spmm_multicore_snf(
 
     */
 
-    bool in1_is_writer = true;  // flip to switch which RISC writes output to DRAM
+    bool in1_is_writer = false;  // flip to switch which RISC writes output to DRAM
 
     bool src0_is_dram = src0_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool src1_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;

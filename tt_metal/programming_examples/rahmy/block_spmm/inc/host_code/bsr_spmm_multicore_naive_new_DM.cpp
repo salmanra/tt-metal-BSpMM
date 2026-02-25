@@ -332,7 +332,7 @@ void bsr_spmm_multicore_naive_new_DM(
     };
 
     // Toggle: set to true to have in1 perform the writeback instead of in0.
-    bool in1_is_writer = true;
+    bool in1_is_writer = false;
 
     // Both in0 and in1 receive the full writer CT args; is_output_writer [20] determines who acts.
     std::vector<uint32_t> reader_in0_compile_time_args = reader_compile_time_args;

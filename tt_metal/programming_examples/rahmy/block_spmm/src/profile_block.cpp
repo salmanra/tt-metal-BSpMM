@@ -75,6 +75,10 @@ int main(int argc, char** argv) {
         case 2:
             Registry = ProfileLargeSparseRegistry;
             registry_name = "ProfileSuiteLargeSparseVersioning";
+            break;
+        case 3:
+            Registry = ProfileLargeSparseLargeBlocksRegistry;
+            registry_name = "ProfileSuiteLargeSparseLargeBlocksVersioning";
     }
 
     int num_profiles = sizeof(Registry) / sizeof(Registry[0]);
@@ -119,7 +123,7 @@ void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Re
     n = sprintf(buf, "mkdir -p %s", trace_directory.c_str());
     std::string mkdir_command(buf, n);
 
-    n = sprintf(buf, "./capture-release -f -o %s &", trace_file_location.c_str());
+    n = sprintf(buf, "nohup ./capture-release -f -o %s &", trace_file_location.c_str());
     std::string capture_trace_command(buf, n);
 
     // run ./capture-release to allow the profiler to listen for the program

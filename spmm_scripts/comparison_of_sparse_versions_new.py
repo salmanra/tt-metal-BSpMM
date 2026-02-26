@@ -19,12 +19,12 @@ ALGORITHM_COLORS = ["red", "orange", "steelblue", "mediumblue", "midnightblue"]
 def build_config(profiles_dir):
     """Return directory paths and algorithm data directories."""
     csv_dir = os.path.join(profiles_dir, "csvs")
-    suite = os.path.join(csv_dir, "ProfileSuiteLargeSparseLargeBlocksVersioning")
+    suite = os.path.join(csv_dir, "ProfileSuiteLargeSparseVersioning")
 
     algorithm_dirs = [
         os.path.join(suite, "bsr_spmm_multicore_snf"),
-        # os.path.join(suite, "bsr_spmm_multicore_load_balanced"),
-        # os.path.join(suite, "bsr_spmm_multicore_reuse_iteration"),
+        os.path.join(suite, "bsr_spmm_multicore_load_balanced"),
+        os.path.join(suite, "bsr_spmm_multicore_reuse_iteration"),
         os.path.join(suite, "bsr_spmm_multicore_load_balanced_new_DM"),
         os.path.join(suite, "bsr_spmm_multicore_naive_new_DM"),
     ]
@@ -55,8 +55,8 @@ def discover_files(algorithm_dirs):
         f.replace(".device.csv", "_Disable__PROFILE_READ_IN0_PROFILE_READ_IN1.device.csv")
         for f in main_device_csv_files
     ]
-    sparse_logs = union_by_suffix("sparse.log")
-    dense_logs = union_by_suffix("dense.log")
+    sparse_logs = sorted(f for f in union_by_suffix("sparse.log") if "Disable" not in f)
+    dense_logs = sorted(f for f in union_by_suffix("dense.log") if "Disable" not in f)
 
     short_names = [
         name.replace("profile_case_sparse_", "").replace(".csv", "").replace("fill_", "")
@@ -220,7 +220,7 @@ def plot_tflops_bar_chart(data_dicts, algorithm_labels, group_labels, output_pat
     ax.set_xlabel("Test Case")
     ax.set_ylabel(f"TFLOP/s (Peak = {PEAK_TFLOPS})")
     ax.set_title("Sparse Algorithms Runtime Comparison")
-    ax.set_xticks(x + bar_width)
+    ax.set_xticks(x + (n_algs - 1) / 2 * bar_width)
     ax.set_xticklabels(group_labels, rotation=45, ha="right")
     ax.legend()
     plt.tight_layout()
@@ -353,7 +353,7 @@ def plot_zone_stacked_bars(zone_dicts, algorithm_labels, short_names, output_dir
 # ── Main ─────────────────────────────────────────────────────────────
 
 def main():
-    profiles_dir = "/home/user/tt-metal/profiles_opt_noc_flip_writer/"
+    profiles_dir = "/home/user/tt-metal/profiles_opt_noc/"
     algorithm_dirs, algorithm_labels, json_dir, png_dir = build_config(profiles_dir)
 
     csv_files, main_device_csv_files, disable_device_csv_files, sparse_logs, dense_logs, short_names = discover_files(algorithm_dirs)
@@ -367,7 +367,7 @@ def main():
 
     # Bar chart
     plot_tflops_bar_chart(data_dicts, algorithm_labels, group_labels,
-                          os.path.join(png_dir, "fig2_tflops_opt_nocsv2.png"))
+                          os.path.join(png_dir, "fig2_tflops_opt_nocs.png"))
 
     # Roofline plots
     plot_roofline(data_dicts, algorithm_labels, group_labels, "oi_ideal",

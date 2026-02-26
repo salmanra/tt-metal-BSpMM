@@ -139,7 +139,6 @@ void kernel_main(){
 
     DPRINT_DATA0(DPRINT << "RK got all args" << ENDL());
 
-
     // Writer setup
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
     uint32_t out_num_subblocks_w = in1_block_w / out_subblock_w;
@@ -189,7 +188,7 @@ void kernel_main(){
                 }
                 else {
 #if PROFILE_WAIT_IN0 == 1
-                    DeviceZoneScopedN("SpMM Zone: Waiting on nonzero block from in0 from neighbor");;
+                    DeviceZoneScopedN("SpMM Zone: Waiting on nonzero block from in0 from neighbor");
 #endif
                     // Read in0 block from neighbor
                     noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
@@ -216,9 +215,6 @@ void kernel_main(){
                 uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_y_coord_offset + out_tensor_x_coord_offset;
 
                 cb_wait_front(spmm::cb_id_out, out_block_num_tiles);
-
-                
-
                 uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
 #if PROFILE_WRITE_OUT == 1
                 DeviceZoneScopedN("SpMM Zone: Writing Block back to DRAM");
@@ -236,7 +232,6 @@ void kernel_main(){
                     out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
                 }
                         
-                
                 noc_async_write_barrier();
 
                 cb_pop_front(spmm::cb_id_out, out_block_num_tiles);

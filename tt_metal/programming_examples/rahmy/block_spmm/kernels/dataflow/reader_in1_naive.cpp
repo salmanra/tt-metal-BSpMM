@@ -7,6 +7,13 @@
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_indexing.hpp"
 
+// Ablation skip flags (set to 1 via CreateKernel defines to skip that phase)
+#ifndef SKIP_IN1_DRAM_READ
+#define SKIP_IN1_DRAM_READ 0
+#endif
+#ifndef SKIP_DRAM_WRITE
+#define SKIP_DRAM_WRITE 0
+#endif
 
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
@@ -115,6 +122,7 @@ void kernel_main(){
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             for (uint32_t reduction_iter = block_row_start; reduction_iter < block_row_end; reduction_iter++){
                 cb_reserve_back(spmm::cb_id_in1, in1_block_num_tiles);
+#if SKIP_IN1_DRAM_READ == 0
                 {
                     DeviceZoneScopedN("SpMM Zone: Reading dense block of in1 from DRAM");
                     uint32_t l1_write_addr_in1 = get_write_ptr(spmm::cb_id_in1);
@@ -128,9 +136,8 @@ void kernel_main(){
                         ti.in1_tile_size, in1_block_h, in1_block_w,
                         in1_tensor_stride_h, in1_tensor_stride_w);
                 }
-
                 noc_async_read_barrier();
-
+#endif
                 cb_push_back(spmm::cb_id_in1, in1_block_num_tiles);
             }
 

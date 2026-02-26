@@ -16,10 +16,10 @@ ALGORITHM_COLORS = ["red", "orange", "steelblue", "mediumblue", "midnightblue"]
 
 # ── Configuration ────────────────────────────────────────────────────
 
-def build_config(profiles_dir):
+def build_config(profiles_dir, registry_name, flag_microbenchmarking):
     """Return directory paths and algorithm data directories."""
     csv_dir = os.path.join(profiles_dir, "csvs")
-    suite = os.path.join(csv_dir, "ProfileSuiteLargeSparseVersioning")
+    suite = os.path.join(csv_dir, registry_name)
 
     algorithm_dirs = [
         os.path.join(suite, "bsr_spmm_multicore_snf"),
@@ -27,6 +27,17 @@ def build_config(profiles_dir):
         os.path.join(suite, "bsr_spmm_multicore_reuse_iteration"),
         os.path.join(suite, "bsr_spmm_multicore_load_balanced_new_DM"),
         os.path.join(suite, "bsr_spmm_multicore_naive_new_DM"),
+    ]
+    microbench_dirs = [
+        os.path.join(suite, "bsr_spmm_multicore_snf"),
+        os.path.join(suite, "bsr_spmm_multicore_snf_no_a_read"),
+        os.path.join(suite, "bsr_spmm_multicore_snf_no_b_read"),
+        os.path.join(suite, "bsr_spmm_multicore_snf_no_compute"),
+        os.path.join(suite, "bsr_spmm_multicore_snf_no_write"),
+        os.path.join(suite, "bsr_spmm_multicore_load_balanced"),
+        os.path.join(suite, "bsr_spmm_multicore_reuse_iteration"),
+        os.path.join(suite, "bsr_spmm_multicore_load_balanced_new_DM"),
+        os.path.join(suite, "bsr_spmm_multicore_naive_new_DM"),    
     ]
     algorithm_labels = [os.path.basename(d) for d in algorithm_dirs]
 
@@ -350,38 +361,52 @@ def plot_zone_stacked_bars(zone_dicts, algorithm_labels, short_names, output_dir
         plt.close(fig)
 
 
-# ── Main ─────────────────────────────────────────────────────────────
-
-def main():
-    profiles_dir = "/home/user/tt-metal/profiles_opt_noc/"
-    algorithm_dirs, algorithm_labels, json_dir, png_dir = build_config(profiles_dir)
+def get_all_plots_for_registry(registry_name, get_device_zones):
+    profiles_dir = "/home/user/tt-metal/profiles_opt_noc_flip_writer/"
+    algorithm_dirs, algorithm_labels, json_dir, png_dir = build_config(profiles_dir, registry_name)
 
     csv_files, main_device_csv_files, disable_device_csv_files, sparse_logs, dense_logs, short_names = discover_files(algorithm_dirs)
     data_dicts = collect_metrics(algorithm_dirs, csv_files, sparse_logs, dense_logs, short_names)
 
     # Dump raw metrics to JSON
-    with open(os.path.join(json_dir, "data_dicts.json"), "w") as f:
+    with open(os.path.join(json_dir, f"data_dicts_{registry_name}.json"), "w") as f:
         json.dump(data_dicts, f, indent=4)
 
     group_labels = list(data_dicts[0].keys())
 
     # Bar chart
     plot_tflops_bar_chart(data_dicts, algorithm_labels, group_labels,
-                          os.path.join(png_dir, "fig2_tflops_opt_nocs.png"))
+                          os.path.join(png_dir, f"0_tflops_{registry_name}.png"))
 
     # Roofline plots
     plot_roofline(data_dicts, algorithm_labels, group_labels, "oi_ideal",
                   "Roofline (Ideal: Dense Matrix Read Once)",
-                  os.path.join(png_dir, "roofline_idealv2.png"))
+                  os.path.join(png_dir, f"1_roofline_ideal_{registry_name}.png"))
 
     plot_roofline(data_dicts, algorithm_labels, group_labels, "oi_pessimistic",
                   "Roofline (Pessimistic: Dense Re-read Per Block)",
-                  os.path.join(png_dir, "roofline_pessimisticv2.png"))
+                  os.path.join(png_dir, f"2_roofline_pessimistic_{registry_name}.png"))
 
     # Device zone breakdown
-    zone_dicts = collect_device_zones(algorithm_dirs, main_device_csv_files, disable_device_csv_files, short_names)
-    plot_zone_pie_charts(zone_dicts, algorithm_labels, short_names, png_dir)
-    plot_zone_stacked_bars(zone_dicts, algorithm_labels, short_names, png_dir)
+    if get_device_zones:
+        zone_dicts = collect_device_zones(algorithm_dirs, main_device_csv_files, disable_device_csv_files, short_names)
+        plot_zone_pie_charts(zone_dicts, algorithm_labels, short_names, png_dir)
+        plot_zone_stacked_bars(zone_dicts, algorithm_labels, short_names, png_dir)
+
+
+
+# ── Main ─────────────────────────────────────────────────────────────
+
+def main():
+    registry_names = [
+        "ProfileSuiteLargeSparseVersioning",
+        "ProfileSweepBlockSize",
+        "ProfileSweepDensity",
+        "ProfileSweepK",
+        "ProfileSweepN"
+    ]
+    for registry_name in registry_names:
+        get_all_plots_for_registry(registry_name, False)
 
 
 if __name__ == "__main__":

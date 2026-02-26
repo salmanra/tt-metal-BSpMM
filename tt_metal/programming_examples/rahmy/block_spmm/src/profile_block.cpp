@@ -79,6 +79,22 @@ int main(int argc, char** argv) {
         case 3:
             Registry = ProfileLargeSparseLargeBlocksRegistry;
             registry_name = "ProfileSuiteLargeSparseLargeBlocksVersioning";
+            break;
+        case 4:
+            Registry = ProfileSweepNRegistry;
+            registry_name = "ProfileSweepN";
+            break;
+        case 5:
+            Registry = ProfileSweepDensityRegistry;
+            registry_name = "ProfileSweepDensity";
+            break;
+        case 6:
+            Registry = ProfileSweepKRegistry;
+            registry_name = "ProfileSweepK";
+            break;
+        case 7:
+            Registry = ProfileSweepBlockSizeRegistry;
+            registry_name = "ProfileSweepBlockSize";
     }
 
     int num_profiles = sizeof(Registry) / sizeof(Registry[0]);

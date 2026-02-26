@@ -19,6 +19,11 @@ CK is neutral to order, but it's probably worth naming loop vars
 #define PROFILE_COMPUTE 1
 #endif
 
+// Ablation skip flag (set to 1 via CreateKernel defines to skip compute)
+#ifndef SKIP_COMPUTE
+#define SKIP_COMPUTE 0
+#endif
+
 namespace NAMESPACE {
 void MAIN {
     ///////////////////////////////////////////////////////////////////////
@@ -61,6 +66,26 @@ void MAIN {
 
     DPRINT_MATH(DPRINT << "CK got all args" << ENDL());
 
+#if SKIP_COMPUTE == 1
+    constexpr uint32_t out_block_num_tiles =
+        out_subblock_num_tiles * in0_num_subblocks * in1_num_subblocks;
+    for (uint32_t iter_y = 0; iter_y < num_iters_y; iter_y++){
+        uint32_t num_blocks = row_sizes[iter_y];
+        for (uint32_t iter_x = 0; iter_x < num_iters_x; iter_x++){
+            for (uint32_t input_block = 0; input_block < num_blocks; input_block++){
+                bool last_out = input_block == (num_blocks - 1);
+                cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
+                cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
+                if (last_out) {
+                    cb_reserve_back(tt::CBIndex::c_16, out_block_num_tiles);
+                    cb_push_back(tt::CBIndex::c_16, out_block_num_tiles);
+                }
+                cb_pop_front(tt::CBIndex::c_0, in0_block_num_tiles);
+                cb_pop_front(tt::CBIndex::c_1, in1_block_num_tiles);
+            }
+        }
+    }
+#else
     for (uint32_t iter_y = 0; iter_y < num_iters_y; iter_y++){
         uint32_t num_blocks = row_sizes[iter_y];
         for (uint32_t iter_x = 0; iter_x < num_iters_x; iter_x++){
@@ -157,6 +182,7 @@ void MAIN {
             }
         }
     }
+#endif // SKIP_COMPUTE
     DPRINT_MATH(DPRINT << "CK complete" << ENDL());
 };
 }

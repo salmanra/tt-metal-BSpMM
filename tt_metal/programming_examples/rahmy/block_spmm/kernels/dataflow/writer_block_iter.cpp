@@ -20,6 +20,11 @@ for num_iters_x:
 #define PROFILE_WRITE_OUT 1
 #endif
 
+// Ablation skip flag (set to 1 via CreateKernel defines to skip writes)
+#ifndef SKIP_DRAM_WRITE
+#define SKIP_DRAM_WRITE 0
+#endif
+
 void kernel_main() {
     ///////////////////////////////////////////////////////////////////////
     /// COMPILETIME ARGS //////////////////////////////////////////////////
@@ -70,9 +75,6 @@ void kernel_main() {
     uint32_t out_tensor_x_coord_offset = 0;
     for (uint32_t y = 0; y < num_iters_y; y++){
         for (uint32_t x = 0; x < num_iters_x; x++){
-#if PROFILE_WRITE_OUT == 1
-            DeviceZoneScopedN("SpMM Zone Writing Block back to DRAM");
-#endif
             uint32_t out_tensor_sbh_start_tile_id = out_tensor_start_tile_id + out_tensor_x_coord_offset;
             for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
                 uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
@@ -80,15 +82,17 @@ void kernel_main() {
                     uint32_t out_tensor_sb_row_start_tile_id = out_tensor_sbw_start_tile_id;
                     cb_wait_front(cb_id_out0, out_subblock_tile_count);
                     uint32_t l1_read_addr = get_read_ptr(cb_id_out0);
-
+#if SKIP_DRAM_WRITE == 0
+#if PROFILE_WRITE_OUT == 1
+                    DeviceZoneScopedN("SpMM Zone Writing Block back to DRAM");
+#endif
                     spmm::write_subblock_by_tile(
                         out_tensor_sbw_start_tile_id,
                         s, l1_read_addr,
                         single_tile_size_bytes, out_subblock_h, out_subblock_w,
                         out_tensor_stride_h, out_tensor_stride_w);
-
                     noc_async_write_barrier();
-
+#endif
                     cb_pop_front(cb_id_out0, out_subblock_tile_count);
                     out_tensor_sbw_start_tile_id += out_tensor_next_subblock_stride_w;
                 }

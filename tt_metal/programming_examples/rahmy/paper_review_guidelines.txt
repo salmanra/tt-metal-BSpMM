@@ -1,0 +1,179 @@
+### 0. Paper Metadata *(For fast context & archiving)*
+
+- **Domain:** (e.g., Sparse linear algebra, DL systems, MPI collectives, Compilers, Runtimes)
+- **Target HW/SW Stack:** (GPU model, CPU, Interconnect, CUDA/HIP, MPI, NCCL, OpenMP, etc.)
+- **Claimed Novelty Type:** (Algorithm / Systems design / Optimization / Artifact / Theory+Impl)
+- **Key Figures/Tables to Revisit:** (e.g., Fig. X for roofline, Tbl. Y for baselines)
+
+---
+
+### 1. Executive Summary *(Elevator Pitch + Reviewer Stance)*
+
+- **One-Sentence Problem:** * **One-Sentence Key Idea:** * **One-Sentence Main Result:** *(Include scale + baseline)*
+- **First-Read Stance:** *(Credible / Questionable / Needs more evidence)*
+- **Who Should Care:** *(HPC app devs, library writers, systems researchers, hardware vendors)*
+
+---
+
+### 2. Contributions & Novelty Audit *(The "What is new, really?" section)*
+
+- **Concrete Contributions** *(List 1–3 checkable claims)*:
+1.
+2.
+3.
+- **Delta vs. SOTA (1 Paragraph):** What is truly new here versus standard engineering?
+- **Novelty Type:** Is the innovation in: Algorithmic formulation Mapping/scheduling Comm pattern/overlap Data layout Autotuning System integration?
+- **Closest Prior Work (Top 3):**
+    - *P1:* How similar? What’s different?
+    - *P2:* How similar? What’s different?
+- **"Incremental" Risk:** What part of this feels like known techniques merely recombined for a new architecture?
+
+---
+
+### 3. Problem Definition & Assumptions *(Where papers often hide constraints)*
+
+- **Workload Characteristics:** (Sizes, sparsity patterns, stencil radius, graph properties, tensor shapes).
+- **System Assumptions:** (Sync/async, failure models, determinism requirements).
+- **Input Distribution:** Does it rely on "nice" structural properties to work?
+- **Operational Constraints:** (Memory budget, latency vs. throughput focus, multi-tenancy).
+- **Graceful Degradation:** What happens if these assumptions fail? Does performance plummet?
+
+---
+
+### 4. Methodology *(What they do, and why it should work)*
+
+**4A. Core Idea Explained** *(2–5 bullet algorithm steps)*
+
+- *Step 1:* * *Step 2:* * *Step 3:* **4B. Algorithmic Analysis**
+- **Parallelism Exposed:** (Task / Data / Pipeline / Model / Sequence).
+- **Asymptotic Complexity Change:** Time / Memory / Communication volume / Sync points.
+- **Critical Path:** What is the strict sequential dependency chain?
+- **Communication Analysis:** Bytes moved, message counts, collectives used, overlap opportunities.
+- **Correctness/Stability:** Are there mathematical proofs? How are corner cases handled?
+
+**4C. Hardware Mapping & Implementation Realism**
+
+- **Mapping Details:** How do kernels, streams, warp/block mappings, and tiling map to the hardware?
+- **Key HW Features Leveraged:** (Tensor Cores, Async copy, Shared memory, L2 persisting, Vector units, NUMA).
+- **Comm Stack:** (NCCL, MPI, UCX, RDMA, NVLink, GPUDirect).
+- **Optimization List:** *(Be explicit: fusion, unrolling, pipelining, prefetching, atomics, lock-free, persistent kernels).*
+- **Autotuning/Perf Model:** Search space size? Cost to run? Portability?
+- **Engineering Risk:** Is the implementation fragile, overly hardware-specific, or bloated with manual knobs?
+
+---
+
+### 5. Experimental Setup *(Reproducibility + "Are baselines fair?")*
+
+- **Test Platforms:** (Node specs, GPU count, interconnect topology, software versions).
+- **Scale:** Max nodes/GPUs tested. Is it large enough to support the paper's claims?
+- **Baselines (Strong & Fair):**
+    - Are the best-known SOTA libraries used (and correctly versioned)?
+    - Are compiler flags / tuning efforts matched?
+    - Is the CPU baseline multi-threaded and heavily optimized?
+- **Datasets / Workloads:** Real vs. synthetic? Is the diversity representative of the target domain?
+- **Measurement Protocol:** Warmup included? Number of repeats? Median/mean reported? Error bars/CI included? Were clocks pinned? Power limits respected?
+- **Artifact Availability:** Code, data, or scripts provided? (Or at least pseudo-code + parameters?)
+- **Action Item for Reviewer:** List any missing but obvious open-source baselines the authors *must* compare against.
+
+---
+
+### 6. Performance Evaluation *(Is the speedup real and explained?)*
+
+**6A. Top-Line Results**
+
+- **Best Case:** *X* speedup vs. *Y* baseline on *Z* scale.
+- **Typical Case:** Median performance across the suite.
+- **Worst Case / Regressions:** Where does it lose, and why?
+
+**6B. "Why is it faster?" Evidence**
+
+- **Bottleneck Removed:** What metric proves it? (e.g., BW utilization, profiling trace).
+- **Roofline / Upper Bound:** Used? How close is it to theoretical peak? (Compute vs. Memory bound).
+- **Profiling Breakdown:** Kernel time vs. Comm time vs. Preprocessing vs. Sync.
+- **Overlap Validation:** Is there empirical evidence (timelines/counters) that overlap actually happens?
+- **Ablations (Crucial):** Impact of turning each component on/off. Sensitivity to hyperparameters.
+- **New Bottleneck:** After this optimization, what dominates the runtime now?
+
+**6C. Scaling Credibility**
+
+- **Strong Scaling:** Fixed total size. Where does efficiency drop off?
+- **Weak Scaling:** Fixed size per node. Does efficiency stay flat?
+- **Comm Scaling:** Allreduce/Alltoall behavior; topology effects.
+- **Load Imbalance:** Any evidence of per-rank time distribution?
+
+**6D. Overheads & Hidden Costs** *(Force the paper to be explicit)*
+
+- **Preprocessing / Format Conversion:** Time + memory overhead. Is it amortized?
+- **Data Movement:** Are PCIe/NVLink/host staging transfers included in the total time?
+- **Memory Footprint:** Peak memory usage and fragmentation risks.
+- **Energy/Power:** If claimed, is the measurement methodology credible?
+
+---
+
+### 7. Generality, Portability, and Usability
+
+- **Hardware Portability:** NVIDIA-only? HIP/oneAPI support? CPU fallback?
+- **Workload Portability:** Does it only work for certain matrix shapes, sparsities, or graph families?
+- **Integration Path:** Can this be upstreamed into standard libraries (MPI/NCCL/RAFT/cuSPARSE)?
+- **API Usability:** How hard is it for a user to adopt? Does it require rewriting their application?
+- **Maintenance Cost:** Does it require a newly tuned kernel for every GPU generation?
+
+---
+
+### 8. Soundness & Clarity *(Writing quality that blocks acceptance)*
+
+- **Precision of Claims:** Are they exactly stated? (What *exactly* is accelerated?)
+- **Missing Elements:** Any undefined variables or missing notations?
+- **Figures:** Are axes clear? Units labeled? Log scales properly explained?
+- **Reproducibility Blockers:** Missing parameters, unclear pipelines, or proprietary baselines?
+
+---
+
+---
+
+### 9. 📋 Reviewer Verdict Pack *(Copy/Paste Ready for the Form)*
+
+**9A. Strengths** *(3–6 concise bullets)*
+
+- **S1:** * **S2:** * **S3:** **9B. Weaknesses** *(3–6 actionable bullets; label as Fatal/Major/Minor)*
+- **W1 [Severity]:** * **W2 [Severity]:** * **W3 [Severity]:** **9C. Questions for Authors / Rebuttal Phase** *(Questions that could change your score)*
+- **9D. Suggestions for Improvement** *(What makes this an "Accept")*
+- [ ]  Add Baseline:
+- [ ]  Add Ablation:
+- [ ]  Add Scaling Evidence:
+- [ ]  Clarify Limitation:
+
+**9E. Final Scores**
+
+- **Overall Recommendation:** (Strong Accept / Accept / Weak Accept / Weak Reject / Reject)
+- **Confidence:** (High / Med / Low) + *Brief reason why*
+- **Novelty:** / 5
+- **Technical Quality:** / 5
+- **Experimental Rigor:** / 5
+- **Clarity:** / 5
+- **Reproducibility:** / 5
+
+---
+
+### 🚨 HPC Reviewer "Red Flags" *(Fast Triage)*
+
+**Fairness / Baseline Issues**
+
+- [ ]  **Sequential Strawman:** Compares optimized GPU code against a naive, single-threaded CPU code.
+- [ ]  **Missing Obvious SOTA:** An open-source, community-standard baseline exists but was ignored.
+- [ ]  **Unfair Tuning:** Authors heavily tune their method but use default, untuned parameters for baselines.
+- [ ]  **Apples-to-Oranges Math:** Comparing FP16 to FP32, or algorithms run for fewer iterations without proving convergence.
+
+**Measurement / Methodology Issues**
+
+- [ ]  **Noise Ignored:** No repeat runs or variance reported on noisy distributed/cloud clusters.
+- [ ]  **Hidden Overheads:** Excludes preprocessing, data transfer, or comm setup from "end-to-end" time.
+- [ ]  **Phantom Overlap:** Claims compute/comm overlap without providing hardware timeline/counter evidence.
+- [ ]  **Cherry-Picked Data:** Only reports matrix sizes or node counts where their method explicitly wins.
+
+**Generality / Practicality Issues**
+
+- [ ]  **Over-Fitted Hardware:** Hard-coded to a single GPU generation using many magic constants.
+- [ ]  **Memory Blow-up Hidden:** Method requires massive format expansion or extra buffers that aren't reported.
+- [ ]  **False Application Claims:** Evaluated only on micro-benchmarks, but makes grand claims about end-to-end application impact.
+- [ ]  **Vaporware Artifacts:** Artifact/Code is promised but the pipeline is highly unclear or closed-source proprietary dependencies are required.

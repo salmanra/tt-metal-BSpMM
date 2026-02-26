@@ -13,6 +13,17 @@
 #ifndef PROFILE_WAIT_IN0
 #define PROFILE_WAIT_IN0 1
 #endif
+#ifndef PROFILE_READ_IN1
+#define PROFILE_READ_IN1 1
+#endif
+
+// Ablation skip flags (set to 1 via CreateKernel defines to skip that phase)
+#ifndef SKIP_IN0_DRAM_READ
+#define SKIP_IN0_DRAM_READ 0
+#endif
+#ifndef SKIP_IN1_DRAM_READ
+#define SKIP_IN1_DRAM_READ 0
+#endif
 
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
@@ -101,6 +112,7 @@ void kernel_main(){
                 uint32_t l1_write_addr_in0 = get_write_ptr(spmm::cb_id_in0);
                 uint32_t l1_write_addr_in1 = get_write_ptr(spmm::cb_id_in1);
 
+#if SKIP_IN0_DRAM_READ == 0
                 // Read in0 block
                 {
 #if PROFILE_READ_IN0 == 1
@@ -112,11 +124,12 @@ void kernel_main(){
                         s0, l1_write_addr_in0,
                         tile_info.in0_tile_size, in0_block_h, in0_block_w,
                         in0_tensor_stride_h, in0_tensor_stride_w);
-                        
                 }
+#endif
+#if SKIP_IN1_DRAM_READ == 0
                 // Read in1 block (row selected by BSR col_indices)
                 {
-#if PROFILE_READ_IN1 == 1 
+#if PROFILE_READ_IN1 == 1
                     DeviceZoneScopedN("SpMM Zone: RK reading in1.");
 #endif
                     uint32_t bsr_col_index = col_indices[reduction_iter];
@@ -127,7 +140,7 @@ void kernel_main(){
                         tile_info.in1_tile_size, in1_block_h, in1_block_w,
                         in1_tensor_stride_h, in1_tensor_stride_w);
                 }
-
+#endif
                 noc_async_read_barrier();
 
                 cb_push_back(spmm::cb_id_in0, in0_block_num_tiles);

@@ -20,6 +20,14 @@
 #define PROFILE_WRITE_OUT 1
 #endif
 
+// Ablation skip flags (set to 1 via CreateKernel defines to skip that phase)
+#ifndef SKIP_IN0_DRAM_READ
+#define SKIP_IN0_DRAM_READ 0
+#endif
+#ifndef SKIP_DRAM_WRITE
+#define SKIP_DRAM_WRITE 0
+#endif
+
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
     /// COMPILETIME ARGS //////////////////////////////////////////////////
@@ -173,6 +181,7 @@ void kernel_main(){
                 uint32_t l1_write_addr_in0_start = l1_write_addr_in0;  // Save start address for forwarding
 
                 if constexpr (is_injector_core){
+#if SKIP_IN0_DRAM_READ == 0
 #if PROFILE_READ_IN0 == 1
                     DeviceZoneScopedN("SpMM Zone: Reading nonzero block from in0 from DRAM");
 #endif
@@ -184,6 +193,7 @@ void kernel_main(){
                         tile_info.in0_tile_size, in0_block_h, in0_block_w,
                         in0_tensor_stride_h, in0_tensor_stride_w);
                     noc_async_read_barrier();
+#endif
                     DPRINT_DATA0(DPRINT << " done injecting" << ENDL());
                 }
                 else {
@@ -216,6 +226,7 @@ void kernel_main(){
 
                 cb_wait_front(spmm::cb_id_out, out_block_num_tiles);
                 uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
+#if SKIP_DRAM_WRITE == 0
 #if PROFILE_WRITE_OUT == 1
                 DeviceZoneScopedN("SpMM Zone: Writing Block back to DRAM");
 #endif
@@ -231,8 +242,8 @@ void kernel_main(){
                     }
                     out_tensor_sbh_start_tile_id += out_tensor_next_subblock_stride_h;
                 }
-                        
                 noc_async_write_barrier();
+#endif
 
                 cb_pop_front(spmm::cb_id_out, out_block_num_tiles);
                 out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;

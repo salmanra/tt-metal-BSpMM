@@ -7,6 +7,13 @@
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_indexing.hpp"
 
+// Ablation skip flags (set to 1 via CreateKernel defines to skip that phase)
+#ifndef SKIP_IN0_DRAM_READ
+#define SKIP_IN0_DRAM_READ 0
+#endif
+#ifndef SKIP_DRAM_WRITE
+#define SKIP_DRAM_WRITE 0
+#endif
 
 void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
@@ -118,6 +125,7 @@ void kernel_main(){
                 cb_reserve_back(spmm::cb_id_in0, in0_block_num_tiles);
                 uint32_t l1_write_addr_in0 = get_write_ptr(spmm::cb_id_in0);
 
+#if SKIP_IN0_DRAM_READ == 0
                 {
                     DeviceZoneScopedN("SpMM Zone: Reading nonzero block from in0 from DRAM");
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
@@ -127,8 +135,8 @@ void kernel_main(){
                         tile_info.in0_tile_size, in0_block_h, in0_block_w,
                         in0_tensor_stride_h, in0_tensor_stride_w);
                 }
-
                 noc_async_read_barrier();
+#endif
                 cb_push_back(spmm::cb_id_in0, in0_block_num_tiles);
             }
 
@@ -140,6 +148,7 @@ void kernel_main(){
                 cb_wait_front(spmm::cb_id_out, out_block_num_tiles);
                 DPRINT_DATA0(DPRINT << "writing" << ENDL());
 
+#if SKIP_DRAM_WRITE == 0
                 {
                     DeviceZoneScopedN("SpMM Zone: Writing Block back to DRAM");
                     uint32_t l1_read_addr = get_read_ptr(spmm::cb_id_out);
@@ -159,7 +168,7 @@ void kernel_main(){
                 }
                 noc_async_write_barrier();
                 DPRINT_DATA0(DPRINT << "done writing" << ENDL());
-
+#endif
                 cb_pop_front(spmm::cb_id_out, out_block_num_tiles);
                 out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
             }

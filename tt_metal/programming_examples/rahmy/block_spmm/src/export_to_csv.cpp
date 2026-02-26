@@ -22,8 +22,8 @@ using namespace profiling_suite;
 
 void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Registry, std::string registry_name){
     // get the host code and test case
-    HostCodeFunctionPtr host_function = HostCodeRegistry[host_code_num].first;
-    std::string host_function_name = HostCodeRegistry[host_code_num].second;
+    HostCodeFunctionPtr host_function = HostCodeRegistryProfiling[host_code_num].first;
+    std::string host_function_name = HostCodeRegistryProfiling[host_code_num].second;
     auto [a, b, test_name] = Registry[test_num]();
 
     auto zone_defines = spmm_zone_config::get_zone_defines();
@@ -77,7 +77,7 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
 
 int main(int argc, char** argv) {
 
-    const int num_host_programs = sizeof(HostCodeRegistry) / sizeof(HostCodeRegistry[0]);
+    const int num_host_programs = sizeof(HostCodeRegistryProfiling) / sizeof(HostCodeRegistryProfiling[0]);
 
     const int test_id = 0;
     const int host_code_id = 0;
@@ -113,6 +113,22 @@ int main(int argc, char** argv) {
         case 3:
             Registry = ProfileLargeSparseLargeBlocksRegistry;
             registry_name = "ProfileSuiteLargeSparseLargeBlocksVersioning";
+            break;
+        case 4:
+            Registry = ProfileSweepNRegistry;
+            registry_name = "ProfileSweepN";
+            break;
+        case 5:
+            Registry = ProfileSweepDensityRegistry;
+            registry_name = "ProfileSweepDensity";
+            break;
+        case 6:
+            Registry = ProfileSweepKRegistry;
+            registry_name = "ProfileSweepK";
+            break;
+        case 7:
+            Registry = ProfileSweepBlockSizeRegistry;
+            registry_name = "ProfileSweepBlockSize";
     }
 
     int num_profiles = sizeof(Registry) / sizeof(Registry[0]);

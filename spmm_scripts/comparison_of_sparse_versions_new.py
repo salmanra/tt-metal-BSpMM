@@ -16,7 +16,7 @@ ALGORITHM_COLORS = ["red", "orange", "steelblue", "mediumblue", "midnightblue"]
 
 # ── Configuration ────────────────────────────────────────────────────
 
-def build_config(profiles_dir, registry_name, flag_microbenchmarking):
+def build_config(profiles_dir, registry_name):
     """Return directory paths and algorithm data directories."""
     csv_dir = os.path.join(profiles_dir, "csvs")
     suite = os.path.join(csv_dir, registry_name)
@@ -27,17 +27,6 @@ def build_config(profiles_dir, registry_name, flag_microbenchmarking):
         os.path.join(suite, "bsr_spmm_multicore_reuse_iteration"),
         os.path.join(suite, "bsr_spmm_multicore_load_balanced_new_DM"),
         os.path.join(suite, "bsr_spmm_multicore_naive_new_DM"),
-    ]
-    microbench_dirs = [
-        os.path.join(suite, "bsr_spmm_multicore_snf"),
-        os.path.join(suite, "bsr_spmm_multicore_snf_no_a_read"),
-        os.path.join(suite, "bsr_spmm_multicore_snf_no_b_read"),
-        os.path.join(suite, "bsr_spmm_multicore_snf_no_compute"),
-        os.path.join(suite, "bsr_spmm_multicore_snf_no_write"),
-        os.path.join(suite, "bsr_spmm_multicore_load_balanced"),
-        os.path.join(suite, "bsr_spmm_multicore_reuse_iteration"),
-        os.path.join(suite, "bsr_spmm_multicore_load_balanced_new_DM"),
-        os.path.join(suite, "bsr_spmm_multicore_naive_new_DM"),    
     ]
     algorithm_labels = [os.path.basename(d) for d in algorithm_dirs]
 
@@ -125,8 +114,9 @@ def collect_metrics(algorithm_dirs, csv_files, sparse_logs, dense_logs, short_na
     for alg_idx, alg_dir in enumerate(algorithm_dirs):
         for case_idx, csv_name in enumerate(csv_files):
             csv_path = os.path.join(alg_dir, csv_name)
-            sparse_log_path = os.path.join(alg_dir, sparse_logs[case_idx])
-            dense_log_path = os.path.join(alg_dir, dense_logs[case_idx])
+            stem = csv_name[:-len(".csv")]
+            sparse_log_path = os.path.join(alg_dir, stem + "_sparse.log")
+            dense_log_path  = os.path.join(alg_dir, stem + "_dense.log")
 
             df = pd.read_csv(csv_path)
             sparse_meta = parse_log_metadata(sparse_log_path)

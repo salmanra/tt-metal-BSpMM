@@ -31,7 +31,7 @@
 #   0  ProfileCaseRegistry              (small sparse cases)
 #   1  ProfileDenseAblationRegistry     (dense K-sweep)
 #   2  ProfileLargeSparseRegistry       (large sparse, R/C 32/64/128)
-#   3  ProfileLargeSparseLargeBlocksRegistry (large sparse, R/C 512)
+#   3  ProfileLargeSparseLargeBlocksRegistry (large sparse, R/C 256/512)
 #   4  ProfileSweepN                    (parametric, sweep N)
 #   5  ProfileSweepDensity              (parametric, sweep density)
 #   6  ProfileSweepK                    (parametric, sweep K)
@@ -178,6 +178,8 @@ function build_if_needed {
 }
 
 function just_build {
+    echo "[build] Reset board with tt-smi -r"
+    tt-smi -r > /dev/null
     pushd "$TT_METAL_DIR" > /dev/null
     echo "[build] Building with profiling enabled..."
     ./build_metal.sh --enable-profiler --build-programming-examples > build.log 2> build_err.log

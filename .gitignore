@@ -4,6 +4,14 @@ tt_metal/programming_examples/rahmy/block_spmm/test_*/*
 tt_metal/programming_examples/rahmy/block_spmm/profile_case_*/*
 nohup.out
 profiles_opt_noc_flip_writer/
+# N-Body-Code cache and build files
+N-Body-Code/build/
+N-Body-Code/.cpmcache/
+/home/user/tt-metal/N-Body-Code/.cpmcache/
+
+# BrownEPCCExperiments cache and build files
+BrownEPCCExperiments/build/
+BrownEPCCExperiments/.cpmcache/
 
 .cache
 .clangd
@@ -142,3 +150,5 @@ ttnn/ttnn/runtime
 ClangBuildAnalyzer.ini
 ttnn/ttnn/.rpath_checked__ttnn
 Testing
+
+

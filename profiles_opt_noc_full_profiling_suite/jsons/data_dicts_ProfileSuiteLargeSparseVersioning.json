@@ -1,0 +1,537 @@
+[
+    {
+        "diagonal_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.015837246,
+            "TFLOP/s": 10.84776304162984,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "diagonal_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.013864052,
+            "TFLOP/s": 3.0979163205677533,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "diagonal_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.015851715,
+            "TFLOP/s": 5.418930754180226,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        },
+        "column_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.016098054,
+            "TFLOP/s": 10.672016123191039,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "column_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.013858693,
+            "TFLOP/s": 3.0991142498069624,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "column_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.014613722,
+            "TFLOP/s": 5.877992336243976,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        },
+        "lower_triangular_large128_C128": {
+            "FLOP count": 0.55834574848,
+            "Program Loop total seconds": 0.332170111,
+            "TFLOP/s": 16.809030372994638,
+            "oi_ideal": 1658.7739160121805,
+            "oi_pessimistic": 122.32460350925707
+        },
+        "lower_triangular_large32_C32": {
+            "FLOP count": 0.551903297536,
+            "Program Loop total seconds": 0.944141102,
+            "TFLOP/s": 5.845559486467522,
+            "oi_ideal": 1642.8672249369406,
+            "oi_pessimistic": 31.630053622364553
+        },
+        "lower_triangular_large64_C64": {
+            "FLOP count": 0.554050781184,
+            "Program Loop total seconds": 0.548894252,
+            "TFLOP/s": 10.093943945763893,
+            "oi_ideal": 1648.4595069710772,
+            "oi_pessimistic": 62.54151619012458
+        },
+        "random_large_R128_C128": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.168325554,
+            "TFLOP/s": 16.330135289143325,
+            "oi_ideal": 910.2090930713235,
+            "oi_pessimistic": 118.72441430906078
+        },
+        "random_large_R32_C32": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.474046492,
+            "TFLOP/s": 5.7985432142803415,
+            "oi_ideal": 910.0216370945124,
+            "oi_pessimistic": 31.386734621437647
+        },
+        "random_large_R64_C64": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.274442808,
+            "TFLOP/s": 10.015853902209017,
+            "oi_ideal": 910.1712870904081,
+            "oi_pessimistic": 61.5937517123106
+        },
+        "row_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.206657557,
+            "TFLOP/s": 0.8313206365833503,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "row_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.083931044,
+            "TFLOP/s": 0.5117257085471258,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "row_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.109939718,
+            "TFLOP/s": 0.7813313285013156,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        }
+    },
+    {
+        "diagonal_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.015915494,
+            "TFLOP/s": 10.79443037332049,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "diagonal_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.01467532,
+            "TFLOP/s": 2.9266600632899316,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "diagonal_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.014217323,
+            "TFLOP/s": 6.041879045724712,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        },
+        "column_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.015946505,
+            "TFLOP/s": 10.77343855848037,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "column_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.014049835,
+            "TFLOP/s": 3.056952125060543,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "column_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.014219325,
+            "TFLOP/s": 6.041028383555478,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        },
+        "lower_triangular_large128_C128": {
+            "FLOP count": 0.55834574848,
+            "Program Loop total seconds": 0.389230814,
+            "TFLOP/s": 14.344849595592398,
+            "oi_ideal": 1658.7739160121805,
+            "oi_pessimistic": 122.32460350925707
+        },
+        "lower_triangular_large32_C32": {
+            "FLOP count": 0.551903297536,
+            "Program Loop total seconds": 0.997684918,
+            "TFLOP/s": 5.5318396377322,
+            "oi_ideal": 1642.8672249369406,
+            "oi_pessimistic": 31.630053622364553
+        },
+        "lower_triangular_large64_C64": {
+            "FLOP count": 0.554050781184,
+            "Program Loop total seconds": 0.618091356,
+            "TFLOP/s": 8.96389790612118,
+            "oi_ideal": 1648.4595069710772,
+            "oi_pessimistic": 62.54151619012458
+        },
+        "random_large_R128_C128": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.192997736,
+            "TFLOP/s": 14.242545671312952,
+            "oi_ideal": 910.2090930713235,
+            "oi_pessimistic": 118.72441430906078
+        },
+        "random_large_R32_C32": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.497660204,
+            "TFLOP/s": 5.523405422708865,
+            "oi_ideal": 910.0216370945124,
+            "oi_pessimistic": 31.386734621437647
+        },
+        "random_large_R64_C64": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.307449091,
+            "TFLOP/s": 8.940599110244237,
+            "oi_ideal": 910.1712870904081,
+            "oi_pessimistic": 61.5937517123106
+        },
+        "row_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.049291643,
+            "TFLOP/s": 3.4853512965676554,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "row_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.054728426,
+            "TFLOP/s": 0.7847781509375037,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "row_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.041947458,
+            "TFLOP/s": 2.047784300064142,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        }
+    },
+    {
+        "diagonal_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.016134714,
+            "TFLOP/s": 10.647768026132969,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "diagonal_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.014618681,
+            "TFLOP/s": 2.9379991915823322,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "diagonal_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.01510068,
+            "TFLOP/s": 5.688442237038331,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        },
+        "column_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.015823845,
+            "TFLOP/s": 10.85694986521923,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "column_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.014136334,
+            "TFLOP/s": 3.038246900504756,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "column_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.014740254,
+            "TFLOP/s": 5.827534988203053,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        },
+        "lower_triangular_large128_C128": {
+            "FLOP count": 0.55834574848,
+            "Program Loop total seconds": 0.566936717,
+            "TFLOP/s": 9.848466887707326,
+            "oi_ideal": 1658.7739160121805,
+            "oi_pessimistic": 122.32460350925707
+        },
+        "lower_triangular_large32_C32": {
+            "FLOP count": 0.551903297536,
+            "Program Loop total seconds": 1.318452171,
+            "TFLOP/s": 4.185994074532113,
+            "oi_ideal": 1642.8672249369406,
+            "oi_pessimistic": 31.630053622364553
+        },
+        "lower_triangular_large64_C64": {
+            "FLOP count": 0.554050781184,
+            "Program Loop total seconds": 0.840451718,
+            "TFLOP/s": 6.592297562344919,
+            "oi_ideal": 1648.4595069710772,
+            "oi_pessimistic": 62.54151619012458
+        },
+        "random_large_R128_C128": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.210237062,
+            "TFLOP/s": 13.074664587160184,
+            "oi_ideal": 910.2090930713235,
+            "oi_pessimistic": 118.72441430906078
+        },
+        "random_large_R32_C32": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.499380017,
+            "TFLOP/s": 5.504383387131007,
+            "oi_ideal": 910.0216370945124,
+            "oi_pessimistic": 31.386734621437647
+        },
+        "random_large_R64_C64": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.303682509,
+            "TFLOP/s": 9.051489591848703,
+            "oi_ideal": 910.1712870904081,
+            "oi_pessimistic": 61.5937517123106
+        },
+        "row_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.049758059,
+            "TFLOP/s": 3.4526807374057737,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "row_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.054198828,
+            "TFLOP/s": 0.7924465259654693,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "row_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.041981561,
+            "TFLOP/s": 2.0461208176608774,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        }
+    },
+    {
+        "diagonal_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.016116203,
+            "TFLOP/s": 10.659998005733733,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "diagonal_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.014734114,
+            "TFLOP/s": 2.9149817192944214,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "diagonal_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.014827462,
+            "TFLOP/s": 5.793260230240348,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        },
+        "column_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.016007364,
+            "TFLOP/s": 10.732478616716657,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "column_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.014273973,
+            "TFLOP/s": 3.008950133224996,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "column_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.015844145,
+            "TFLOP/s": 5.421519805581178,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        },
+        "lower_triangular_large128_C128": {
+            "FLOP count": 0.55834574848,
+            "Program Loop total seconds": 0.329916995,
+            "TFLOP/s": 16.92382499058589,
+            "oi_ideal": 1658.7739160121805,
+            "oi_pessimistic": 122.32460350925707
+        },
+        "lower_triangular_large32_C32": {
+            "FLOP count": 0.551903297536,
+            "Program Loop total seconds": 0.95930846,
+            "TFLOP/s": 5.753136978860793,
+            "oi_ideal": 1642.8672249369406,
+            "oi_pessimistic": 31.630053622364553
+        },
+        "lower_triangular_large64_C64": {
+            "FLOP count": 0.554050781184,
+            "Program Loop total seconds": 0.588150145,
+            "TFLOP/s": 9.420226890941258,
+            "oi_ideal": 1648.4595069710772,
+            "oi_pessimistic": 62.54151619012458
+        },
+        "random_large_R128_C128": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.166078439,
+            "TFLOP/s": 16.551089268366738,
+            "oi_ideal": 910.2090930713235,
+            "oi_pessimistic": 118.72441430906078
+        },
+        "random_large_R32_C32": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.479429687,
+            "TFLOP/s": 5.733435254375476,
+            "oi_ideal": 910.0216370945124,
+            "oi_pessimistic": 31.386734621437647
+        },
+        "random_large_R64_C64": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.292198667,
+            "TFLOP/s": 9.407226588887895,
+            "oi_ideal": 910.1712870904081,
+            "oi_pessimistic": 61.5937517123106
+        },
+        "row_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.157657994,
+            "TFLOP/s": 1.0896922349525773,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "row_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.049883808,
+            "TFLOP/s": 0.8609942721293451,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "row_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.075534579,
+            "TFLOP/s": 1.137218834833249,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        }
+    },
+    {
+        "diagonal_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.016201244,
+            "TFLOP/s": 10.604043235198482,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "diagonal_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.015537424,
+            "TFLOP/s": 2.764272440528108,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "diagonal_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.015068612,
+            "TFLOP/s": 5.700547994732362,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        },
+        "column_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.016127105,
+            "TFLOP/s": 10.652791796171725,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "column_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.015291248,
+            "TFLOP/s": 2.808774859972188,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "column_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.015936787,
+            "TFLOP/s": 5.390004015238454,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        },
+        "lower_triangular_large128_C128": {
+            "FLOP count": 0.55834574848,
+            "Program Loop total seconds": 0.465113867,
+            "TFLOP/s": 12.004495847035235,
+            "oi_ideal": 1658.7739160121805,
+            "oi_pessimistic": 122.32460350925707
+        },
+        "lower_triangular_large32_C32": {
+            "FLOP count": 0.551903297536,
+            "Program Loop total seconds": 1.272080846,
+            "TFLOP/s": 4.338586649358291,
+            "oi_ideal": 1642.8672249369406,
+            "oi_pessimistic": 31.630053622364553
+        },
+        "lower_triangular_large64_C64": {
+            "FLOP count": 0.554050781184,
+            "Program Loop total seconds": 0.788415365,
+            "TFLOP/s": 7.0273970521109765,
+            "oi_ideal": 1648.4595069710772,
+            "oi_pessimistic": 62.54151619012458
+        },
+        "random_large_R128_C128": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.169431411,
+            "TFLOP/s": 16.2235505991271,
+            "oi_ideal": 910.2090930713235,
+            "oi_pessimistic": 118.72441430906078
+        },
+        "random_large_R32_C32": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.48478017,
+            "TFLOP/s": 5.670155752121627,
+            "oi_ideal": 910.0216370945124,
+            "oi_pessimistic": 31.386734621437647
+        },
+        "random_large_R64_C64": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.296814981,
+            "TFLOP/s": 9.26091755941389,
+            "oi_ideal": 910.1712870904081,
+            "oi_pessimistic": 61.5937517123106
+        },
+        "row_large_R128_C128": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.157678118,
+            "TFLOP/s": 1.089553160699191,
+            "oi_ideal": 63.50375484519227,
+            "oi_pessimistic": 63.50375484519227
+        },
+        "row_large_R32_C32": {
+            "FLOP count": 0.004294967296,
+            "Program Loop total seconds": 0.049335153,
+            "TFLOP/s": 0.8705693678501413,
+            "oi_ideal": 15.968689084750164,
+            "oi_pessimistic": 15.968689084750164
+        },
+        "row_large_R64_C64": {
+            "FLOP count": 0.008589934592,
+            "Program Loop total seconds": 0.075106425,
+            "TFLOP/s": 1.143701699554998,
+            "oi_ideal": 31.875364786456064,
+            "oi_pessimistic": 31.875364786456064
+        }
+    }
+]

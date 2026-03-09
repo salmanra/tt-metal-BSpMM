@@ -7,6 +7,7 @@ set(RAHMY_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/test_block.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/run_block.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/export_to_csv.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/remake_logs.cpp
 #    ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/profile_dense.cpp
 )
 

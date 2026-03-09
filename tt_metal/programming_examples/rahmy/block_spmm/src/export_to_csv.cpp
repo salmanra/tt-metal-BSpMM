@@ -39,11 +39,11 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
 
     // set up command strings to direct and capture the trace (and its csv file)
     char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_opt_noc_flip_writer/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_bad_noc_full_profiling_suite/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
     std::string trace_file_location = trace_directory + test_file_name + ".tracy";
 
-    n = sprintf(buf, "/home/user/tt-metal/profiles_opt_noc_flip_writer/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    n = sprintf(buf, "/home/user/tt-metal/profiles_bad_noc_full_profiling_suite/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string csv_directory(buf);
     std::string csv_file_location = csv_directory + test_file_name + ".csv";
 
@@ -67,12 +67,41 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
     // pipe the output of b.pretty_print() to the sparse file
     std::string sparse_log_file = csv_directory + test_file_name + "_sparse.log";
     std::ofstream os_sparse(sparse_log_file);
-
+    
     std::string dense_log_file = csv_directory + test_file_name + "_dense.log";
     std::ofstream os_dense(dense_log_file);
 
     a.pretty_print(os_sparse);
     b.pretty_print(os_dense);
+    os_dense << "Block Size (R x C): " << a.R << " x " << a.C << std::endl;
+
+    // Compute in1_block_w (dense block width in tiles) the same way the host codes do
+    uint32_t Nt = b.W / TILE_WIDTH;
+    uint32_t Rt = a.R / TILE_HEIGHT;
+    uint32_t Ct = a.C / TILE_WIDTH;
+
+    // Indexing buffer tile counts (mirrors host code sizing)
+    tt::DataFormat indexing_data_format = tt::DataFormat::Int32;
+    uint32_t indexing_tile_size = detail::TileSize(indexing_data_format);
+    uint32_t indptr_buf_size = sizeof(int) * a.indptr.size();
+    indptr_buf_size = indexing_tile_size * ((indexing_tile_size - 1 + indptr_buf_size) / indexing_tile_size);
+    uint32_t col_idx_buf_size = sizeof(int) * a.indices.size();
+    col_idx_buf_size = indexing_tile_size * ((indexing_tile_size - 1 + col_idx_buf_size) / indexing_tile_size);
+    uint32_t num_tiles_indexing = indptr_buf_size / indexing_tile_size + col_idx_buf_size / indexing_tile_size;
+
+    // Count nonzero block-rows
+    uint32_t nnz_rows = 0;
+    for (uint32_t i = 0; i + 1 < a.indptr.size(); i++) {
+        if (a.indptr[i + 1] - a.indptr[i] > 0) nnz_rows++;
+    }
+
+    // Wormhole compute grid: 8×8
+    constexpr uint32_t num_cores_x = 8;
+    constexpr uint32_t num_cores_y = 8;
+
+    uint32_t in1_block_w = get_Npc_from_BSR_block_size(Nt, Rt, Ct, num_cores_x, num_cores_y, num_tiles_indexing, nnz_rows);
+    os_dense << "Dense block width (in1_block_w): " << in1_block_w << " tiles"
+             << " (" << in1_block_w * TILE_WIDTH << " columns)" << std::endl;
 }
 
 int main(int argc, char** argv) {

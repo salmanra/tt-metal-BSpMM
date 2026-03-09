@@ -1,0 +1,187 @@
+[
+    {
+        "parametric_M8192_N1024_K8192_R64_C64_d25": {
+            "FLOP count": 0.034359738368,
+            "Program Loop total seconds": 0.02794245,
+            "TFLOP/s": 12.296609054682035,
+            "oi_ideal": 511.8710956943447,
+            "oi_pessimistic": 58.51260169068647
+        },
+        "parametric_M8192_N2048_K8192_R64_C64_d25": {
+            "FLOP count": 0.068719476736,
+            "Program Loop total seconds": 0.055450371,
+            "TFLOP/s": 12.392969694648212,
+            "oi_ideal": 682.5520754449068,
+            "oi_pessimistic": 60.2344018348955
+        },
+        "parametric_M8192_N4096_K8192_R64_C64_d25": {
+            "FLOP count": 0.137438953472,
+            "Program Loop total seconds": 0.124926077,
+            "TFLOP/s": 11.001622461257629,
+            "oi_ideal": 819.1174887802578,
+            "oi_pessimistic": 61.13386879644169
+        },
+        "parametric_M8192_N512_K8192_R64_C64_d25": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.015243116,
+            "TFLOP/s": 11.270575638209406,
+            "oi_ideal": 341.21876134342546,
+            "oi_pessimistic": 55.348337653822675
+        },
+        "parametric_M8192_N8192_K8192_R64_C64_d25": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.274623369,
+            "TFLOP/s": 10.009268619233929,
+            "oi_ideal": 910.1712870904081,
+            "oi_pessimistic": 61.5937517123106
+        }
+    },
+    {
+        "parametric_M8192_N1024_K8192_R64_C64_d25": {
+            "FLOP count": 0.034359738368,
+            "Program Loop total seconds": 0.040250893,
+            "TFLOP/s": 8.536391569747284,
+            "oi_ideal": 511.8710956943447,
+            "oi_pessimistic": 58.51260169068647
+        },
+        "parametric_M8192_N2048_K8192_R64_C64_d25": {
+            "FLOP count": 0.068719476736,
+            "Program Loop total seconds": 0.07143924,
+            "TFLOP/s": 9.61929000588472,
+            "oi_ideal": 682.5520754449068,
+            "oi_pessimistic": 60.2344018348955
+        },
+        "parametric_M8192_N4096_K8192_R64_C64_d25": {
+            "FLOP count": 0.137438953472,
+            "Program Loop total seconds": 0.143260205,
+            "TFLOP/s": 9.593658858159529,
+            "oi_ideal": 819.1174887802578,
+            "oi_pessimistic": 61.13386879644169
+        },
+        "parametric_M8192_N512_K8192_R64_C64_d25": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.027186333,
+            "TFLOP/s": 6.319303594199336,
+            "oi_ideal": 341.21876134342546,
+            "oi_pessimistic": 55.348337653822675
+        },
+        "parametric_M8192_N8192_K8192_R64_C64_d25": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.306790908,
+            "TFLOP/s": 8.9597800904843,
+            "oi_ideal": 910.1712870904081,
+            "oi_pessimistic": 61.5937517123106
+        }
+    },
+    {
+        "parametric_M8192_N1024_K8192_R64_C64_d25": {
+            "FLOP count": 0.034359738368,
+            "Program Loop total seconds": 0.041302316,
+            "TFLOP/s": 8.319082728435857,
+            "oi_ideal": 511.8710956943447,
+            "oi_pessimistic": 58.51260169068647
+        },
+        "parametric_M8192_N2048_K8192_R64_C64_d25": {
+            "FLOP count": 0.068719476736,
+            "Program Loop total seconds": 0.07295339,
+            "TFLOP/s": 9.419641326605932,
+            "oi_ideal": 682.5520754449068,
+            "oi_pessimistic": 60.2344018348955
+        },
+        "parametric_M8192_N4096_K8192_R64_C64_d25": {
+            "FLOP count": 0.137438953472,
+            "Program Loop total seconds": 0.144442131,
+            "TFLOP/s": 9.515156867354719,
+            "oi_ideal": 819.1174887802578,
+            "oi_pessimistic": 61.13386879644169
+        },
+        "parametric_M8192_N512_K8192_R64_C64_d25": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.028292915,
+            "TFLOP/s": 6.072145335325116,
+            "oi_ideal": 341.21876134342546,
+            "oi_pessimistic": 55.348337653822675
+        },
+        "parametric_M8192_N8192_K8192_R64_C64_d25": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.313121455,
+            "TFLOP/s": 8.778635336374506,
+            "oi_ideal": 910.1712870904081,
+            "oi_pessimistic": 61.5937517123106
+        }
+    },
+    {
+        "parametric_M8192_N1024_K8192_R64_C64_d25": {
+            "FLOP count": 0.034359738368,
+            "Program Loop total seconds": 0.041114033,
+            "TFLOP/s": 8.357180227977148,
+            "oi_ideal": 511.8710956943447,
+            "oi_pessimistic": 58.51260169068647
+        },
+        "parametric_M8192_N2048_K8192_R64_C64_d25": {
+            "FLOP count": 0.068719476736,
+            "Program Loop total seconds": 0.060620192,
+            "TFLOP/s": 11.336070452564716,
+            "oi_ideal": 682.5520754449068,
+            "oi_pessimistic": 60.2344018348955
+        },
+        "parametric_M8192_N4096_K8192_R64_C64_d25": {
+            "FLOP count": 0.137438953472,
+            "Program Loop total seconds": 0.127783476,
+            "TFLOP/s": 10.755612366656859,
+            "oi_ideal": 819.1174887802578,
+            "oi_pessimistic": 61.13386879644169
+        },
+        "parametric_M8192_N512_K8192_R64_C64_d25": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.040740575,
+            "TFLOP/s": 4.216894136619328,
+            "oi_ideal": 341.21876134342546,
+            "oi_pessimistic": 55.348337653822675
+        },
+        "parametric_M8192_N8192_K8192_R64_C64_d25": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.293583267,
+            "TFLOP/s": 9.362860143660708,
+            "oi_ideal": 910.1712870904081,
+            "oi_pessimistic": 61.5937517123106
+        }
+    },
+    {
+        "parametric_M8192_N1024_K8192_R64_C64_d25": {
+            "FLOP count": 0.034359738368,
+            "Program Loop total seconds": 0.041817988,
+            "TFLOP/s": 8.216497256635112,
+            "oi_ideal": 511.8710956943447,
+            "oi_pessimistic": 58.51260169068647
+        },
+        "parametric_M8192_N2048_K8192_R64_C64_d25": {
+            "FLOP count": 0.068719476736,
+            "Program Loop total seconds": 0.062691902,
+            "TFLOP/s": 10.961459860637186,
+            "oi_ideal": 682.5520754449068,
+            "oi_pessimistic": 60.2344018348955
+        },
+        "parametric_M8192_N4096_K8192_R64_C64_d25": {
+            "FLOP count": 0.137438953472,
+            "Program Loop total seconds": 0.12956238,
+            "TFLOP/s": 10.607936769299853,
+            "oi_ideal": 819.1174887802578,
+            "oi_pessimistic": 61.13386879644169
+        },
+        "parametric_M8192_N512_K8192_R64_C64_d25": {
+            "FLOP count": 0.017179869184,
+            "Program Loop total seconds": 0.040609597,
+            "TFLOP/s": 4.230494871446274,
+            "oi_ideal": 341.21876134342546,
+            "oi_pessimistic": 55.348337653822675
+        },
+        "parametric_M8192_N8192_K8192_R64_C64_d25": {
+            "FLOP count": 0.274877906944,
+            "Program Loop total seconds": 0.296176408,
+            "TFLOP/s": 9.280884618737087,
+            "oi_ideal": 910.1712870904081,
+            "oi_pessimistic": 61.5937517123106
+        }
+    }
+]

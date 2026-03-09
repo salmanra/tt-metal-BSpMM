@@ -142,6 +142,15 @@ function get_trace {
         "$profile_case" "$host_code" "$registry"
 }
 
+function just_export_to_csv {
+    local profile_case="$1"
+    local host_code="$2"
+    local registry="$3"
+
+    "$TT_METAL_DIR/build/programming_examples/rahmy/export_to_csv" \
+        "$profile_case" "$host_code" "$registry"
+}
+
 # Parse --disable-zones flag and export env vars.
 # Usage: parse_disable_zones "read_in0,wait_in0,read_in1,write_out,compute"
 function parse_disable_zones {

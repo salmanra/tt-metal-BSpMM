@@ -4,6 +4,7 @@ tt_metal/programming_examples/rahmy/block_spmm/test_*/*
 tt_metal/programming_examples/rahmy/block_spmm/profile_case_*/*
 nohup.out
 profiles_opt_noc_flip_writer/
+*.tracy
 
 .cache
 .clangd

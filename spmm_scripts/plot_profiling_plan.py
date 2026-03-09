@@ -53,6 +53,10 @@ ALGO_COLOR = {
 
 ABLATION_VARIANTS = ["", "_no_a_read", "_no_b_read", "_no_compute", "_no_write"]
 
+# Suffix appended to directory names when plotting flip-noc data.
+# Set by --flip-noc CLI flag; used by all loading functions.
+DIR_SUFFIX = ""
+
 # Reference case used for ablation analysis
 ABLATION_REGISTRY = "ProfileSuiteLargeSparseVersioning"
 ABLATION_LARGE_BLOCKS_REGISTRY = "ProfileSuiteLargeSparseLargeBlocksVersioning"
@@ -80,7 +84,7 @@ plt.rcParams.update({
 # ── Log / metadata parsing ──────────────────────────────────────────
 
 def parse_log_metadata(filepath):
-    """Parse matrix metadata (H, W, R, C, nblocks) from a pretty_print log file."""
+    """Parse matrix metadata (H, W, R, C, nblocks, in1_block_w) from a pretty_print log file."""
     result = {}
     try:
         with open(filepath, "r") as f:
@@ -93,6 +97,10 @@ def parse_log_metadata(filepath):
                     result["R"], result["C"] = int(parts[0]), int(parts[1])
                 elif "Number of blocks" in line:
                     result["nblocks"] = int(line.split(":")[1].strip())
+                elif "in1_block_w" in line:
+                    # "Dense block width (in1_block_w): 4 tiles (128 columns)"
+                    tiles_str = line.split(":")[1].strip().split()[0]
+                    result["in1_block_w"] = int(tiles_str)
     except FileNotFoundError:
         pass
     return result
@@ -116,7 +124,7 @@ def load_ablation(data_dir: Path, ablation_reg, ablation_case) -> pd.DataFrame:
     reg_dir = data_dir / ablation_reg
     for algo in ALGOS:
         for suffix in ABLATION_VARIANTS:
-            path = reg_dir / f"{algo}{suffix}" / f"{ablation_case}.csv"
+            path = reg_dir / f"{algo}{suffix}{DIR_SUFFIX}" / f"{ablation_case}.csv"
             ns = get_metric(path)
             if ns is not None:
                 ns = ns / NUM_ITERS
@@ -157,7 +165,7 @@ def load_sweep(data_dir: Path, registry: str, sweep_param: str) -> pd.DataFrame:
     rows = []
     reg_dir = data_dir / registry
     for algo in ALGOS:
-        algo_dir = reg_dir / algo
+        algo_dir = reg_dir / f"{algo}{DIR_SUFFIX}"
         if not algo_dir.exists():
             continue
         for csv in sorted(algo_dir.glob("*.csv")):
@@ -416,7 +424,18 @@ def make_figure2(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
     # No linear guide here — block size has a non-linear sweet spot
     block_ticks = sorted(bs_df["R"].unique()) if not bs_df.empty else []
     axes[1, 1].set_xticks(block_ticks)
-    axes[1, 1].set_xticklabels([f"{r}×{r}" for r in block_ticks])
+    # Load dense block widths for block size sweep to annotate labels
+    sweep_bw = _load_dense_block_widths(data_dir, ["ProfileSweepBlockSize"])
+    bs_labels = []
+    for r in block_ticks:
+        lbl = f"A:{r}×{r}"
+        # Find any sweep case with this R to get its dense block width
+        for case, dw in sweep_bw.items():
+            if _parse_parametric(case) and _parse_parametric(case)["R"] == r:
+                lbl += f"\nB:{r}×{dw}"
+                break
+        bs_labels.append(lbl)
+    axes[1, 1].set_xticklabels(bs_labels, fontsize=7)
     axes[1, 1].tick_params(axis="x", which="minor", bottom=False)
 
     fig.tight_layout(rect=[0, 0, 1, 0.96])
@@ -430,20 +449,43 @@ def make_figure2(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
 # ── Figure 3: Ablation detail across all test cases ────────────────────────────
 
 # Short display name for each test-case stem
-def _case_label(stem: str) -> str:
-    stem = stem.replace("profile_case_sparse_", "").replace("_large", "")
-    # extract pattern and block size
+def _load_dense_block_widths(data_dir: Path, registries) -> dict:
+    """
+    Scan dense log files to build a mapping: case_stem → dense block width
+    in columns (in1_block_w * TILE_WIDTH).  Uses the first algo's directory
+    in each registry (all algos share the same matrix geometry).
+    """
+    result = {}
+    for reg in (registries if isinstance(registries, list) else [registries]):
+        first_algo_dir = data_dir / reg / f"{ALGOS[0]}{DIR_SUFFIX}"
+        if not first_algo_dir.exists():
+            continue
+        for log in first_algo_dir.glob("*_dense.log"):
+            case = log.stem.removesuffix("_dense")
+            if case in result:
+                continue
+            meta = parse_log_metadata(log)
+            if "in1_block_w" in meta:
+                # in1_block_w is in tiles; convert to columns (tile_width=32)
+                result[case] = meta["in1_block_w"] * 32
+    return result
+
+
+def _case_label(stem: str, dense_bw: dict | None = None) -> str:
+    stem_clean = stem.replace("profile_case_sparse_", "").replace("_large", "")
     for pat, short in [("fill_lower_triangular", "tri"),
                        ("fill_column", "col"),
                        ("fill_random", "rand"),
                        ("fill_row", "row"),
                        ("diagonal",  "diag")]:
-        if pat in stem:
-            # extract block size suffix: R32_C32 / R64_C64 / R128_C128
-            # or the mis-named triangular form: large32_C32
-            m = re.search(r"[_]?(\d+)[_]C\d+", stem)
+        if pat in stem_clean:
+            m = re.search(r"[_]?(\d+)[_]C\d+", stem_clean)
             size = m.group(1) if m else "?"
-            return f"{short}\n{size}×{size}"
+            label = f"{short}\nA:{size}×{size}"
+            if dense_bw and stem in dense_bw:
+                dw = dense_bw[stem]
+                label += f"\nB:{size}×{dw}"
+            return label
     return stem
 
 
@@ -485,14 +527,14 @@ def load_ablation_all_cases(data_dir: Path, ablation_reg) -> pd.DataFrame:
     rows = []
     reg_dir = data_dir / ablation_reg
     # Collect all available test-case stems from the base (full) algorithm
-    base_dir = reg_dir / ALGOS[0]
+    base_dir = reg_dir / f"{ALGOS[0]}{DIR_SUFFIX}"
     cases = sorted(
         p.stem for p in base_dir.glob("*.csv")
         if not p.stem.endswith(".device")
     )
     for algo in ALGOS:
         for suffix in ABLATION_VARIANTS:
-            algo_dir = reg_dir / f"{algo}{suffix}"
+            algo_dir = reg_dir / f"{algo}{suffix}{DIR_SUFFIX}"
             for case in cases:
                 path = algo_dir / f"{case}.csv"
                 ns = get_metric(path)
@@ -507,12 +549,34 @@ def load_ablation_all_cases(data_dir: Path, ablation_reg) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _load_ablation_merged(data_dir: Path, registries, block_filter=None) -> pd.DataFrame:
+    """
+    Load and concatenate ablation data from multiple registries.
+    If block_filter is given, only keep cases whose block size is in the set.
+    """
+    frames = []
+    for reg in registries:
+        part = load_ablation_all_cases(data_dir, reg)
+        if not part.empty and block_filter is not None:
+            part = part[part["case"].apply(_block_size).isin(block_filter)]
+        frames.append(part)
+    combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    return combined.drop_duplicates(subset=["algo", "variant", "case"])
+
+
 def make_ablation_plot(data_dir: Path, out_dir: Path, ablation_reg, fig_num, clean: bool = False) -> None:
     # shared logic for figs 3 and 4 (they're the same)
-    df = load_ablation_all_cases(data_dir, ablation_reg)
+    if isinstance(ablation_reg, list):
+        regs_list = ablation_reg[0]
+        df = _load_ablation_merged(data_dir, *ablation_reg)
+    else:
+        regs_list = [ablation_reg]
+        df = load_ablation_all_cases(data_dir, ablation_reg)
     if df.empty:
         print(f"WARNING: No ablation data found. Skipping Figure {fig_num}.")
         return
+
+    dense_bw = _load_dense_block_widths(data_dir, regs_list)
 
     # Pivot so each row is (algo, case) with columns for each variant's ms
     pivot = df.pivot_table(index=["algo", "case"], columns="variant",
@@ -525,7 +589,7 @@ def make_ablation_plot(data_dir: Path, out_dir: Path, ablation_reg, fig_num, cle
 
     # Build ordered case list: group by pattern, ordered by block size within each.
     all_cases = _sorted_cases(pivot)
-    case_labels = [_case_label(c) for c in all_cases]
+    case_labels = [_case_label(c, dense_bw) for c in all_cases]
     x = np.arange(len(all_cases))
 
     variants_cfg = [
@@ -535,7 +599,7 @@ def make_ablation_plot(data_dir: Path, out_dir: Path, ablation_reg, fig_num, cle
         ("no_write",   "No-Write savings\n(skip output DRAM writes)",         "#1B5E20"),
     ]
 
-    fig, axes = plt.subplots(2, 2, figsize=(15, 9))
+    fig, axes = plt.subplots(2, 2, figsize=(16, 11))
     if not clean:
         fig.suptitle(
             "Ablation Savings Across All Test Cases\n"
@@ -561,7 +625,7 @@ def make_ablation_plot(data_dir: Path, out_dir: Path, ablation_reg, fig_num, cle
         ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.4)
 
         ax.set_xticks(x)
-        ax.set_xticklabels(case_labels, fontsize=7.5)
+        ax.set_xticklabels(case_labels, fontsize=6.5)
         ax.set_ylabel("Runtime savings (%)")
         ax.set_title(title, pad=8, color=accent, fontweight="bold")
         if not clean:
@@ -572,9 +636,12 @@ def make_ablation_plot(data_dir: Path, out_dir: Path, ablation_reg, fig_num, cle
         else:
             ax.tick_params(axis="both", length=0)
 
-        # Shade pattern groups (every 3 cases = one block-size triplet per pattern)
-        for i in range(0, len(all_cases), 6):
-            ax.axvspan(i - 0.5, i + 2.5, alpha=0.04, color="black", zorder=0)
+        # Shade alternating pattern groups
+        # Detect group size from the data (number of block sizes per pattern)
+        n_sizes = len(set(_block_size(c) for c in all_cases))
+        grp = n_sizes  # cases per pattern group
+        for i in range(0, len(all_cases), 2 * grp):
+            ax.axvspan(i - 0.5, i + grp - 0.5, alpha=0.04, color="black", zorder=0)
 
     fig.tight_layout(rect=[0, 0, 1, 0.94])
     suffix = "_clean" if clean else ""
@@ -585,13 +652,265 @@ def make_ablation_plot(data_dir: Path, out_dir: Path, ablation_reg, fig_num, cle
 
 
 def make_figure3(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
-    make_ablation_plot(data_dir, out_dir, ABLATION_REGISTRY, 3, clean=clean)
+    # Merge standard registry (32/64/128) with 256×256 from large blocks registry
+    regs = [[ABLATION_REGISTRY, ABLATION_LARGE_BLOCKS_REGISTRY], {32, 64, 128, 256}]
+    make_ablation_plot(data_dir, out_dir, regs, 3, clean=clean)
 
 def make_figure4(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
     '''
     Large Blocks Ablation fig
     '''
     make_ablation_plot(data_dir, out_dir, ABLATION_LARGE_BLOCKS_REGISTRY, 4, clean=clean)
+
+def _pattern_name(stem: str) -> str:
+    """Extract the sparsity pattern name from a case stem."""
+    for pat in _PATTERN_RANK:
+        if pat in stem:
+            return pat
+    return stem
+
+
+def _pattern_label(pat: str) -> str:
+    """Short display label for a pattern name."""
+    _MAP = {
+        "fill_row": "row",
+        "diagonal": "diag",
+        "fill_column": "col",
+        "fill_lower_triangular": "tri",
+        "fill_random": "rand",
+    }
+    return _MAP.get(pat, pat)
+
+
+def make_figure9(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
+    """
+    Fig 9: ablation detail for 256×256 block size, with 32×32 overlaid as
+    dashed lines on the same x-axis (matched by sparsity pattern).
+    """
+    # Load 256 data (primary) and 32 data (reference)
+    df_256 = _load_ablation_merged(
+        data_dir, [ABLATION_LARGE_BLOCKS_REGISTRY], block_filter={256})
+    df_32 = _load_ablation_merged(
+        data_dir, [ABLATION_REGISTRY], block_filter={32})
+
+    if df_256.empty:
+        print("WARNING: No 256×256 ablation data found. Skipping Figure 9.")
+        return
+
+    def _pivot_savings(df):
+        pivot = df.pivot_table(index=["algo", "case"], columns="variant",
+                               values="ms").reset_index()
+        for v in ["no_a_read", "no_b_read", "no_compute", "no_write"]:
+            if v in pivot.columns:
+                pivot[f"saving_{v}"] = (pivot["full"] - pivot[v]) / pivot["full"] * 100
+        return pivot
+
+    pivot_256 = _pivot_savings(df_256)
+    pivot_32  = _pivot_savings(df_32) if not df_32.empty else None
+
+    # X-axis: one tick per sparsity pattern (from 256 cases, sorted by pattern rank)
+    cases_256 = _sorted_cases(pivot_256)
+    dense_bw = _load_dense_block_widths(data_dir, [ABLATION_LARGE_BLOCKS_REGISTRY, ABLATION_REGISTRY])
+    dense_bw_32 = _load_dense_block_widths(data_dir, [ABLATION_REGISTRY])
+    pat_labels = []
+    for c in cases_256:
+        pat = _pattern_label(_pattern_name(c))
+        dw256 = dense_bw.get(c)
+        # Find matching 32 case for this pattern
+        c32_stem = None
+        for k in dense_bw_32:
+            if _pattern_name(k) == _pattern_name(c) and _block_size(k) == 32:
+                c32_stem = k
+                break
+        dw32 = dense_bw_32.get(c32_stem) if c32_stem else None
+        line2 = f"A:256×256"
+        if dw256:
+            line2 += f" B:256×{dw256}"
+        line3 = f"A:32×32"
+        if dw32:
+            line3 += f" B:32×{dw32}"
+        pat_labels.append(f"{pat}\n{line2}\n{line3}")
+    x = np.arange(len(cases_256))
+
+    # Build pattern→case mapping for 32×32
+    case_32_by_pat = {}
+    if pivot_32 is not None:
+        for c in pivot_32["case"].unique():
+            case_32_by_pat[_pattern_name(c)] = c
+
+    variants_cfg = [
+        ("no_a_read",  "No-A-read savings\n(skip sparse A DRAM reads)",     "#7B1FA2"),
+        ("no_b_read",  "No-B-read savings\n(skip dense B DRAM reads)",       "#C62828"),
+        ("no_compute", "No-Compute savings\n(skip tile multiply)",            "#E65100"),
+        ("no_write",   "No-Write savings\n(skip output DRAM writes)",         "#1B5E20"),
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(15, 11))
+    if not clean:
+        fig.suptitle(
+            "Ablation Savings — 256×256 blocks (solid) vs 32×32 blocks (dashed)\n"
+            "% runtime reduction when each component is skipped",
+            fontsize=13, fontweight="bold",
+        )
+
+    for ax, (variant, title, accent) in zip(axes.flat, variants_cfg):
+        col = f"saving_{variant}"
+        if col not in pivot_256.columns:
+            ax.set_visible(False)
+            continue
+
+        marker = "" if clean else "o"
+        for algo in ALGOS:
+            # 256 lines (solid)
+            sub = pivot_256[pivot_256["algo"] == algo].set_index("case")
+            ys = [sub.loc[c, col] if c in sub.index else np.nan
+                  for c in cases_256]
+            ax.plot(x, ys, f"{marker}-", label=f"{ALGO_LABEL[algo]} (256)",
+                    color=ALGO_COLOR[algo], linewidth=1.6, markersize=5, zorder=3)
+
+            # 32 lines (dashed)
+            if pivot_32 is not None and col in pivot_32.columns:
+                sub32 = pivot_32[pivot_32["algo"] == algo].set_index("case")
+                ys32 = []
+                for c256 in cases_256:
+                    pat = _pattern_name(c256)
+                    c32 = case_32_by_pat.get(pat)
+                    if c32 is not None and c32 in sub32.index:
+                        ys32.append(sub32.loc[c32, col])
+                    else:
+                        ys32.append(np.nan)
+                ax.plot(x, ys32, f"{marker}--", label=f"{ALGO_LABEL[algo]} (32)",
+                        color=ALGO_COLOR[algo], linewidth=1.2, markersize=4,
+                        alpha=0.55, zorder=2)
+
+        ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.4)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(pat_labels, fontsize=6)
+        ax.set_ylabel("Runtime savings (%)")
+        ax.set_title(title, pad=8, color=accent, fontweight="bold")
+        if not clean:
+            ax.legend(fontsize=6.5, ncol=2)
+            ax.grid(axis="y", alpha=0.25)
+            ax.set_axisbelow(True)
+        else:
+            ax.tick_params(axis="both", length=0)
+
+    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    suffix = "_clean" if clean else ""
+    out = out_dir / f"fig9_ablation_detail{suffix}.png"
+    fig.savefig(out, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved {out}")
+
+
+# ── Figure 10: Throughput across ablation test cases ──────────────────────────
+
+def _load_throughput_all_cases(data_dir: Path, registries, block_filter=None) -> pd.DataFrame:
+    """
+    Load full-run timing + metadata for every (algo, test_case) pair and
+    compute TFLOPs/s.  Returns DataFrame with columns: algo, case, ms, tflops.
+    """
+    rows = []
+    for reg in registries:
+        reg_dir = data_dir / reg
+        base_dir = reg_dir / f"{ALGOS[0]}{DIR_SUFFIX}"
+        if not base_dir.exists():
+            continue
+        cases = sorted(
+            p.stem for p in base_dir.glob("*.csv")
+            if not p.stem.endswith(".device")
+        )
+        for algo in ALGOS:
+            algo_dir = reg_dir / f"{algo}{DIR_SUFFIX}"
+            for case in cases:
+                if block_filter is not None and _block_size(case) not in block_filter:
+                    continue
+                csv_path = algo_dir / f"{case}.csv"
+                ns = get_metric(csv_path)
+                if ns is None:
+                    continue
+                # Read nblocks and block size from sparse log
+                log_path = algo_dir / f"{case}_sparse.log"
+                meta = parse_log_metadata(log_path)
+                nblocks = meta.get("nblocks")
+                R = meta.get("R")
+                C = meta.get("C")
+                # Read N from dense log
+                dense_log = algo_dir / f"{case}_dense.log"
+                dense_meta = parse_log_metadata(dense_log)
+                N = dense_meta.get("W")
+                if nblocks is None or R is None or C is None or N is None:
+                    continue
+                ms = ns / NUM_ITERS / 1e6
+                rows.append({
+                    "algo": algo,
+                    "case": case,
+                    "ms": ms,
+                    "tflops": _tflops_per_sec(nblocks, R, C, N, ms),
+                })
+    df = pd.DataFrame(rows)
+    return df.drop_duplicates(subset=["algo", "case"])
+
+
+def make_figure10(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
+    """
+    Figure 10: Throughput (TFLOPs/s) of each algorithm across the same test
+    cases used in fig 3 (block sizes 32, 64, 128, 256).
+    """
+    df = _load_throughput_all_cases(
+        data_dir,
+        [ABLATION_REGISTRY, ABLATION_LARGE_BLOCKS_REGISTRY],
+        block_filter={32, 64, 128, 256},
+    )
+    if df.empty:
+        print("WARNING: No throughput data found. Skipping Figure 10.")
+        return
+
+    dense_bw = _load_dense_block_widths(data_dir, [ABLATION_REGISTRY, ABLATION_LARGE_BLOCKS_REGISTRY])
+    all_cases   = _sorted_cases(df)
+    case_labels = [_case_label(c, dense_bw) for c in all_cases]
+    x = np.arange(len(all_cases))
+
+    fig, ax = plt.subplots(figsize=(15, 6))
+
+    marker = "" if clean else "o"
+    for algo in ALGOS:
+        sub = df[df["algo"] == algo].set_index("case")
+        ys = [sub.loc[c, "tflops"] if c in sub.index else np.nan
+              for c in all_cases]
+        ax.plot(x, ys, f"{marker}-", label=ALGO_LABEL[algo],
+                color=ALGO_COLOR[algo], linewidth=1.8, markersize=5, zorder=3)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(case_labels, fontsize=6.5)
+    ax.set_ylabel("Throughput (TFLOPs/s)")
+    ax.set_ylim(bottom=0)
+    if not clean:
+        ax.set_title(
+            "SpMM Throughput Across Sparsity Patterns and Block Sizes\n"
+            "(M=K=8192, N=8192, density varies by pattern)",
+            pad=10, fontweight="bold",
+        )
+        ax.legend(fontsize=8)
+        ax.grid(axis="y", alpha=0.25)
+        ax.set_axisbelow(True)
+    else:
+        ax.tick_params(axis="both", length=0)
+
+    # Alternating group shading
+    if not clean:
+        n_sizes = len(set(_block_size(c) for c in all_cases))
+        grp = n_sizes
+        for i in range(0, len(all_cases), 2 * grp):
+            ax.axvspan(i - 0.5, i + grp - 0.5, alpha=0.04, color="black", zorder=0)
+
+    fig.tight_layout()
+    suffix = "_clean" if clean else ""
+    out = out_dir / f"fig10_throughput_cases{suffix}.png"
+    fig.savefig(out, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved {out}")
 
 
 # ── Figure 7: No-B-read savings with sparsity-regime highlights ────────────────
@@ -617,8 +936,9 @@ def make_figure7(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
     col = "saving_no_b_read"
     pivot[col] = (pivot["full"] - pivot["no_b_read"]) / pivot["full"] * 100
 
+    dense_bw = _load_dense_block_widths(data_dir, [ABLATION_REGISTRY])
     all_cases   = _sorted_cases(pivot)
-    case_labels = [_case_label(c) for c in all_cases]
+    case_labels = [_case_label(c, dense_bw) for c in all_cases]
     x = np.arange(len(all_cases))
 
     fig, ax = plt.subplots(figsize=(11, 5))
@@ -674,7 +994,7 @@ def make_figure7(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
 
     # ── Axes decoration ──────────────────────────────────────────────────
     ax.set_xticks(x)
-    ax.set_xticklabels(case_labels, fontsize=7.5)
+    ax.set_xticklabels(case_labels, fontsize=6.5)
     ax.set_ylabel("Runtime savings (%)")
     ax.set_title("No-B-read savings  (skip dense B DRAM reads)",
                  pad=8, color="#C62828", fontweight="bold")
@@ -698,6 +1018,88 @@ def make_figure7(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
     print(f"Saved {out}")
 
 
+# ── Figure 8: All four ablation panels on one axis ────────────────────────────
+
+def make_figure8(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
+    """
+    Figure 8: overlay all four ablation savings (no_a_read, no_b_read,
+    no_compute, no_write) on a single axis, averaged across algorithms.
+    One line per ablation variant.
+    """
+    df = _load_ablation_merged(
+        data_dir,
+        [ABLATION_REGISTRY, ABLATION_LARGE_BLOCKS_REGISTRY],
+        block_filter={32, 64, 128, 256},
+    )
+    if df.empty:
+        print("WARNING: No ablation data found. Skipping Figure 8.")
+        return
+
+    pivot = df.pivot_table(index=["algo", "case"], columns="variant",
+                           values="ms").reset_index()
+
+    variants_cfg = [
+        ("no_a_read",  "A-reads skipped",  "#7B1FA2"),
+        ("no_b_read",  "B-reads skipped",  "#C62828"),
+        ("no_compute", "Compute skipped",  "#E65100"),
+        ("no_write",   "Writes skipped",   "#1B5E20"),
+    ]
+
+    for v, _, _ in variants_cfg:
+        if v in pivot.columns:
+            pivot[f"saving_{v}"] = (pivot["full"] - pivot[v]) / pivot["full"] * 100
+
+    dense_bw = _load_dense_block_widths(data_dir, [ABLATION_REGISTRY, ABLATION_LARGE_BLOCKS_REGISTRY])
+    all_cases   = _sorted_cases(pivot)
+    case_labels = [_case_label(c, dense_bw) for c in all_cases]
+    x = np.arange(len(all_cases))
+
+    fig, ax = plt.subplots(figsize=(13, 6))
+
+    marker = "" if clean else "o"
+    for variant, label, color in variants_cfg:
+        col = f"saving_{variant}"
+        if col not in pivot.columns:
+            continue
+        # Average savings across all algorithms for each case
+        means = []
+        for c in all_cases:
+            vals = pivot.loc[pivot["case"] == c, col].dropna()
+            means.append(vals.mean() if not vals.empty else np.nan)
+        ax.plot(x, means, f"{marker}-", label=label, color=color,
+                linewidth=2.0, markersize=6, zorder=3)
+
+    ax.axhline(0, color="black", linewidth=0.8, linestyle="--", alpha=0.4)
+
+    # Alternating group shading
+    if not clean:
+        n_sizes = len(set(_block_size(c) for c in all_cases))
+        grp = n_sizes
+        for i in range(0, len(all_cases), 2 * grp):
+            ax.axvspan(i - 0.5, i + grp - 0.5, alpha=0.04, color="black", zorder=0)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(case_labels, fontsize=6.5)
+    ax.set_ylabel("Runtime savings (%)")
+    if not clean:
+        ax.set_title(
+            "Ablation Savings Overview  (all four components, averaged across algorithms)",
+            pad=10, fontweight="bold",
+        )
+        ax.legend(fontsize=9)
+        ax.grid(axis="y", alpha=0.25)
+        ax.set_axisbelow(True)
+    else:
+        ax.tick_params(axis="both", length=0)
+
+    fig.tight_layout()
+    suffix = "_clean" if clean else ""
+    out = out_dir / f"fig8_ablation_combined{suffix}.png"
+    fig.savefig(out, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved {out}")
+
+
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -715,7 +1117,15 @@ def main() -> None:
         default=Path("spmm_plots"),
         help="Output directory for PNG figures",
     )
+    parser.add_argument(
+        "--flip-noc", action="store_true",
+        help="Plot flip-noc data (directories with _flip_noc suffix)",
+    )
     args = parser.parse_args()
+
+    global DIR_SUFFIX
+    if args.flip_noc:
+        DIR_SUFFIX = "_flip_noc"
 
     if not args.data_dir.exists():
         raise SystemExit(f"Data directory not found: {args.data_dir}")
@@ -729,11 +1139,19 @@ def main() -> None:
     make_figure3(args.data_dir, args.out_dir)
     make_figure4(args.data_dir, args.out_dir)
     make_figure7(args.data_dir, args.out_dir)
-    make_figure7(args.data_dir, args.out_dir, clean=True)
-    make_figure1(args.data_dir, args.out_dir, clean=True)
-    make_figure2(args.data_dir, args.out_dir, clean=True)
-    make_figure3(args.data_dir, args.out_dir, clean=True)
-    make_figure4(args.data_dir, args.out_dir, clean=True)
+    make_figure8(args.data_dir, args.out_dir)
+    make_figure9(args.data_dir, args.out_dir)
+    make_figure10(args.data_dir, args.out_dir)
+    clean_dir = args.out_dir / "clean"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    make_figure1(args.data_dir, clean_dir, clean=True)
+    make_figure2(args.data_dir, clean_dir, clean=True)
+    make_figure3(args.data_dir, clean_dir, clean=True)
+    make_figure4(args.data_dir, clean_dir, clean=True)
+    make_figure7(args.data_dir, clean_dir, clean=True)
+    make_figure8(args.data_dir, clean_dir, clean=True)
+    make_figure9(args.data_dir, clean_dir, clean=True)
+    make_figure10(args.data_dir, clean_dir, clean=True)
 
 
 if __name__ == "__main__":

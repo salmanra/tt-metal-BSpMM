@@ -2,7 +2,7 @@
 # run_profiling_plan.sh - Orchestrate the full SpMM profiling plan
 #
 # Usage:
-#   ./run_profiling_plan.sh [--phase <ablation|sweep|all>]
+#   ./run_profiling_plan.sh [--phase <ablation|sweep|flip_noc|all>]
 #                           [--host-code <index|all>]
 #                           [--registry <index|all>]
 #                           [--ablation-registry <index>]
@@ -17,12 +17,16 @@
 #   sweep     - Run the 5 base algorithms against the 4 parametric sweep registries
 #               (N sweep, density sweep, K sweep, block-size sweep).
 #               Host codes 0-4 in HostCodeRegistryProfiling, registries 4-7.
-#   all       - Run both phases (default).
+#   flip_noc  - Run the non-optimal NoC assignment variants (full + 4 ablation groups)
+#               against a chosen reference registry.
+#               Host codes 25-49 in HostCodeRegistryProfiling, registry default=2.
+#   all       - Run ablation + sweep phases (default). Does NOT include flip_noc.
 #
 # Options:
 #   --host-code <i|all>       Override host-code index (0-4 for base, 5-24 for ablation)
 #   --registry <i|all>        Override profile registry for sweep phase (4-7, or all 4-7)
-#   --ablation-registry <i>   Registry to use for ablation phase (default: 2)
+#   --ablation-registry <i|all> Registry to use for ablation/flip_noc phase (default: 2)
+#                             Use "all" to run against all registries (0-7)
 #   --no-build                Skip the build step
 #   --dry-run                 Print commands without running them
 #   --list                    List all registries and host codes, then exit
@@ -43,6 +47,11 @@
 #   [10-14] no_b_read  variants (SKIP_IN1_DRAM_READ=1)
 #   [15-19] no_compute variants (SKIP_COMPUTE=1)
 #   [20-24] no_write   variants (SKIP_DRAM_WRITE=1)
+#   [25-29] flip_noc full algorithms (non-optimal NoC assignment)
+#   [30-34] flip_noc no_a_read
+#   [35-39] flip_noc no_b_read
+#   [40-44] flip_noc no_compute
+#   [45-49] flip_noc no_write
 
 set -euo pipefail
 
@@ -134,6 +143,11 @@ function list_plan {
         elif (( i >= 10 && i <= 14 )); then group="[no_b_read]"
         elif (( i >= 15 && i <= 19 )); then group="[no_compute]"
         elif (( i >= 20 && i <= 24 )); then group="[no_write]"
+        elif (( i >= 25 && i <= 29 )); then group="[flip_noc]"
+        elif (( i >= 30 && i <= 34 )); then group="[flip_noc no_a]"
+        elif (( i >= 35 && i <= 39 )); then group="[flip_noc no_b]"
+        elif (( i >= 40 && i <= 44 )); then group="[flip_noc no_c]"
+        elif (( i >= 45 && i <= 49 )); then group="[flip_noc no_w]"
         fi
         printf "  [%2d] %-12s %s\n" "$i" "$group" "$entry"
         i=$(( i + 1 ))
@@ -271,8 +285,17 @@ function run_registry {
 #   group 2 (no_compute): host codes 15-19
 #   group 3 (no_write):   host codes 20-24
 function run_ablation_phase {
-    local ablation_registry="$1"   # reference registry (default 2)
+    local ablation_registry="$1"   # reference registry index or "all"
     local hc_override="${2:-all}"  # "all" or a single algorithm index 0-4
+
+    # If "all", recurse for each registry
+    if [[ "$ablation_registry" == "all" ]]; then
+        local num_regs=${#PROFILE_REGISTRY_ARRAY_NAMES[@]}
+        for (( r=0; r<num_regs; r++ )); do
+            run_ablation_phase "$r" "$hc_override"
+        done
+        return
+    fi
 
     local hc_entries=()
     read_registry_into hc_entries "$HOST_CODE_HPP" "HostCodeRegistryProfiling"
@@ -363,6 +386,77 @@ function run_sweep_phase {
 }
 
 ###############################################################################
+# Flip-NoC phase
+###############################################################################
+
+# Run the non-optimal NoC assignment variants against a reference registry.
+# Host code index layout in HostCodeRegistryProfiling:
+#   group 0 (full):       host codes 25-29 (5 algorithms)
+#   group 1 (no_a_read):  host codes 30-34
+#   group 2 (no_b_read):  host codes 35-39
+#   group 3 (no_compute): host codes 40-44
+#   group 4 (no_write):   host codes 45-49
+function run_flip_noc_phase {
+    local ablation_registry="$1"   # reference registry index or "all"
+    local hc_override="${2:-all}"  # "all" or a single algorithm index 0-4
+
+    # If "all", recurse for each registry
+    if [[ "$ablation_registry" == "all" ]]; then
+        local num_regs=${#PROFILE_REGISTRY_ARRAY_NAMES[@]}
+        for (( r=0; r<num_regs; r++ )); do
+            run_flip_noc_phase "$r" "$hc_override"
+        done
+        return
+    fi
+
+    local hc_entries=()
+    read_registry_into hc_entries "$HOST_CODE_HPP" "HostCodeRegistryProfiling"
+
+    local FLIP_NOC_GROUPS=(
+        "flip_noc_full:25:29"
+        "flip_noc_no_a_read:30:34"
+        "flip_noc_no_b_read:35:39"
+        "flip_noc_no_compute:40:44"
+        "flip_noc_no_write:45:49"
+    )
+
+    echo ""
+    echo "###################################################################"
+    echo "### FLIP-NOC PHASE — registry=$ablation_registry              ###"
+    echo "###################################################################"
+
+    local arr_name="${PROFILE_REGISTRY_ARRAY_NAMES[$ablation_registry]}"
+    local num_profiles
+    num_profiles=$(registry_size "$PROFILING_SUITE_HPP" "$arr_name")
+
+    for group_spec in "${FLIP_NOC_GROUPS[@]}"; do
+        local group_name="${group_spec%%:*}"
+        local rest="${group_spec#*:}"
+        local group_hc_start="${rest%%:*}"
+        local group_hc_end="${rest#*:}"
+
+        # If user passed a specific algorithm index (0-4), map it into this group
+        local hc_start hc_end
+        if [[ "$hc_override" == "all" ]]; then
+            hc_start="$group_hc_start"
+            hc_end="$group_hc_end"
+        else
+            hc_start=$(( group_hc_start + hc_override ))
+            hc_end="$hc_start"
+        fi
+
+        echo ""
+        echo "--- Flip-NoC group: $group_name (host codes $hc_start..$hc_end) ---"
+
+        for (( pc=0; pc<num_profiles; pc++ )); do
+            for (( hc=hc_start; hc<=hc_end; hc++ )); do
+                run_one "$pc" "$hc" "$ablation_registry" "${hc_entries[$hc]:-?}"
+            done
+        done
+    done
+}
+
+###############################################################################
 # Main
 ###############################################################################
 function main {
@@ -394,8 +488,8 @@ function main {
                 OPT_DRY_RUN=1; shift ;;
             *)
                 echo "Unknown option: $1"
-                echo "Usage: $0 [--phase ablation|sweep|all] [--host-code <i|all>]"
-                echo "          [--registry <i|all>] [--ablation-registry <i>]"
+                echo "Usage: $0 [--phase ablation|sweep|flip_noc|all] [--host-code <i|all>]"
+                echo "          [--registry <i|all>] [--ablation-registry <i|all>]"
                 echo "          [--no-build] [--dry-run] [--list]"
                 exit 1
                 ;;
@@ -404,9 +498,9 @@ function main {
 
     # Validate phase
     case "$OPT_PHASE" in
-        ablation|sweep|all) ;;
+        ablation|sweep|flip_noc|all) ;;
         *)
-            echo "Error: --phase must be 'ablation', 'sweep', or 'all'"
+            echo "Error: --phase must be 'ablation', 'sweep', 'flip_noc', or 'all'"
             exit 1
             ;;
     esac
@@ -420,6 +514,9 @@ function main {
             ;;
         sweep)
             run_sweep_phase "$OPT_REGISTRY" "$OPT_HOST_CODE"
+            ;;
+        flip_noc)
+            run_flip_noc_phase "$OPT_ABLATION_REGISTRY" "$OPT_HOST_CODE"
             ;;
         all)
             run_ablation_phase "$OPT_ABLATION_REGISTRY" "$OPT_HOST_CODE"

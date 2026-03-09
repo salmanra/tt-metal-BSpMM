@@ -910,9 +910,11 @@ def main():
     make_figure5(args.out_dir)
     make_figure5c(args.out_dir)
     make_figure6(args.out_dir)
-    make_figure5(args.out_dir, clean=True)
-    make_figure5c(args.out_dir, clean=True)
-    make_figure6(args.out_dir, clean=True)
+    clean_dir = args.out_dir / "clean"
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    make_figure5(clean_dir, clean=True)
+    make_figure5c(clean_dir, clean=True)
+    make_figure6(clean_dir, clean=True)
 
 
 if __name__ == "__main__":

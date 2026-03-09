@@ -72,7 +72,7 @@ void bsr_spmm_multicore_reuse_many_blocks_per_core(
     uint32_t B,
     IDevice* device);
 
-template<bool verbose = false, bool is_profiling = false>
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true>
 void bsr_spmm_multicore_reuse_iteration(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -87,7 +87,7 @@ void bsr_spmm_multicore_reuse_iteration(
     uint32_t B,
     IDevice* device);
 
-template<bool verbose = false, bool is_profiling = false>
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true>
 void bsr_spmm_multicore_load_balanced(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -133,7 +133,7 @@ void bsr_spmm_multicore_sparse_mcast(
     uint32_t B,
     IDevice* device);
 
-template<bool verbose = false, bool is_profiling = false>
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true>
 void bsr_spmm_multicore_snf(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -148,7 +148,7 @@ void bsr_spmm_multicore_snf(
     uint32_t B,
     IDevice* device);
 
-template<bool verbose = false, bool is_profiling = false>
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true>
 void bsr_spmm_multicore_naive_new_DM(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -163,7 +163,7 @@ void bsr_spmm_multicore_naive_new_DM(
     uint32_t B,
     IDevice* device);
 
-template<bool verbose = false, bool is_profiling = false>
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true>
 void bsr_spmm_multicore_load_balanced_new_DM(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -180,22 +180,22 @@ void bsr_spmm_multicore_load_balanced_new_DM(
 
 // Ablation skip wrapper declarations (no_a_read, no_b_read, no_compute, no_write)
 #define DECLARE_ABLATION_WRAPPERS(func_name) \
-template<bool verbose = false, bool is_profiling = false> \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true> \
 void func_name##_no_a_read( \
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
     uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
-template<bool verbose = false, bool is_profiling = false> \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true> \
 void func_name##_no_b_read( \
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
     uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
-template<bool verbose = false, bool is_profiling = false> \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true> \
 void func_name##_no_compute( \
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
     uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
-template<bool verbose = false, bool is_profiling = false> \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true> \
 void func_name##_no_write( \
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
@@ -283,6 +283,36 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryProfiling[] =
     {bsr_spmm_multicore_reuse_iteration_no_write<false, true>, "bsr_spmm_multicore_reuse_iteration_no_write"},
     {bsr_spmm_multicore_naive_new_DM_no_write<false, true>, "bsr_spmm_multicore_naive_new_DM_no_write"},
     {bsr_spmm_multicore_load_balanced_new_DM_no_write<false, true>, "bsr_spmm_multicore_load_balanced_new_DM_no_write"},
+    // [25-29] flip_noc full algorithms
+    {bsr_spmm_multicore_snf<false, true, false>, "bsr_spmm_multicore_snf_flip_noc"},
+    {bsr_spmm_multicore_load_balanced<false, true, false>, "bsr_spmm_multicore_load_balanced_flip_noc"},
+    {bsr_spmm_multicore_reuse_iteration<false, true, false>, "bsr_spmm_multicore_reuse_iteration_flip_noc"},
+    {bsr_spmm_multicore_naive_new_DM<false, true, false>, "bsr_spmm_multicore_naive_new_DM_flip_noc"},
+    {bsr_spmm_multicore_load_balanced_new_DM<false, true, false>, "bsr_spmm_multicore_load_balanced_new_DM_flip_noc"},
+    // [30-34] flip_noc no_a_read
+    {bsr_spmm_multicore_snf_no_a_read<false, true, false>, "bsr_spmm_multicore_snf_no_a_read_flip_noc"},
+    {bsr_spmm_multicore_load_balanced_no_a_read<false, true, false>, "bsr_spmm_multicore_load_balanced_no_a_read_flip_noc"},
+    {bsr_spmm_multicore_reuse_iteration_no_a_read<false, true, false>, "bsr_spmm_multicore_reuse_iteration_no_a_read_flip_noc"},
+    {bsr_spmm_multicore_naive_new_DM_no_a_read<false, true, false>, "bsr_spmm_multicore_naive_new_DM_no_a_read_flip_noc"},
+    {bsr_spmm_multicore_load_balanced_new_DM_no_a_read<false, true, false>, "bsr_spmm_multicore_load_balanced_new_DM_no_a_read_flip_noc"},
+    // [35-39] flip_noc no_b_read
+    {bsr_spmm_multicore_snf_no_b_read<false, true, false>, "bsr_spmm_multicore_snf_no_b_read_flip_noc"},
+    {bsr_spmm_multicore_load_balanced_no_b_read<false, true, false>, "bsr_spmm_multicore_load_balanced_no_b_read_flip_noc"},
+    {bsr_spmm_multicore_reuse_iteration_no_b_read<false, true, false>, "bsr_spmm_multicore_reuse_iteration_no_b_read_flip_noc"},
+    {bsr_spmm_multicore_naive_new_DM_no_b_read<false, true, false>, "bsr_spmm_multicore_naive_new_DM_no_b_read_flip_noc"},
+    {bsr_spmm_multicore_load_balanced_new_DM_no_b_read<false, true, false>, "bsr_spmm_multicore_load_balanced_new_DM_no_b_read_flip_noc"},
+    // [40-44] flip_noc no_compute
+    {bsr_spmm_multicore_snf_no_compute<false, true, false>, "bsr_spmm_multicore_snf_no_compute_flip_noc"},
+    {bsr_spmm_multicore_load_balanced_no_compute<false, true, false>, "bsr_spmm_multicore_load_balanced_no_compute_flip_noc"},
+    {bsr_spmm_multicore_reuse_iteration_no_compute<false, true, false>, "bsr_spmm_multicore_reuse_iteration_no_compute_flip_noc"},
+    {bsr_spmm_multicore_naive_new_DM_no_compute<false, true, false>, "bsr_spmm_multicore_naive_new_DM_no_compute_flip_noc"},
+    {bsr_spmm_multicore_load_balanced_new_DM_no_compute<false, true, false>, "bsr_spmm_multicore_load_balanced_new_DM_no_compute_flip_noc"},
+    // [45-49] flip_noc no_write
+    {bsr_spmm_multicore_snf_no_write<false, true, false>, "bsr_spmm_multicore_snf_no_write_flip_noc"},
+    {bsr_spmm_multicore_load_balanced_no_write<false, true, false>, "bsr_spmm_multicore_load_balanced_no_write_flip_noc"},
+    {bsr_spmm_multicore_reuse_iteration_no_write<false, true, false>, "bsr_spmm_multicore_reuse_iteration_no_write_flip_noc"},
+    {bsr_spmm_multicore_naive_new_DM_no_write<false, true, false>, "bsr_spmm_multicore_naive_new_DM_no_write_flip_noc"},
+    {bsr_spmm_multicore_load_balanced_new_DM_no_write<false, true, false>, "bsr_spmm_multicore_load_balanced_new_DM_no_write_flip_noc"},
     // {bsr_spmm_multicore_reuse_many_blocks_per_core<false, true>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
     // {bsr_spmm_multicore_reuse<false, true>, "bsr_spmm_multicore_reuse"},
     // {bsr_spmm_multicore_reuse_naive<false, true>, "bsr_spmm_multicore_reuse_naive"},

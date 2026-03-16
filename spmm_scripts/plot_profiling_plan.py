@@ -1126,7 +1126,7 @@ def _parse_sparsity_pattern_stem(stem: str) -> tuple[str | None, dict | None]:
       parametric_multi_diag_M8192_N8192_K8192_R256_C256_d25 → ("multi_diag", {...})
     """
     m = re.match(
-        r"parametric_(?:(multi_diag|col|diag|row)_)?M(\d+)_N(\d+)_K(\d+)_R(\d+)_C(\d+)_d(\d+)",
+        r"parametric_(?:(multi_diag|col|row)_)?M(\d+)_N(\d+)_K(\d+)_R(\d+)_C(\d+)_d(\d+)",
         stem,
     )
     if not m:
@@ -1256,6 +1256,101 @@ def make_figure15(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
     _make_sparsity_pattern_figure(data_dir, out_dir, "ProfileSweepSparsityPatternD50", 15, clean)
 
 
+# ── Figure 16: Combined sparsity-pattern throughput, grouped by algorithm ─────
+
+_PATTERN_COLOR = {
+    "random":     "#1565C0",
+    "row":        "#E53935",
+    "col":        "#43A047",
+    "diag":       "#F57C00",
+    "multi_diag": "#7B1FA2",
+}
+
+# (registry, density_label) tuples ordered by density
+_FIG16_PANELS = [
+    ("ProfileSweepSparsityPatternD5",  "5%"),
+    ("ProfileSweepSparsityPatternD10", "10%"),
+    ("ProfileSweepSparsityPattern",    "25%"),
+    ("ProfileSweepSparsityPatternD50", "50%"),
+]
+
+
+def make_figure16(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
+    """
+    Figure 16: 2×2 grid combining figs 11, 13, 14, 15.
+    Each subplot is one density level, bars grouped by algorithm,
+    colored by sparsity pattern.
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(16, 10), sharey=True)
+
+    for ax, (registry, density_label) in zip(axes.flat, _FIG16_PANELS):
+        df = load_sweep_sparsity_pattern(data_dir, registry)
+        if df.empty:
+            ax.set_title(f"Density = {density_label} (no data)")
+            continue
+
+        patterns = [p for p in _SPARSITY_PATTERN_ORDER if p in df["pattern"].values]
+        algos_present = [a for a in ALGOS if a in df["algo"].values]
+        n_patterns = len(patterns)
+        x = np.arange(len(algos_present))
+        total_bar_width = 0.75
+        bar_w = total_bar_width / max(n_patterns, 1)
+
+        for j, pat in enumerate(patterns):
+            ys = []
+            for algo in algos_present:
+                row = df[(df["algo"] == algo) & (df["pattern"] == pat)]
+                ys.append(row["tflops"].iloc[0] if not row.empty else 0)
+            offset = (j - (n_patterns - 1) / 2) * bar_w
+            bars = ax.bar(x + offset, ys, bar_w,
+                          label=_SPARSITY_PATTERN_LABELS.get(pat, pat),
+                          color=_PATTERN_COLOR[pat],
+                          edgecolor="white", linewidth=0.5, zorder=3)
+            if not clean:
+                for bar in bars:
+                    h = bar.get_height()
+                    if h > 0:
+                        ax.text(bar.get_x() + bar.get_width() / 2, h + 0.002,
+                                f"{h:.3f}", ha="left", va="bottom",
+                                fontsize=5.5, rotation=45)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels([ALGO_LABEL[a] for a in algos_present],
+                           fontsize=8, rotation=15, ha="right")
+        if not clean:
+            ax.set_title(f"Density = {density_label}", fontweight="bold")
+            ax.grid(axis="y", alpha=0.25)
+            ax.set_axisbelow(True)
+        else:
+            ax.set_title(f"Density = {density_label}")
+            ax.tick_params(axis="both", length=0)
+
+    # Shared y-axis: start at 0, with headroom for value labels
+    global_max = max(ax.get_ylim()[1] for ax in axes.flat)
+    axes.flat[0].set_ylim(0, global_max * 1.12)
+
+    # Common y-label on the left subplots
+    for ax in axes[:, 0]:
+        ax.set_ylabel("Throughput (TFLOPs/s)")
+
+    # Single shared legend at the top
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    if not clean:
+        fig.legend(handles, labels, loc="upper center", ncol=len(labels),
+                   fontsize=9, frameon=False, bbox_to_anchor=(0.5, 1.0))
+        fig.suptitle(
+            "SpMM Throughput vs. Sparsity Pattern (grouped by algorithm)",
+            fontsize=13, fontweight="bold", y=1.04,
+        )
+
+    fig.tight_layout()
+    suffix = "_clean" if clean else ""
+    out = out_dir / f"fig16_sparsity_pattern_by_algo{suffix}.png"
+    fig.savefig(out, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved {out}")
+
+
 # ── Figure 12: Throughput across densities (bar chart like fig 11) ────────────
 
 DENSITY_SWEEP_DATA_DIR = Path("/home/user/tt-metal/profiles_opt_noc_full_profiling_suite/csvs")
@@ -1373,6 +1468,7 @@ def main() -> None:
     make_figure13(args.data_dir, args.out_dir)
     make_figure14(args.data_dir, args.out_dir)
     make_figure15(args.data_dir, args.out_dir)
+    make_figure16(args.data_dir, args.out_dir)
     clean_dir = args.out_dir / "clean"
     clean_dir.mkdir(parents=True, exist_ok=True)
     make_figure1(args.data_dir, clean_dir, clean=True)
@@ -1388,6 +1484,7 @@ def main() -> None:
     make_figure13(args.data_dir, clean_dir, clean=True)
     make_figure14(args.data_dir, clean_dir, clean=True)
     make_figure15(args.data_dir, clean_dir, clean=True)
+    make_figure16(args.data_dir, clean_dir, clean=True)
 
 
 if __name__ == "__main__":

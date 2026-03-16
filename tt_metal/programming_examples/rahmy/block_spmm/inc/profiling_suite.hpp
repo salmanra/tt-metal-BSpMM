@@ -203,7 +203,6 @@ namespace profiling_suite {
     static ProfileCaseFunctionPtr ProfileSweepSparsityPatternRegistry[] = {
         profile_case_parametric_row<8192, 8192, 8192, 256, 256, 25>,
         profile_case_parametric_col<8192, 8192, 8192, 256, 256, 25>,
-        profile_case_parametric_diag<8192, 8192, 8192, 256, 256, 25>,
         profile_case_parametric_multi_diag<8192, 8192, 8192, 256, 256, 25>,
         profile_case_parametric_random<8192, 8192, 8192, 256, 256, 25>,
     };
@@ -212,7 +211,6 @@ namespace profiling_suite {
     static ProfileCaseFunctionPtr ProfileSweepSparsityPatternRegistryD10[] = {
         profile_case_parametric_row<8192, 8192, 8192, 256, 256, 10>,
         profile_case_parametric_col<8192, 8192, 8192, 256, 256, 10>,
-        profile_case_parametric_diag<8192, 8192, 8192, 256, 256, 10>,
         profile_case_parametric_multi_diag<8192, 8192, 8192, 256, 256, 10>,
         profile_case_parametric_random<8192, 8192, 8192, 256, 256, 10>,
     };
@@ -222,7 +220,6 @@ namespace profiling_suite {
     static ProfileCaseFunctionPtr ProfileSweepSparsityPatternRegistryD5[] = {
         profile_case_parametric_row<8192, 8192, 8192, 256, 256, 5>,
         profile_case_parametric_col<8192, 8192, 8192, 256, 256, 5>,
-        profile_case_parametric_diag<8192, 8192, 8192, 256, 256, 5>,
         profile_case_parametric_multi_diag<8192, 8192, 8192, 256, 256, 5>,
         profile_case_parametric_random<8192, 8192, 8192, 256, 256, 5>,
     };
@@ -232,7 +229,6 @@ namespace profiling_suite {
     static ProfileCaseFunctionPtr ProfileSweepSparsityPatternRegistryD50[] = {
         profile_case_parametric_row<8192, 8192, 8192, 256, 256, 50>,
         profile_case_parametric_col<8192, 8192, 8192, 256, 256, 50>,
-        profile_case_parametric_diag<8192, 8192, 8192, 256, 256, 50>,
         profile_case_parametric_multi_diag<8192, 8192, 8192, 256, 256, 50>,
         profile_case_parametric_random<8192, 8192, 8192, 256, 256, 50>,
     };

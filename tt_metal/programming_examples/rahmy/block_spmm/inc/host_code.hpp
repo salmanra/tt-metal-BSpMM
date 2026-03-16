@@ -149,6 +149,21 @@ void bsr_spmm_multicore_snf(
     IDevice* device);
 
 template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true>
+void bsr_spmm_multicore_snfin0_cdain1(
+    bsr_matrix<bfloat16>& a,
+    dense_matrix<bfloat16>& b,
+    dense_matrix<bfloat16>& output,
+    bool bcast_batch,
+    uint32_t nnz_blocks,
+    uint32_t M,
+    uint32_t N,
+    uint32_t K,
+    uint32_t R,
+    uint32_t C,
+    uint32_t B,
+    IDevice* device);
+
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true>
 void bsr_spmm_multicore_naive_new_DM(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -227,6 +242,7 @@ using HostCodeFunctionPtr = void (*)(
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
     {bsr_spmm_multicore_snf<false, false>, "bsr_spmm_multicore_snf"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, false>, "bsr_spmm_multicore_snfin0_cdain1"},
     // {bsr_spmm_multicore_sparse_mcast<false, false>, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced<false, false>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<false, false>, "bsr_spmm_multicore_reuse_iteration"},
@@ -240,6 +256,7 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryVerbose[] = {
     {bsr_spmm_multicore_snf<true, false>, "bsr_spmm_multicore_snf"},
+    {bsr_spmm_multicore_snfin0_cdain1<true, false>, "bsr_spmm_multicore_snfin0_cdain1"},
     // {bsr_spmm_multicore_sparse_mcast<true, false>, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced<true, false>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<true, false>, "bsr_spmm_multicore_reuse_iteration"},

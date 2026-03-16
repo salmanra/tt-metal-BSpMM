@@ -1,12 +1,4 @@
-// simplest thing we can make: take the sparse_mcast host code and fill it in with SnF kernels
-//     ignore transposing
-
-// if we adapt it from the tt metal example, 
-//     it's all the same except we transpose
-
-// yeah it's probably worth transposing. 
-// Still just SnF on the sparse matrix tho
-
+// SNF for in0 (store-and-forward along core columns) + CDA for in1 (chain of direct addressing along core rows)
 
 #include "../host_code.hpp"
 #include "spmm_zone_config.hpp"
@@ -14,7 +6,7 @@
 namespace bsr_host_code{
 
 template<bool verbose, bool is_profiling, bool use_optimal_noc = true>
-void bsr_spmm_multicore_snf_impl(
+void bsr_spmm_multicore_snfin0_cdain1_impl(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
     dense_matrix<bfloat16>& output,
@@ -28,27 +20,6 @@ void bsr_spmm_multicore_snf_impl(
     uint32_t B,
     IDevice* device,
     const std::map<std::string, std::string>& extra_defines = {}){
-    // load balanced plus store-and-forwarding for sharing blocks of sparse matrix across core rows
-
-    /// Transposition step:
-    // auto small_input_noc = tt::tt_metal::detail::preferred_noc_for_dram_write(device->arch());
-    // auto small_input_risc = tt::tt_metal::DataMovementProcessor::RISCV_1;
-    // auto large_input_noc = tt::tt_metal::detail::preferred_noc_for_dram_read(device->arch());
-    // auto large_input_risc = tt::tt_metal::DataMovementProcessor::RISCV_0;
-
-    // Transpose core grid if the output is wide (M > N)
-    // If transpose core grid, we parallelize M on cores_x and N on cores_y and swap the NOCs and RISCVs
-    // TODO: base the transposition off of the block rizes (R, C, K, N) instead of (M, N)
-    // bool transpose_core_grid = M > N;
-
-    // auto in0_noc = transpose_core_grid ? large_input_noc : small_input_noc;
-    // auto in0_risc = transpose_core_grid ? large_input_risc : small_input_risc;
-    // uint32_t in0_parallel_axis_cores = transpose_core_grid ? grid_size.x : grid_size.y;
-
-    // auto in1_noc = transpose_core_grid ? small_input_noc : large_input_noc;
-    // auto in1_risc = transpose_core_grid ? small_input_risc : large_input_risc;
-    // uint32_t in1_parallel_axis_cores = transpose_core_grid ? grid_size.y : grid_size.x;
-    
 
     CommandQueue& cq = device->command_queue();
     Program program{};
@@ -59,7 +30,7 @@ void bsr_spmm_multicore_snf_impl(
 
     tt::DataFormat indexing_data_format = tt::DataFormat::Int32;
     uint32_t indexing_data_single_tile_size = detail::TileSize(indexing_data_format);
-    uint32_t dram_buffer_indptr_size = // can't we use the size of tiles and avoid the data format debacle?
+    uint32_t dram_buffer_indptr_size =
         sizeof(int) * a.indptr.size();
     // Round up to tile size
     dram_buffer_indptr_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_indptr_size) / (indexing_data_single_tile_size));
@@ -70,13 +41,12 @@ void bsr_spmm_multicore_snf_impl(
     dram_buffer_col_indices_size = indexing_data_single_tile_size * ((indexing_data_single_tile_size - 1 + dram_buffer_col_indices_size) / (indexing_data_single_tile_size));
 
     uint32_t num_tiles_for_output_y_indices = 0;
-    uint32_t num_tiles_for_col_indices = dram_buffer_col_indices_size / indexing_data_single_tile_size; 
+    uint32_t num_tiles_for_col_indices = dram_buffer_col_indices_size / indexing_data_single_tile_size;
     uint32_t num_tiles_for_indptr = dram_buffer_indptr_size / indexing_data_single_tile_size;
     uint32_t num_tiles_indexing = num_tiles_for_col_indices + num_tiles_for_indptr + num_tiles_for_output_y_indices;
 
     // Core Grid detection
     auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
-    // auto compute_with_storage_grid_size = CoreCoord(3, 1);
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
     uint32_t num_cores_y = compute_with_storage_grid_size.y;
     uint32_t num_cores_total = num_cores_x * num_cores_y;
@@ -88,7 +58,6 @@ void bsr_spmm_multicore_snf_impl(
 
     uint32_t Rt = R / TILE_HEIGHT;
     uint32_t Ct = C / TILE_WIDTH;
-
 
     // Core grid assignment
     std::vector<uint32_t> folded_bsr_matrix_indices;
@@ -135,7 +104,6 @@ void bsr_spmm_multicore_snf_impl(
     uint32_t num_iters_x = (num_blocks_x + num_cores_x - 1) / num_cores_x;
     uint32_t num_iters_y = (num_blocks_y + num_cores_y - 1) / num_cores_y;
 
-
     uint32_t num_work_regions = (num_blocks_total + num_iters_x * num_iters_y - 1)/ (num_iters_x * num_iters_y);
     uint32_t target_num_cores;
     if (num_work_regions < num_cores_total)
@@ -153,7 +121,6 @@ void bsr_spmm_multicore_snf_impl(
     }
 
     CoreCoord start_core = {0, 0};
-    // CoreCoord core_range = bmm_op_utils::get_core_range(num_blocks_y / num_iters_y, num_blocks_x / num_iters_x, num_cores_y, num_cores_x);
     CoreCoord core_range(0, 0);
     if ( (num_blocks_y / num_iters_y) <= num_cores_y &&
         (num_blocks_x / num_iters_x) <= num_cores_x) {
@@ -173,13 +140,12 @@ void bsr_spmm_multicore_snf_impl(
     CoreRange in0_injector_cores(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x, (std::size_t)start_core_y + num_cores_r - 1});
-    
+
     uint32_t column_offset = num_cores_c > 1 ? num_cores_c : num_cores_c + 1;
     CoreRange in0_receiver_cores(
         {(std::size_t)start_core_x + 1, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + column_offset - 1, (std::size_t)start_core_y + num_cores_r - 1});
-    
-    // may not end up using these
+
     CoreRange top_row(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y});
@@ -196,14 +162,12 @@ void bsr_spmm_multicore_snf_impl(
         log_info(tt::LogVerif, "in0 receiver cores {}, used? {}", in0_receiver_cores, num_cores_c > 1);
     }
 
-    
     auto in0_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in0_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in1_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in1_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
 
-
-    // Circural Buffer sizing
+    // Circular Buffer sizing
     uint32_t in0_CB_num_tiles = in0_block_h * in0_block_w * 2; // double buffer
     uint32_t in0_CB_size = in0_CB_num_tiles * single_tile_size;
     uint32_t in1_CB_num_tiles = in0_block_w * in1_block_w * 2; // double buffer
@@ -213,7 +177,7 @@ void bsr_spmm_multicore_snf_impl(
 
     uint32_t in0_num_subblocks = (in0_block_h / out_subblock_h);
     uint32_t in0_block_num_tiles = out_subblock_h * in0_block_w * in0_num_subblocks;
-    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w; // this is named weird but it's correct.
+    uint32_t in0_subblock_num_tiles = out_subblock_h * in0_block_w;
 
     uint32_t in1_num_subblocks = (in1_block_w / out_subblock_w);
     uint32_t in1_block_num_tiles = out_subblock_w * in0_block_w * in1_num_subblocks;
@@ -221,18 +185,16 @@ void bsr_spmm_multicore_snf_impl(
 
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
 
-
-    // DRAM buffers initialiation
+    // DRAM buffers initialization
     uint32_t dram_buffer_dst_row_size =
         single_tile_size * Rt * Nt;
 
     uint32_t dram_buffer_dst_total_size = dram_buffer_dst_row_size * nnz_rows;
 
     uint32_t dram_buffer_A_size =
-        single_tile_size * Rt * Ct * nnz_blocks;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
+        single_tile_size * Rt * Ct * nnz_blocks;
     uint32_t dram_buffer_B_size =
-        single_tile_size * Nt * Kt;  // num_tiles of FP16_B, hard-coded in the reader/writer kernels
-
+        single_tile_size * Nt * Kt;
 
     auto dst_dram_buffer = MakeBuffer(device, dram_buffer_dst_total_size, single_tile_size);
     auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
@@ -312,28 +274,16 @@ void bsr_spmm_multicore_snf_impl(
         auto cb_output = tt_metal::CreateCircularBuffer(program, all_cores, cb_output_config);
 
     uint32_t column_indices_cb_index = CBIndex::c_2;  // 2
-    // Use full buffer size as page_size so noc_async_read can transfer the entire buffer
     CircularBufferConfig cb_column_indices_config = CircularBufferConfig(
         dram_buffer_col_indices_size, {{column_indices_cb_index, tt::DataFormat::Int32}})
                                                 .set_page_size(column_indices_cb_index, indexing_data_single_tile_size);
     auto cb_column_indices = tt_metal::CreateCircularBuffer(program, all_cores, cb_column_indices_config);
 
     auto indptr_cb_index = CBIndex::c_3; // 3
-    // Use full buffer size as page_size so noc_async_read can transfer the entire buffer
     auto cb_indptr = MakeCircularBuffer(program, all_cores, indptr_cb_index, dram_buffer_indptr_size, indexing_data_single_tile_size, indexing_data_format);
 
-    
-    /* 
+    /*
         Compile-time arguments.
-
-        Start answering questions about what you want your two DM kernels to do.
-        Start coding. 
-
-        Decision: follow their example, both kernels read, one writes.
-        TODO: only one kernel should read the indexing data from DRAM. 
-            - the kernel to read the indexing data should use a semaphore to let the other kernel know it's ready
-        
-
     */
 
     bool in1_is_writer = false;  // flip to switch which RISC writes output to DRAM
@@ -342,6 +292,8 @@ void bsr_spmm_multicore_snf_impl(
     bool src1_is_dram = src1_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool col_indices_is_dram = column_indices_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
     bool indptr_is_dram = indptr_dram_buffer->buffer_type() == tt_metal::BufferType::DRAM ? 1 : 0;
+
+    // in0 injector compile-time args (IDENTICAL to SNF)
     std::vector<uint32_t> in0_injector_compile_time_args = {
         (std::uint32_t)src0_is_dram,
         (std::uint32_t)src1_is_dram,
@@ -364,33 +316,27 @@ void bsr_spmm_multicore_snf_impl(
         (std::uint32_t)in0_block_w,               // in1_block_h
         (std::uint32_t)in1_block_w * in0_block_w,  // in1_block_num_tiles
 
-
         (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
         (std::uint32_t)indptr_dram_buffer->address(), // NoC args, indptr
 
         (std::uint32_t)num_tiles_for_col_indices,
         (std::uint32_t)num_tiles_for_indptr,
 
-        in0_sender_semaphore_id, 
+        in0_sender_semaphore_id,
         in0_receiver_semaphore_id,
         (std::uint32_t)true,                            // is_injector_core
         (std::uint32_t)!in1_is_writer,                  // is_output_writer
         (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
 
-        (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
+        (std::uint32_t)Rt * Nt,  // RtNt
         (std::uint32_t)Nt,
 
         // writer args
-        (std::uint32_t)out_subblock_w,                     // out_subblock_w
-        (std::uint32_t)out_subblock_h,                     // out_subblock_h
-
-
-        // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
-        // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x
-        // col indices start of row obtained by // a.indptr[output_idx_y],
-        // col indices end of row obtained by //  a.indptr[output_idx_y + 1],
+        (std::uint32_t)out_subblock_w,
+        (std::uint32_t)out_subblock_h,
     };
 
+    // in0 receiver compile-time args (IDENTICAL to SNF)
     std::vector<uint32_t> in0_receiver_compile_time_args = {
         (std::uint32_t)src0_is_dram,
         (std::uint32_t)src1_is_dram,
@@ -413,31 +359,26 @@ void bsr_spmm_multicore_snf_impl(
         (std::uint32_t)in0_block_w,               // in1_block_h
         (std::uint32_t)in1_block_w * in0_block_w,  // in1_block_num_tiles
 
-
         (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
         (std::uint32_t)indptr_dram_buffer->address(), // NoC args, indptr
 
         (std::uint32_t)num_tiles_for_col_indices,
         (std::uint32_t)num_tiles_for_indptr,
-        in0_sender_semaphore_id, 
+        in0_sender_semaphore_id,
         in0_receiver_semaphore_id,
         (std::uint32_t)false,                    // is_injector_core
         (std::uint32_t)!in1_is_writer,           // is_output_writer
         (std::uint32_t)dst_dram_buffer->address(),      // out_buffer_addr
 
-        (std::uint32_t)Rt * Nt,  // Size of output row, used to index into next output block
+        (std::uint32_t)Rt * Nt,  // RtNt
         (std::uint32_t)Nt,
 
         // writer args
-        (std::uint32_t)out_subblock_w,                     // out_subblock_w
-        (std::uint32_t)out_subblock_h,                     // out_subblock_h
-
-        // in0_tensor_start_tile_id obtained by // a.indptr[output_idx_y] * Rt * Ct,
-        // in1_tensor_start_tile_id obtained by // per_core_N * output_idx_x
-        // col indices start of row obtained by // a.indptr[output_idx_y],
-        // col indices end of row obtained by //  a.indptr[output_idx_y + 1],
+        (std::uint32_t)out_subblock_w,
+        (std::uint32_t)out_subblock_h,
     };
 
+    // in1 CDA reader compile-time args (slots 0-25 identical to SNF in1, + slots 26-27 for CDA semaphores)
     std::vector<uint32_t> in1_reader_compile_time_args = {
         (std::uint32_t)src0_is_dram,
         (std::uint32_t)src1_is_dram,
@@ -460,7 +401,6 @@ void bsr_spmm_multicore_snf_impl(
         (std::uint32_t)in0_block_w,               // in1_block_h
         (std::uint32_t)in1_block_w * in0_block_w,  // in1_block_num_tiles
 
-
         (std::uint32_t)column_indices_dram_buffer->address(), // NoC args, column indices
         (std::uint32_t)indptr_dram_buffer->address(), // NoC args, indptr
 
@@ -473,6 +413,9 @@ void bsr_spmm_multicore_snf_impl(
         (std::uint32_t)Nt,                                       // Nt [23]
         (std::uint32_t)out_subblock_w,                           // out_subblock_w [24]
         (std::uint32_t)out_subblock_h,                           // out_subblock_h [25]
+
+        in1_sender_semaphore_id,                                 // [26]
+        in1_receiver_semaphore_id,                               // [27]
     };
 
     std::vector<uint32_t> compute_kernel_compile_time_args = {
@@ -495,13 +438,7 @@ void bsr_spmm_multicore_snf_impl(
         (std::uint32_t)num_iters_x,
     };
 
-
     // Create Kernels
-    /* 1. all cores CK... wait are we using bmm_iter here?
-       2. all cores in1 reader -- identical to load_balanced reader
-       3. in0 injector cores in0 reader w/ injector comp args
-       4. in0 receiver cores in0 reader w/ receiver comp args
-    */
     auto zone_defines = spmm_zone_config::get_zone_defines();
     zone_defines.insert(extra_defines.begin(), extra_defines.end());
 
@@ -515,13 +452,13 @@ void bsr_spmm_multicore_snf_impl(
         all_cores,
         tt_metal::ComputeConfig{
             .math_fidelity = math_fidelity,
-            // .fp32_dest_acc_en = true,
             .compile_args = compute_kernel_compile_time_args,
             .defines = zone_defines});
 
+    // CDA in1 reader (replaces SNF in1 reader)
     auto in1_reader_id = tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_snf_in1_reader.cpp",
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_in1_chain_of_direct_addressing.cpp",
         all_cores,
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_1,
@@ -529,7 +466,7 @@ void bsr_spmm_multicore_snf_impl(
             .compile_args = in1_reader_compile_time_args,
             .defines = zone_defines});
 
-
+    // SNF in0 reader (UNCHANGED from SNF version)
     auto in0_injector_and_writer_id = tt_metal::CreateKernel(
         program,
         "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_snf_in0_reader.cpp",
@@ -556,8 +493,7 @@ void bsr_spmm_multicore_snf_impl(
                 .defines = zone_defines});
     }
 
-    // Find Perms — sort only the nnz rows so perm values are folded indices
-    // (indices into folded_bsr_matrix_indices), not original row indices.
+    // Find Perms -- sort only the nnz rows so perm values are folded indices
     std::vector<int> nnz_row_diffs;
     for (int i = 0; i < a.indptr.size() - 1; i++){
         int diff = a.indptr[i+1] - a.indptr[i];
@@ -567,18 +503,6 @@ void bsr_spmm_multicore_snf_impl(
     }
     std::vector<int> perm(nnz_row_diffs.size());
     sortingPermutation(nnz_row_diffs, perm);
-
-    // if constexpr (verbose) {
-    //     log_info(tt::LogVerif, " -- nnz_row_diffs (size={}) --", nnz_row_diffs.size());
-    //     for (uint32_t i = 0; i < nnz_row_diffs.size(); i++) {
-    //         log_info(tt::LogVerif, "   nnz_row_diffs[{}] = {}", i, nnz_row_diffs[i]);
-    //     }
-    //     log_info(tt::LogVerif, " -- perm (size={}) --", perm.size());
-    //     for (uint32_t i = 0; i < perm.size(); i++) {
-    //         log_info(tt::LogVerif, "   perm[{}] = {} (folded row index -> original row {})",
-    //             i, perm[i], folded_bsr_matrix_indices[perm[i]]);
-    //     }
-    // }
 
     // 1. initialize a vector for each row of cores
     std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
@@ -624,15 +548,9 @@ void bsr_spmm_multicore_snf_impl(
     }
 
     // Assign runtime args
-    /* 1. in1 reader -- LB reader
-       2. compute -- LB compute
-       3. in0 reader -- some semaphore stuff, writer LB
-    */
-
     for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
         for (uint32_t core_idx_x = 0; core_idx_x < num_cores_c; core_idx_x++) {
             CoreCoord core(core_idx_x, core_idx_y);
-
 
             int output_idx_x_start = (core_idx_x * num_iters_x) % num_blocks_x;
 
@@ -642,13 +560,33 @@ void bsr_spmm_multicore_snf_impl(
 
             uint32_t num_iters_y_this_core = output_y_indices[core_idx_y].size();
             uint32_t num_iters_x_this_core = std::min(num_iters_x, num_blocks_x - output_idx_x_start + 1);
+
+            // ── in0 SNF reader runtime args (IDENTICAL to SNF version) ──
             in0_snf_reader_runtime_args.push_back(num_iters_x_this_core);
             in0_snf_reader_runtime_args.push_back(num_iters_y_this_core);
             in0_snf_reader_runtime_args.push_back(output_idx_x_start);
-            in1_reader_runtime_args.push_back(num_iters_x_this_core);
-            in1_reader_runtime_args.push_back(num_iters_y_this_core);
-            in1_reader_runtime_args.push_back(output_idx_x_start);
+
+            // ── in1 CDA reader runtime args (NEW layout) ──
+            in1_reader_runtime_args.push_back(num_iters_x_this_core);       // [0] num_iters_x
+            in1_reader_runtime_args.push_back(num_iters_y_this_core);       // [1] num_iters_y
+            in1_reader_runtime_args.push_back(output_idx_x_start);          // [2] output_idx_x_start
+            in1_reader_runtime_args.push_back(core_idx_y);                  // [3] my_core_idx_y
+            in1_reader_runtime_args.push_back(num_cores_r);                 // [4] num_cores_in_column
+
+            // [5] noc_x_for_column (physical NOC x from column's logical x)
+            auto column_phys_core = device->worker_core_from_logical_core(CoreCoord(core_idx_x, 0));
+            in1_reader_runtime_args.push_back((std::uint32_t)column_phys_core.x);
+
+            // [6..6+N-1] noc_y_table[0..num_cores_r-1] (physical NOC y per core row)
+            for (uint32_t r = 0; r < num_cores_r; r++) {
+                auto phys_core = device->worker_core_from_logical_core(CoreCoord(core_idx_x, r));
+                in1_reader_runtime_args.push_back((std::uint32_t)phys_core.y);
+            }
+
+            // ── compute runtime args ──
             compute_runtime_args.push_back(num_iters_y_this_core);
+
+            // ── Per-iter_y y_coords and folded_y_coords ──
             for (int iter_y = 0; iter_y < num_iters_y_this_core; iter_y++) {
                 uint32_t folded_output_idx_y = output_y_indices[core_idx_y][iter_y];
                 uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y];
@@ -665,20 +603,26 @@ void bsr_spmm_multicore_snf_impl(
                             output_idx_y + 1, a.indptr.size());
                     }
                 }
-                in0_snf_reader_runtime_args.push_back(output_idx_y); // for reading
-                in0_snf_reader_runtime_args.push_back(folded_output_idx_y); // always parsed by in0 kernel
+                // in0 SNF reader: y_coord and folded_y_coord (always both)
+                in0_snf_reader_runtime_args.push_back(output_idx_y);
+                in0_snf_reader_runtime_args.push_back(folded_output_idx_y);
+
+                // in1 CDA reader: y_coord (always), folded_y_coord (only if is_output_writer)
                 in1_reader_runtime_args.push_back(output_idx_y);
                 if (in1_is_writer) in1_reader_runtime_args.push_back(folded_output_idx_y);
+
+                // compute: num_blocks_in_row for this iter_y
                 compute_runtime_args.push_back(a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
             }
 
-
-            in0_snf_reader_runtime_args.push_back(output_idx_x_start * in1_block_w); // always parsed by in0 kernel
+            // in0 SNF reader: out_tensor_start_tile_id (always parsed by in0 kernel)
+            in0_snf_reader_runtime_args.push_back(output_idx_x_start * in1_block_w);
+            // in1 CDA reader: out_tensor_start_tile_id (only if in1_is_writer)
             if (in1_is_writer) in1_reader_runtime_args.push_back(output_idx_x_start * in1_block_w);
+
+            // in0 SNF reader: num_cores_y, dest/sender noc coords, is_sink_core
             in0_snf_reader_runtime_args.push_back(num_iters_y_this_core);
-            // dest_nocx/y and sender_nocx/y
-            //      these are pretty simple?
-            //      Let me check the minimal matmul code to see if there is anything tricky here.
+
             bool is_injector_core = core_idx_x == 0;
             bool is_sink_core = core_idx_x == (num_cores_c - 1);
 
@@ -688,22 +632,27 @@ void bsr_spmm_multicore_snf_impl(
             auto in0_prev_core_physical = device->worker_core_from_logical_core(in0_prev_core);
             auto in0_next_core_physical = device->worker_core_from_logical_core(in0_next_core);
 
-            // log_info(tt::LogVerif, "Core ({}, {}) [{}{}] -> prev logical ({}, {}) physical ({}, {}), next logical ({}, {}) physical ({}, {})",
-            //     core_idx_x, core_idx_y,
-            //     is_injector_core ? "INJ" : "RCV",
-            //     is_sink_core ? ",SINK" : "",
-            //     in0_prev_core.x, in0_prev_core.y,
-            //     in0_prev_core_physical.x, in0_prev_core_physical.y,
-            //     in0_next_core.x, in0_next_core.y,
-            //     in0_next_core_physical.x, in0_next_core_physical.y);
-
             in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core_physical.x);
             in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_next_core_physical.y);
             in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core_physical.x);
             in0_snf_reader_runtime_args.push_back((std::uint32_t)in0_prev_core_physical.y);
-            
+
             in0_snf_reader_runtime_args.push_back(is_sink_core);
 
+            // ── in1 CDA reader: column-wide schedule ──
+            // all_num_iters_y[0..num_cores_r-1]
+            for (uint32_t r = 0; r < num_cores_r; r++) {
+                in1_reader_runtime_args.push_back((std::uint32_t)output_y_indices[r].size());
+            }
+            // all_y_coords flattened (for each core r, for each iy, resolved BSR row)
+            for (uint32_t r = 0; r < num_cores_r; r++) {
+                for (uint32_t iy = 0; iy < output_y_indices[r].size(); iy++) {
+                    uint32_t resolved_row = folded_bsr_matrix_indices[output_y_indices[r][iy]];
+                    in1_reader_runtime_args.push_back(resolved_row);
+                }
+            }
+
+            // Set runtime args for in0 reader
             if (is_injector_core){
                 tt_metal::SetRuntimeArgs(program, in0_injector_and_writer_id, core, in0_snf_reader_runtime_args);
                 if constexpr (verbose) {
@@ -723,7 +672,11 @@ void bsr_spmm_multicore_snf_impl(
                 for (size_t arg_idx = 0; arg_idx < in0_snf_reader_runtime_args.size(); arg_idx++){
                     log_info(tt::LogVerif, "arg {} : {}", arg_idx, in0_snf_reader_runtime_args[arg_idx]);
                 }
-            } 
+                log_info(tt::LogVerif, "in1 CDA reader runtime args for core {} , {} :", core_idx_x, core_idx_y);
+                for (size_t arg_idx = 0; arg_idx < in1_reader_runtime_args.size(); arg_idx++){
+                    log_info(tt::LogVerif, "arg {} : {}", arg_idx, in1_reader_runtime_args[arg_idx]);
+                }
+            }
             tt_metal::SetRuntimeArgs(program, in1_reader_id, core, in1_reader_runtime_args);
             tt_metal::SetRuntimeArgs(program, compute_id, core, compute_runtime_args);
         }
@@ -742,7 +695,7 @@ void bsr_spmm_multicore_snf_impl(
     EnqueueWriteBuffer(cq, indptr_dram_buffer, padded_indptr.data(), true);
 
     if constexpr (is_profiling){
-        int num_iters = 10; // TODO: there should be smarter way to set the number of iters. we'll see
+        int num_iters = 10;
         EnqueueProgram(cq, program, true);
         ZoneScopedNC("Device program Loop", tracy::Color::Aquamarine);
         for (int i = 0; i < num_iters; i++){
@@ -751,7 +704,7 @@ void bsr_spmm_multicore_snf_impl(
     }
     else if constexpr (verbose){
         log_info(tt::LogVerif, " -- Entering Program --");
-        EnqueueProgram(cq, program, true); // block on this call so we can determine the order of print statements
+        EnqueueProgram(cq, program, true);
     }
     else {
         EnqueueProgram(cq, program, false);
@@ -759,7 +712,7 @@ void bsr_spmm_multicore_snf_impl(
 
     if constexpr (verbose)
         log_info(tt::LogVerif, " -- Program returned --");
-    
+
     if constexpr (!is_profiling){
         uint32_t nonzero_row_index = 0;
         for (size_t row_index = 0; row_index < a.indptr.size() - 1; row_index++) {
@@ -781,91 +734,23 @@ void bsr_spmm_multicore_snf_impl(
 
 // Public thin wrapper (matches original API and HostCodeFunctionPtr)
 template<bool verbose, bool is_profiling, bool use_optimal_noc>
-void bsr_spmm_multicore_snf(
+void bsr_spmm_multicore_snfin0_cdain1(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_snf_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {});
-}
-
-// Ablation skip wrappers
-template<bool verbose, bool is_profiling, bool use_optimal_noc>
-void bsr_spmm_multicore_snf_no_a_read(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_snf_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_IN0_DRAM_READ", "1"}});
-}
-template<bool verbose, bool is_profiling, bool use_optimal_noc>
-void bsr_spmm_multicore_snf_no_b_read(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_snf_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_IN1_DRAM_READ", "1"}});
-}
-template<bool verbose, bool is_profiling, bool use_optimal_noc>
-void bsr_spmm_multicore_snf_no_compute(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_snf_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_COMPUTE", "1"}});
-}
-template<bool verbose, bool is_profiling, bool use_optimal_noc>
-void bsr_spmm_multicore_snf_no_write(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_snf_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_DRAM_WRITE", "1"}});
+    bsr_spmm_multicore_snfin0_cdain1_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {});
 }
 
 // Explicit template instantiations
-template void bsr_spmm_multicore_snf<false, false>(
+template void bsr_spmm_multicore_snfin0_cdain1<false, false>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snf<true, false>(
+template void bsr_spmm_multicore_snfin0_cdain1<true, false>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snf<false, true>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-// Ablation skip wrappers (profiling only)
-template void bsr_spmm_multicore_snf_no_a_read<false, true>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snf_no_b_read<false, true>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snf_no_compute<false, true>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snf_no_write<false, true>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-// flip_noc instantiations (profiling, non-optimal NoC)
-template void bsr_spmm_multicore_snf<false, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snf_no_a_read<false, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snf_no_b_read<false, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snf_no_compute<false, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snf_no_write<false, true, false>(
+template void bsr_spmm_multicore_snfin0_cdain1<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);

@@ -71,7 +71,8 @@ uint32_t get_Npc_from_BSR_block_size(uint32_t Nt, uint32_t Mpc, uint32_t in0_blo
         uint32_t num_iters_x = (num_blocks_x + num_cores_x - 1) / num_cores_x;
         uint32_t num_blocks_total = nnz_rows * num_blocks_x;
         uint32_t num_work_regions = (num_blocks_total + num_iters_x * num_iters_y - 1)/ (num_iters_x * num_iters_y);
-        if (num_work_regions < num_cores_total){
+        if (num_blocks_x < num_cores_x){
+            // hmmm... can it be that NWR<NCT but we can still do better than the current NPC?
             break;
         }
         if (ele * Npc_min <= Npc_max) {

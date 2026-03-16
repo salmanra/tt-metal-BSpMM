@@ -80,7 +80,7 @@ void run_test(
     dense_matrix<bfloat16> output = tmp.bfloat16_cast();
 
 
-    // a.pretty_print();
+    a.pretty_print();
 
 
     // tilize input data
@@ -139,19 +139,59 @@ int main(int argc, char** argv) {
 
     // Registry selection (mirrors profile_block.cpp)
     int registry_number = argc > 3 ? std::stoi(argv[3]) : -1;
-    TestFunctionPtr *registry = nullptr;
+    std::string registry_name = "";
+    TestFunctionPtr *Registry = nullptr;
     switch (registry_number) {
         case 0:
-            registry = ProfileCaseRegistry;
+            Registry = ProfileCaseRegistry;
+            registry_name = "ProfileSuiteSparseVersioning";
             break;
         case 1:
-            registry = ProfileDenseAblationRegistry;
+            Registry = ProfileDenseAblationRegistry;
+            registry_name = "DenseAblationKProfileSuite";
             break;
         case 2:
-            registry = ProfileLargeSparseRegistry;
+            Registry = ProfileLargeSparseRegistry;
+            registry_name = "ProfileSuiteLargeSparseVersioning";
+            break;
+        case 3:
+            Registry = ProfileLargeSparseLargeBlocksRegistry;
+            registry_name = "ProfileSuiteLargeSparseLargeBlocksVersioning";
+            break;
+        case 4:
+            Registry = ProfileSweepNRegistry;
+            registry_name = "ProfileSweepN";
+            break;
+        case 5:
+            Registry = ProfileSweepDensityRegistry;
+            registry_name = "ProfileSweepDensity";
+            break;
+        case 6:
+            Registry = ProfileSweepKRegistry;
+            registry_name = "ProfileSweepK";
+            break;
+        case 7:
+            Registry = ProfileSweepBlockSizeRegistry;
+            registry_name = "ProfileSweepBlockSize";
+            break;
+        case 8:
+            Registry = ProfileSweepSparsityPatternRegistry;
+            registry_name = "ProfileSweepSparsityPattern";
+            break;
+        case 9:
+            Registry = ProfileSweepSparsityPatternRegistryD10;
+            registry_name = "ProfileSweepSparsityPatternD10";
+            break;
+        case 10:
+            Registry = ProfileSweepSparsityPatternRegistryD5;
+            registry_name = "ProfileSweepSparsityPatternD5";
+            break;
+        case 11:
+            Registry = ProfileSweepSparsityPatternRegistryD50;
+            registry_name = "ProfileSweepSparsityPatternD50";
             break;
         default:
-            registry = TestRegistry;
+            Registry = TestRegistry;
             break;
     }
 
@@ -160,6 +200,6 @@ int main(int argc, char** argv) {
         console_printf("No test specified. Returning.\n");
         return 0;
     }
-    run_full_test(host_code_index, test_num, registry);
+    run_full_test(host_code_index, test_num, Registry);
     console_printf("Leaving the test program\n");
 }

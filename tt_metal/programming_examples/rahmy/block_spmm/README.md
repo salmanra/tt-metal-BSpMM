@@ -5,33 +5,66 @@ In this readme:
 2. Specifying which version of the SpMM algorithm you want to run
 3. How to add a test case
 4. How to build and run the test suite
+5. How to run the profiling plan
 
 ### Directory structure
 ```
 block_spmm/
 -- inc/
--- -- host_code.hpp
+-- -- host_code.hpp          # HostCodeRegistry + HostCodeRegistryProfiling
+-- -- host_code/             # one .cpp per algorithm implementation
+-- -- -- bsr_spmm_multicore_snf.cpp
+-- -- -- bsr_spmm_multicore_load_balanced.cpp
+-- -- -- bsr_spmm_multicore_reuse_iteration.cpp
+-- -- -- bsr_spmm_multicore_naive_new_DM.cpp
+-- -- -- bsr_spmm_multicore_load_balanced_new_DM.cpp
+-- -- -- ...
+-- -- -- spmm_zone_config.hpp
 -- -- test_suite.hpp
+-- -- profiling_suite.hpp    # parametric test cases + sweep registries
+-- -- bsr_matrix.hpp
+-- -- bmm_op.hpp
 -- kernels/
--- -- compute/
--- -- dataflow/
+-- -- compute/               # compute kernels (bmm_iter.cpp, ...)
+-- -- dataflow/              # reader/writer kernels
+-- -- common/                # shared headers (spmm_profiling.hpp, spmm_reader_common.hpp, ...)
 -- src/
--- -- block.cpp
--- -- profile_block.cpp
 -- -- test_block.cpp
--- test/
--- -- *.txt
+-- -- profile_block.cpp
+-- -- export_to_csv.cpp
+-- -- run_block.cpp
+-- -- ...
+-- analysis_tools/           # Python scripts for output analysis
+-- PROFILING_PLAN.md         # detailed profiling infrastructure docs
 ```
 
-**src/** - contains the **.cpp** files which run the program. ***test_block.cpp*** runs the selected version of the program chosen from the registry defined in *host_code.hpp* along the entire test suite defined in *test_suite.hpp* and checks that all tests pass (Pearson's Correlation Coefficient between sequential result and multicore result is greater than 0.99). ***profile_block.cpp*** runs the selected host code on the selected test case 10 times with Tracy ZoneScoped macros for capturing profiling data.
+**src/** - contains the **.cpp** files which run the program. ***test_block.cpp*** runs the selected version of the program chosen from the registry defined in *host_code.hpp* along the entire test suite defined in *test_suite.hpp* and checks that all tests pass (Pearson's Correlation Coefficient between sequential result and multicore result is greater than 0.99). ***profile_block.cpp*** runs the selected host code on the selected profiling case with Tracy ZoneScoped macros for capturing profiling data. ***export_to_csv.cpp*** extracts Tracy trace data to CSV files for analysis.
 
 ## Specifying a program to run
 Since we are iterating over increasingly optimized SpMM impls, we want an easy way to go back and forth between versions.
-***host_code.hpp*** introduces a HostCodeRegistry which includes the function pointers to all the different versions in development.
+***host_code.hpp*** introduces two registries:
 
-Both the **profile_block** and **test_block** executable take an index into the HostCodeRegistry. If none is provided, they will run the first program in the registry. Try to keep the newest version at the top so you can run these executables without thinking to hard about the command line args.
+- **HostCodeRegistry** — the base algorithms, used by `test_block`.
+- **HostCodeRegistryProfiling** — an extended registry (50 entries) used by `profile_block`, organized into groups:
 
-When you want to develop a new version of the program, add the new function declaration to the top of the namespace in ***host_code.hpp***, then add that function pointer to the HostCodeRegistry, then define it towards the bottom of the namespace. This will allow any host program (profiling, testing, visualizing, debugging) to quickly access all version of the code.
+| Indices   | Group              | Description                                 |
+|-----------|--------------------|---------------------------------------------|
+| `[0-4]`   | Full               | Base algorithms (same as HostCodeRegistry)  |
+| `[5-9]`   | `no_a_read`        | Skip sparse A DRAM reads                    |
+| `[10-14]` | `no_b_read`        | Skip dense B DRAM reads                     |
+| `[15-19]` | `no_compute`       | Skip tile multiply                          |
+| `[20-24]` | `no_write`         | Skip output DRAM writes                     |
+| `[25-29]` | `flip_noc full`    | Full algorithms with non-optimal NoC        |
+| `[30-34]` | `flip_noc no_a`    | Non-optimal NoC + skip sparse A reads       |
+| `[35-39]` | `flip_noc no_b`    | Non-optimal NoC + skip dense B reads        |
+| `[40-44]` | `flip_noc no_c`    | Non-optimal NoC + skip compute              |
+| `[45-49]` | `flip_noc no_w`    | Non-optimal NoC + skip DRAM writes          |
+
+Within each group, the 5 algorithms are ordered: `snf`, `load_balanced`, `reuse_iteration`, `naive_new_DM`, `load_balanced_new_DM`.
+
+Both the **profile_block** and **test_block** executables take an index into their respective registry. If none is provided, they will run the first program in the registry.
+
+When you want to develop a new version of the program, add the new function declaration to the top of the namespace in ***host_code.hpp***, then add that function pointer to the HostCodeRegistry, then define it towards the bottom of the namespace. This will allow any host program (profiling, testing, visualizing, debugging) to quickly access all versions of the code.
 
 ## How to add a test case
 In ***test_suite.hpp***:
@@ -110,19 +143,46 @@ Say I have added a test to *test_suite.hpp* and want to run it on my latest SpMM
 ./build_metal.sh --build-programming-examples # should be fast, will only rebuild modified examples
 ./build/programming_examples/rahmy/test_block # default args -> runs the entire test suite using the first function in the HostCodeRegistry
 ```
-## How to capture a profiling trace
-Say my latest test case is big and interesting and I want to capture a trace of my program running the test case. I will have to:
-1. Rebuild **tt-metal** with progrmaming_examples *and* profiling enabled.
-2. Start a background process of the Tracy profiler listening on the capture port.
-3. Run the profile build, specifying a program implementation and the test case number (index into the TestRegistry).
-4. Move the trace file from the remote machine to any machine with Tracy GUI.
-5. Open the saved trace in the GUI.
+## How to run the profiling plan
 
-**Tracy** is the open-source profiler that Tenstorrent includes in the source builds. Since TT cards are typically set up in non-interactive workstations, we have to launch the Tracy GUI on a separate machine from the one we use to run our code and capture a trace. On the remote Wormhole card we have access to, we have the **capture** tool from Tracy which is built into the **tt-metal** project. After creating symbolic link to the ***./capture-release*** command, we can achieve steps 1. 2. and 3. with the following commands:
+The automated profiling script `spmm_scripts/run_profiling_plan.sh` handles building with profiling enabled, launching Tracy capture, running profile_block, and exporting CSVs. It supports three phases: **ablation** (skip one cost component at a time), **sweep** (vary one matrix parameter at a time), and **flip_noc** (compare optimal vs non-optimal NoC assignment).
+
+```shell
+# List all registries and host codes
+./spmm_scripts/run_profiling_plan.sh --list
+
+# Run everything (ablation + sweep + flip_noc)
+./spmm_scripts/run_profiling_plan.sh
+
+# Ablation only (all 5 algorithms × 4 skip variants)
+./spmm_scripts/run_profiling_plan.sh --phase ablation
+
+# Sweep only (vary N, density, K, or block size)
+./spmm_scripts/run_profiling_plan.sh --phase sweep
+
+# Flip-NoC only (non-optimal NoC + ablation variants)
+./spmm_scripts/run_profiling_plan.sh --phase flip_noc
+
+# Restrict to one algorithm (0=snf, 1=load_balanced, ...)
+./spmm_scripts/run_profiling_plan.sh --phase ablation --host-code 0
+
+# Skip rebuild if already built with profiling
+./spmm_scripts/run_profiling_plan.sh --no-build --phase sweep
+
+# Preview commands without executing
+./spmm_scripts/run_profiling_plan.sh --dry-run
+```
+
+See [PROFILING_PLAN.md](PROFILING_PLAN.md) for the full description of the profiling infrastructure, including kernel skip flags, the `_impl` host code pattern, sweep registries, and output locations.
+
+### Manual single-trace capture
+
+For one-off traces outside the profiling plan, you can still run the manual process:
 
 ```shell
 ./build_metal.sh --enable-profiler --build-programming-examples
 ./capture-release -f -o {path-to-stored-traces}/{new-test-name}.tracy & # Note the ampersand!!!
-./build/programming_examples/rahmy/profile_block {program_id} {test_id} # default behavior -> use first function in HostCodeRegistry, use test case 30
+./build/programming_examples/rahmy/profile_block {program_id} {test_id}
 ```
-As the test case is running, the console should display a wealth of live profiling information. If it isn't, check that ***./capture-release*** was running in the background before you ran the test case, and check that your last rebuild of **tt-metal** enabled profiling.
+
+**Tracy** is the open-source profiler that Tenstorrent includes in the source builds. Since TT cards are typically set up in non-interactive workstations, we launch the Tracy GUI on a separate machine from the one used to run code and capture traces. The **capture-release** tool is built into the **tt-metal** project. As the test case is running, the console should display live profiling information. If it isn't, check that ***./capture-release*** was running in the background before you ran the test case, and check that your last rebuild of **tt-metal** enabled profiling.

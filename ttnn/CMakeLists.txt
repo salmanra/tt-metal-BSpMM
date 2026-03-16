@@ -206,6 +206,7 @@ set(TTNN_SRC_PYBIND
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/experimental/experimental_${PY_BINDING}.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/experimental/matmul/attn_matmul/attn_matmul_${PY_BINDING}.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/experimental/matmul/group_attn_matmul/group_attn_matmul_${PY_BINDING}.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/experimental/minimal_matmul/minimal_matmul_${PY_BINDING}.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/experimental/paged_cache/paged_cache_${PY_BINDING}.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/experimental/plusone/plusone_${PY_BINDING}.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/experimental/reduction/argmax/argmax_${PY_BINDING}.cpp
@@ -519,6 +520,7 @@ target_link_libraries(
         TTNN::Ops::Experimental::Copy
         TTNN::Ops::Experimental::Dropout
         TTNN::Ops::Experimental::Matmul
+        TTNN::Ops::Experimental::MinimalMatmul
         TTNN::Ops::Experimental::PagedCache
         TTNN::Ops::Experimental::PlusOne
         TTNN::Ops::Experimental::Reduction
@@ -687,6 +689,7 @@ add_subdirectory(cpp/ttnn/operations/experimental/conv3d)
 add_subdirectory(cpp/ttnn/operations/experimental/copy)
 add_subdirectory(cpp/ttnn/operations/experimental/dropout)
 add_subdirectory(cpp/ttnn/operations/experimental/matmul)
+add_subdirectory(cpp/ttnn/operations/experimental/minimal_matmul)
 add_subdirectory(cpp/ttnn/operations/experimental/paged_cache)
 add_subdirectory(cpp/ttnn/operations/experimental/plusone)
 add_subdirectory(cpp/ttnn/operations/experimental/reduction)

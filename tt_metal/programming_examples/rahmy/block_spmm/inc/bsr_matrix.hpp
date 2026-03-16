@@ -18,6 +18,7 @@
 #define FILL_COL 2
 #define FILL_DIAG 3 // will require the size to be perfect
 #define FILL_TRIL 4 // block lower triangular (requires square block grid)
+#define FILL_MULTI_DIAG 5 // fills diagonals expanding outward from the main diagonal
 #define TILE_SIZE 32
 #define RAND_DENOM 2 << 10 // trying to control the range...
 #define SIGNED_RAND_MAX RAND_MAX / 2
@@ -211,6 +212,33 @@ public: // everything is public for now
     size_t R;
     size_t C;
 
+    static std::vector<std::pair<size_t, size_t>> multi_diag_positions(
+            size_t blocked_h, size_t blocked_w, size_t nblocks) {
+        std::vector<std::pair<size_t, size_t>> positions;
+        positions.reserve(nblocks);
+        // Expand outward from main diagonal: d=0, +1, -1, +2, -2, ...
+        for (int d = 0; positions.size() < nblocks; ) {
+            if (d >= 0) {
+                // super-diagonal d
+                for (size_t i = 0; i < blocked_h && i + d < blocked_w && positions.size() < nblocks; i++) {
+                    positions.emplace_back(i, i + d);
+                }
+            } else {
+                // sub-diagonal |d|
+                size_t ad = static_cast<size_t>(-d);
+                for (size_t j = 0; j < blocked_w && j + ad < blocked_h && positions.size() < nblocks; j++) {
+                    positions.emplace_back(j + ad, j);
+                }
+            }
+            // Advance: 0 -> 1 -> -1 -> 2 -> -2 -> ...
+            if (d <= 0) d = -d + 1; else d = -d;
+            // Safety: if we've exhausted all positions
+            if (static_cast<size_t>(std::abs(d)) >= std::max(blocked_h, blocked_w)) break;
+        }
+        std::sort(positions.begin(), positions.end());
+        return positions;
+    }
+
 public:
     bsr_matrix() : H(0), W(0), nblocks(0), R(0), C(0) {}
     bsr_matrix(size_t rows, size_t cols, size_t block_rows, size_t block_cols, size_t num_blocks, int fill_type = FILL_ROW, content_type content = RAND) :
@@ -288,6 +316,8 @@ public:
                 }
             }
         } else if (fill_type == FILL_DIAG){
+            // TODO: add logic to fill multiple diagonals. Maybe just fill from the center out?
+            //          And we can use nblocks to mean num_diags instead maybe...
             assert(nblocks <= std::min(blocked_matrix_height, blocked_matrix_width));
             for (size_t i = 0; i < nblocks; i++) {
                 indptr[i + 1]++;
@@ -338,6 +368,32 @@ public:
                                 data.push_back(static_cast<T>(k));
                                 break;
                         }
+                    }
+                }
+            }
+
+        } else if (fill_type == FILL_MULTI_DIAG) {
+            auto positions = multi_diag_positions(blocked_matrix_height, blocked_matrix_width, nblocks);
+            nblocks = positions.size();  // may be fewer if matrix is small
+            for (auto& [row, col] : positions) {
+                indptr[row + 1]++;
+                indices.push_back(col);
+                for (size_t k = 0; k < R * C; k++) {
+                    float temp = ((k / C) == (k % C)) ? 1.0 : 0.0;
+                    T val = static_cast<T>(temp);
+                    switch (content) {
+                        case RAND:
+                            data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
+                            break;
+                        case UNIFORM:
+                            data.push_back(static_cast<T>(1.0));
+                            break;
+                        case ID:
+                            data.push_back(val);
+                            break;
+                        case ARANGE:
+                            data.push_back(static_cast<T>(k));
+                            break;
                     }
                 }
             }
@@ -407,6 +463,16 @@ public:
                     for (size_t k = 0; k < R * C; k++) {
                         data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
                     }
+                }
+            }
+        } else if (fill_type == FILL_MULTI_DIAG) {
+            auto positions = multi_diag_positions(blocked_matrix_height, blocked_matrix_width, nblocks);
+            nblocks = positions.size();
+            for (auto& [row, col] : positions) {
+                indptr[row + 1]++;
+                indices.push_back(col);
+                for (size_t k = 0; k < R * C; k++) {
+                    data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
                 }
             }
         } else {

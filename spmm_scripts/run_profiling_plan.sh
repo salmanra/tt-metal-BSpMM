@@ -40,6 +40,10 @@
 #   5  ProfileSweepDensity              (parametric, sweep density)
 #   6  ProfileSweepK                    (parametric, sweep K)
 #   7  ProfileSweepBlockSize            (parametric, sweep block size)
+#   8  ProfileSweepSparsityPattern     (parametric, sweep sparsity pattern)
+#   9  ProfileSweepSparsityPatternD10 (parametric, sweep sparsity pattern, density=10%)
+#  10  ProfileSweepSparsityPatternD5  (parametric, sweep sparsity pattern, density=5%)
+#  11  ProfileSweepSparsityPatternD50 (parametric, sweep sparsity pattern, density=50%)
 #
 # Host code index map in HostCodeRegistryProfiling:
 #   [0-4]   Full algorithms: snf, load_balanced, reuse_iteration, naive_new_DM, lb_new_DM
@@ -69,6 +73,10 @@ PROFILE_REGISTRY_ARRAY_NAMES=(
     "ProfileSweepDensityRegistry"
     "ProfileSweepKRegistry"
     "ProfileSweepBlockSizeRegistry"
+    "ProfileSweepSparsityPatternRegistry"
+    "ProfileSweepSparsityPatternRegistryD10"
+    "ProfileSweepSparsityPatternRegistryD5"
+    "ProfileSweepSparsityPatternRegistryD50"
 )
 PROFILE_REGISTRY_DISPLAY_NAMES=(
     "ProfileSuiteSparseVersioning"
@@ -79,6 +87,10 @@ PROFILE_REGISTRY_DISPLAY_NAMES=(
     "ProfileSweepDensity"
     "ProfileSweepK"
     "ProfileSweepBlockSize"
+    "ProfileSweepSparsityPattern"
+    "ProfileSweepSparsityPatternD10"
+    "ProfileSweepSparsityPatternD5"
+    "ProfileSweepSparsityPatternD50"
 )
 
 ###############################################################################

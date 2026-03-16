@@ -59,6 +59,10 @@ Four sweep registries explore one axis at a time:
 | 5              | `ProfileSweepDensity` | Density %  | M=N=K=8192, R=C=64           |
 | 6              | `ProfileSweepK`       | K (reduction) | M=N=8192, R=C=64, density=25% |
 | 7              | `ProfileSweepBlockSize` | R=C block size | M=N=K=8192, density=25%   |
+| 8              | `ProfileSweepSparsityPattern` | Sparsity pattern | M=N=K=8192, R=C=256, density=25% |
+| 9              | `ProfileSweepSparsityPatternD10` | Sparsity pattern | M=N=K=8192, R=C=256, density=10% |
+| 10             | `ProfileSweepSparsityPatternD5` | Sparsity pattern | M=N=K=8192, R=C=256, density=5% |
+| 11             | `ProfileSweepSparsityPatternD50` | Sparsity pattern | M=N=K=8192, R=C=256, density=50% |
 
 Each case is named `parametric_M{M}_N{N}_K{K}_R{R}_C{C}_d{density%}` for
 unambiguous identification in Tracy output.

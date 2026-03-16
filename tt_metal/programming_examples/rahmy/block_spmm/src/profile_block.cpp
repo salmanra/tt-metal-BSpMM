@@ -95,6 +95,23 @@ int main(int argc, char** argv) {
         case 7:
             Registry = ProfileSweepBlockSizeRegistry;
             registry_name = "ProfileSweepBlockSize";
+            break;
+        case 8:
+            Registry = ProfileSweepSparsityPatternRegistry;
+            registry_name = "ProfileSweepSparsityPattern";
+            break;
+        case 9:
+            Registry = ProfileSweepSparsityPatternRegistryD10;
+            registry_name = "ProfileSweepSparsityPatternD10";
+            break;
+        case 10:
+            Registry = ProfileSweepSparsityPatternRegistryD5;
+            registry_name = "ProfileSweepSparsityPatternD5";
+            break;
+        case 11:
+            Registry = ProfileSweepSparsityPatternRegistryD50;
+            registry_name = "ProfileSweepSparsityPatternD50";
+            break;
     }
 
     int num_profiles = sizeof(Registry) / sizeof(Registry[0]);
@@ -132,7 +149,7 @@ void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Re
 
     // set up command strings to direct and capture the trace (and its csv file)
     char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_bad_noc_full_profiling_suite/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_fix_sparsity/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
     std::string trace_file_location = trace_directory + test_name + disabled_zones + ".tracy";
 
@@ -185,7 +202,7 @@ void profile_test(
         // I wonder, do we even need to do this?
         dense_matrix<float> tmp(M, N, 0.0f);
         dense_matrix<bfloat16> output = tmp.bfloat16_cast();
-
+        
         host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
 
     }

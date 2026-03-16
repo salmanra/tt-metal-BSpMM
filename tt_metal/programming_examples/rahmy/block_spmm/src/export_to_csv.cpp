@@ -39,11 +39,11 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
 
     // set up command strings to direct and capture the trace (and its csv file)
     char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_bad_noc_full_profiling_suite/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_fix_sparsity/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
     std::string trace_file_location = trace_directory + test_file_name + ".tracy";
 
-    n = sprintf(buf, "/home/user/tt-metal/profiles_bad_noc_full_profiling_suite/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    n = sprintf(buf, "/home/user/tt-metal/profiles_fix_sparsity/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string csv_directory(buf);
     std::string csv_file_location = csv_directory + test_file_name + ".csv";
 
@@ -158,6 +158,23 @@ int main(int argc, char** argv) {
         case 7:
             Registry = ProfileSweepBlockSizeRegistry;
             registry_name = "ProfileSweepBlockSize";
+            break;
+        case 8:
+            Registry = ProfileSweepSparsityPatternRegistry;
+            registry_name = "ProfileSweepSparsityPattern";
+            break;
+        case 9:
+            Registry = ProfileSweepSparsityPatternRegistryD10;
+            registry_name = "ProfileSweepSparsityPatternD10";
+            break;
+        case 10:
+            Registry = ProfileSweepSparsityPatternRegistryD5;
+            registry_name = "ProfileSweepSparsityPatternD5";
+            break;
+        case 11:
+            Registry = ProfileSweepSparsityPatternRegistryD50;
+            registry_name = "ProfileSweepSparsityPatternD50";
+            break;
     }
 
     int num_profiles = sizeof(Registry) / sizeof(Registry[0]);

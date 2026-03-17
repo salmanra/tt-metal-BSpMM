@@ -155,6 +155,13 @@ void kernel_main(){
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in1_receiver_semaphore_addr);
     *(in1_receiver_sem_ptr) = 0;
 
+    // Precompute CB slot addresses for CDA forwarding.
+    // Double-buffered CB has two slots: base and base + half_size.
+    // Receivers encode their slot in the readiness signal so senders
+    // write to the correct address on the receiver's L1.
+    uint32_t in1_cb_base = get_write_ptr(spmm::cb_id_in1);
+    uint32_t in1_single_buf_size = ti.in1_tile_size * in1_block_num_tiles;
+
     // Load or wait for sparse indexing data
     uint32_t* col_indices;
     uint32_t* indptr;
@@ -294,8 +301,9 @@ void kernel_main(){
                     noc_semaphore_set(in1_receiver_sem_ptr, 0);
                     DPRINT_DATA0(DPRINT << "Receiving set local semaphore"<< ENDL());
                     uint64_t sender_sem_noc = get_noc_addr(noc_x_for_column, noc_y_table[my_sender_idx], in1_sender_semaphore_addr);
-                    noc_semaphore_inc(sender_sem_noc, 1);
-                    DPRINT_DATA0(DPRINT << "Receiving set NoC sender semaphore"<< ENDL());
+                    uint32_t my_slot_bit = (l1_write_addr_in1_start != in1_cb_base) ? 1 : 0;
+                    noc_semaphore_inc(sender_sem_noc, 1 + my_slot_bit);
+                    DPRINT_DATA0(DPRINT << "Receiving set NoC sender semaphore, slot=" << my_slot_bit << ENDL());
                     noc_semaphore_wait(in1_receiver_sem_ptr, 1);
                     DPRINT_DATA0(DPRINT << "Receiving got past commit"<< ENDL());
 
@@ -307,13 +315,15 @@ void kernel_main(){
                 if (found_downstream && action != CDA_SOLO) {
                     DPRINT_DATA0(DPRINT << "in1 sharing to x:" << noc_x_for_column << ", y: " << noc_y_table[my_downstream_idx] << ENDL());
 
-                    noc_semaphore_wait(in1_sender_sem_ptr, 1);
-                    DPRINT_DATA0(DPRINT << "Sharing got past waiting semaphore"<< ENDL());
+                    // Wait for downstream readiness — value encodes CB slot bit
+                    while (*in1_sender_sem_ptr == 0) {}
+                    uint32_t receiver_slot_bit = *in1_sender_sem_ptr - 1;
+                    DPRINT_DATA0(DPRINT << "Sharing got past waiting semaphore, recv_slot=" << receiver_slot_bit << ENDL());
                     noc_semaphore_set(in1_sender_sem_ptr, 0);
                     DPRINT_DATA0(DPRINT << "Sharing got past setting semaphore"<< ENDL());
 
-
-                    uint64_t dest_data_addr = get_noc_addr(noc_x_for_column, noc_y_table[my_downstream_idx], l1_write_addr_in1_start);
+                    uint32_t receiver_dest_addr = in1_cb_base + receiver_slot_bit * in1_single_buf_size;
+                    uint64_t dest_data_addr = get_noc_addr(noc_x_for_column, noc_y_table[my_downstream_idx], receiver_dest_addr);
                     noc_async_write(l1_write_addr_in1_start, dest_data_addr, current_block_bytes);
                     noc_async_write_barrier();
                     DPRINT_DATA0(DPRINT << "Sharing got past write barrier"<< ENDL());

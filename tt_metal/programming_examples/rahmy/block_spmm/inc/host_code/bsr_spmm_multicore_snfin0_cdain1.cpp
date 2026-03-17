@@ -619,14 +619,14 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
                 in1_reader_runtime_args.push_back((std::uint32_t)phys_core.y);
             }
 
-            if constexpr (verbose) {
-                log_info(tt::LogVerif, " -- Core ({},{}) CDA noc coords: noc_x_for_column={} --",
-                    core_idx_x, core_idx_y, (uint32_t)column_phys_core.x);
-                for (uint32_t r = 0; r < num_cores_r; r++) {
-                    auto phys_core = device->worker_core_from_logical_core(CoreCoord(core_idx_x, r));
-                    log_info(tt::LogVerif, "   noc_y_table[{}] = {} (logical row {})", r, (uint32_t)phys_core.y, r);
-                }
-            }
+            // if constexpr (verbose) {
+            //     log_info(tt::LogVerif, " -- Core ({},{}) CDA noc coords: noc_x_for_column={} --",
+            //         core_idx_x, core_idx_y, (uint32_t)column_phys_core.x);
+            //     for (uint32_t r = 0; r < num_cores_r; r++) {
+            //         auto phys_core = device->worker_core_from_logical_core(CoreCoord(core_idx_x, r));
+            //         log_info(tt::LogVerif, "   noc_y_table[{}] = {} (logical row {})", r, (uint32_t)phys_core.y, r);
+            //     }
+            // }
 
             // ── compute runtime args ──
             compute_runtime_args.push_back(num_iters_y_this_core);
@@ -635,19 +635,19 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
             for (int iter_y = 0; iter_y < num_iters_y_this_core; iter_y++) {
                 uint32_t folded_output_idx_y = output_y_indices[core_idx_y][iter_y];
                 uint32_t output_idx_y = folded_bsr_matrix_indices[folded_output_idx_y];
-                if constexpr (verbose) {
-                    log_info(tt::LogVerif, " -- Core ({},{}) iter_y={}: folded_output_idx_y={} -> output_idx_y={} --",
-                        core_idx_x, core_idx_y, iter_y, folded_output_idx_y, output_idx_y);
-                    if (output_idx_y + 1 < a.indptr.size()) {
-                        log_info(tt::LogVerif, "     indptr[{}]={}, indptr[{}]={}, row_nnz={}",
-                            output_idx_y, a.indptr[output_idx_y],
-                            output_idx_y + 1, a.indptr[output_idx_y + 1],
-                            a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
-                    } else {
-                        log_info(tt::LogVerif, "     *** BUG: output_idx_y+1={} >= indptr.size()={}, would access out-of-bounds! ***",
-                            output_idx_y + 1, a.indptr.size());
-                    }
-                }
+                // if constexpr (verbose) {
+                //     log_info(tt::LogVerif, " -- Core ({},{}) iter_y={}: folded_output_idx_y={} -> output_idx_y={} --",
+                //         core_idx_x, core_idx_y, iter_y, folded_output_idx_y, output_idx_y);
+                //     if (output_idx_y + 1 < a.indptr.size()) {
+                //         log_info(tt::LogVerif, "     indptr[{}]={}, indptr[{}]={}, row_nnz={}",
+                //             output_idx_y, a.indptr[output_idx_y],
+                //             output_idx_y + 1, a.indptr[output_idx_y + 1],
+                //             a.indptr[output_idx_y + 1] - a.indptr[output_idx_y]);
+                //     } else {
+                //         log_info(tt::LogVerif, "     *** BUG: output_idx_y+1={} >= indptr.size()={}, would access out-of-bounds! ***",
+                //             output_idx_y + 1, a.indptr.size());
+                //     }
+                // }
                 // in0 SNF reader: y_coord and folded_y_coord (always both)
                 in0_snf_reader_runtime_args.push_back(output_idx_y);
                 in0_snf_reader_runtime_args.push_back(folded_output_idx_y);
@@ -697,21 +697,21 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
                 }
             }
 
-            if constexpr (verbose) {
-                log_info(tt::LogVerif, " -- Core ({},{}) CDA column-wide schedule --", core_idx_x, core_idx_y);
-                log_info(tt::LogVerif, "   all_num_iters_y:");
-                for (uint32_t r = 0; r < num_cores_r; r++) {
-                    log_info(tt::LogVerif, "     core_row[{}] num_iters_y = {}", r, output_y_indices[r].size());
-                }
-                log_info(tt::LogVerif, "   all_y_coords (flattened):");
-                for (uint32_t r = 0; r < num_cores_r; r++) {
-                    for (uint32_t iy = 0; iy < output_y_indices[r].size(); iy++) {
-                        uint32_t resolved_row = folded_bsr_matrix_indices[output_y_indices[r][iy]];
-                        log_info(tt::LogVerif, "     core_row[{}] iy[{}] -> resolved BSR row = {}", r, iy, resolved_row);
-                    }
-                }
-                log_info(tt::LogVerif, "   total in1_reader_runtime_args size = {}", in1_reader_runtime_args.size());
-            }
+            // if constexpr (verbose) {
+            //     log_info(tt::LogVerif, " -- Core ({},{}) CDA column-wide schedule --", core_idx_x, core_idx_y);
+            //     log_info(tt::LogVerif, "   all_num_iters_y:");
+            //     for (uint32_t r = 0; r < num_cores_r; r++) {
+            //         log_info(tt::LogVerif, "     core_row[{}] num_iters_y = {}", r, output_y_indices[r].size());
+            //     }
+            //     log_info(tt::LogVerif, "   all_y_coords (flattened):");
+            //     for (uint32_t r = 0; r < num_cores_r; r++) {
+            //         for (uint32_t iy = 0; iy < output_y_indices[r].size(); iy++) {
+            //             uint32_t resolved_row = folded_bsr_matrix_indices[output_y_indices[r][iy]];
+            //             log_info(tt::LogVerif, "     core_row[{}] iy[{}] -> resolved BSR row = {}", r, iy, resolved_row);
+            //         }
+            //     }
+            //     log_info(tt::LogVerif, "   total in1_reader_runtime_args size = {}", in1_reader_runtime_args.size());
+            // }
 
             // Set runtime args for in0 reader
             if (is_injector_core){

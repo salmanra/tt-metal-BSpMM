@@ -144,6 +144,17 @@ void kernel_main(){
     const InterleavedAddrGenFast<true> out_s = {
         .bank_base_address = out_tensor_addr, .page_size = output_tile_size, .data_format = output_format};
 
+    // CDA semaphore setup — MUST happen before indexing load so that
+    // semaphores are initialized before any core can signal us.
+    // (A fast core may finish wait_for_indexing, enter the main loop,
+    //  and noc_semaphore_inc our sender_sem before we reach this point.)
+    volatile tt_l1_ptr uint32_t* in1_sender_sem_ptr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in1_sender_semaphore_addr);
+    *(in1_sender_sem_ptr) = 0;
+    volatile tt_l1_ptr uint32_t* in1_receiver_sem_ptr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in1_receiver_semaphore_addr);
+    *(in1_receiver_sem_ptr) = 0;
+
     // Load or wait for sparse indexing data
     uint32_t* col_indices;
     uint32_t* indptr;
@@ -159,14 +170,6 @@ void kernel_main(){
         indptr = spmm::wait_for_indexing(spmm::cb_id_indptr, indptr_num_tiles);
         col_indices = spmm::wait_for_indexing(spmm::cb_id_col_indices, col_indices_num_tiles);
     }
-
-    // CDA semaphore setup (same pattern as in0 SNF reader)
-    volatile tt_l1_ptr uint32_t* in1_sender_sem_ptr =
-        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in1_sender_semaphore_addr);
-    *(in1_sender_sem_ptr) = 0;
-    volatile tt_l1_ptr uint32_t* in1_receiver_sem_ptr =
-        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in1_receiver_semaphore_addr);
-    *(in1_receiver_sem_ptr) = 0;
 
     // Writer setup (computed unconditionally; values are only used when is_output_writer == 1)
     uint32_t out_num_subblocks_w = in1_block_w / out_subblock_w;
@@ -317,6 +320,7 @@ void kernel_main(){
 
                     uint64_t dest_recv_sem = get_noc_addr(noc_x_for_column, noc_y_table[my_downstream_idx], in1_receiver_semaphore_addr);
                     noc_semaphore_inc(dest_recv_sem, 1);
+                    noc_async_atomic_barrier();
                     DPRINT_DATA0(DPRINT << "Sharing got past commit"<< ENDL());
 
                 }

@@ -166,6 +166,8 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
     auto in0_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in1_sender_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
     auto in1_receiver_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in1_barrier_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
+    auto in1_release_semaphore_id = tt::tt_metal::CreateSemaphore(program, all_cores, INVALID);
 
     // Circular Buffer sizing
     uint32_t in0_CB_num_tiles = in0_block_h * in0_block_w * 2; // double buffer
@@ -416,6 +418,8 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
 
         in1_sender_semaphore_id,                                 // [26]
         in1_receiver_semaphore_id,                               // [27]
+        in1_barrier_semaphore_id,                                // [28]
+        in1_release_semaphore_id,                                // [29]
     };
 
     if constexpr (verbose) {
@@ -430,10 +434,11 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
             "num_tiles_col_indices", "num_tiles_indptr",
             "is_output_writer", "out_tensor_addr", "RtNt", "Nt",
             "out_subblock_w", "out_subblock_h",
-            "in1_sender_sem", "in1_receiver_sem"
+            "in1_sender_sem", "in1_receiver_sem",
+            "in1_barrier_sem", "in1_release_sem"
         };
         for (uint32_t i = 0; i < in1_reader_compile_time_args.size(); i++) {
-            const char* label = (i < 28) ? in1_ct_labels[i] : "???";
+            const char* label = (i < 30) ? in1_ct_labels[i] : "???";
             log_info(tt::LogVerif, "   ct_arg[{}] ({}) = {}", i, label, in1_reader_compile_time_args[i]);
         }
     }

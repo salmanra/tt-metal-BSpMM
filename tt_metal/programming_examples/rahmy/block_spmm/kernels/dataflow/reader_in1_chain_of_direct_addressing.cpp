@@ -73,6 +73,8 @@ void kernel_main(){
     // CDA semaphores
     uint32_t in1_sender_semaphore_addr = get_semaphore(get_compile_time_arg_val(26));
     uint32_t in1_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(27));
+    uint32_t in1_barrier_semaphore_addr = get_semaphore(get_compile_time_arg_val(28));
+    uint32_t in1_release_semaphore_addr = get_semaphore(get_compile_time_arg_val(29));
 
     ///////////////////////////////////////////////////////////////////////
     /// END COMPILETIME ARGS //////////////////////////////////////////////
@@ -154,6 +156,12 @@ void kernel_main(){
     volatile tt_l1_ptr uint32_t* in1_receiver_sem_ptr =
         reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in1_receiver_semaphore_addr);
     *(in1_receiver_sem_ptr) = 0;
+    volatile tt_l1_ptr uint32_t* in1_barrier_sem_ptr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in1_barrier_semaphore_addr);
+    *(in1_barrier_sem_ptr) = 0;
+    volatile tt_l1_ptr uint32_t* in1_release_sem_ptr =
+        reinterpret_cast<volatile tt_l1_ptr uint32_t*>(in1_release_semaphore_addr);
+    *(in1_release_sem_ptr) = 0;
 
     // Precompute CB slot addresses for CDA forwarding.
     // Double-buffered CB has two slots: base and base + half_size.
@@ -209,130 +217,175 @@ void kernel_main(){
         // Block bytes for forwarding
         uint32_t current_block_bytes = ti.in1_tile_size * in1_block_num_tiles;
 
+        // Precompute barrier leader and participant count for this iter_y
+        // Leader = lowest-indexed core that participates in this iter_y
+        uint32_t barrier_participants = 0;
+        uint32_t barrier_leader_idx = my_core_idx_y;  // fallback
+        bool leader_found = false;
+        for (uint32_t r = 0; r < num_cores_in_column; r++) {
+            if (iter_y < all_num_iters_y[r]) {
+                barrier_participants++;
+                if (!leader_found) {
+                    barrier_leader_idx = r;
+                    leader_found = true;
+                }
+            }
+        }
+        bool is_barrier_leader = (my_core_idx_y == barrier_leader_idx);
+        uint64_t leader_barrier_noc_addr = get_noc_addr(
+            noc_x_for_column, noc_y_table[barrier_leader_idx], in1_barrier_semaphore_addr);
+
         for (uint32_t iter_x = 0; iter_x < num_iters_x; iter_x++){
             output_idx_x = output_idx_x_start + iter_x;
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
 
             for (uint32_t vstep = 0; vstep < max_blocks; vstep++){
-                // NOP check: if this core has no block at this vstep, skip
-                if (my_block_start + vstep >= my_block_end) continue;
+                bool has_work_this_vstep = (my_block_start + vstep < my_block_end);
 
-                uint32_t my_col = col_indices[my_block_start + vstep];
+                if (has_work_this_vstep) {
+                    uint32_t my_col = col_indices[my_block_start + vstep];
 
-                // ── Share set computation ──
-                // Scan all cores in column. Find:
-                // - share_set_size: how many cores need this same col index at this vstep
-                // - injector_idx: max core_idx_y in share set (reads from DRAM)
-                // - my_sender_idx: smallest r > my_core_idx_y in share set (sends data to us)
-                // - my_downstream_idx: largest r < my_core_idx_y in share set (we forward to them)
-                uint32_t share_set_size = 0;
-                uint32_t injector_idx = my_core_idx_y;  // guaranteed in set
-                bool found_sender = false;
-                uint32_t my_sender_idx = 0;
-                bool found_downstream = false;
-                uint32_t my_downstream_idx = 0;
+                    // ── Share set computation ──
+                    // Scan all cores in column. Find:
+                    // - share_set_size: how many cores need this same col index at this vstep
+                    // - injector_idx: max core_idx_y in share set (reads from DRAM)
+                    // - my_sender_idx: smallest r > my_core_idx_y in share set (sends data to us)
+                    // - my_downstream_idx: largest r < my_core_idx_y in share set (we forward to them)
+                    uint32_t share_set_size = 0;
+                    uint32_t injector_idx = my_core_idx_y;  // guaranteed in set
+                    bool found_sender = false;
+                    uint32_t my_sender_idx = 0;
+                    bool found_downstream = false;
+                    uint32_t my_downstream_idx = 0;
 
-                for (uint32_t r = 0; r < num_cores_in_column; r++) {
-                    if (iter_y >= all_num_iters_y[r]) continue;
-                    uint32_t their_row = all_y_coords_flat[all_y_coords_offsets[r] + iter_y];
-                    uint32_t their_start = indptr[their_row];
-                    uint32_t their_end = indptr[their_row + 1];
-                    if (their_start + vstep >= their_end) continue;
+                    for (uint32_t r = 0; r < num_cores_in_column; r++) {
+                        if (iter_y >= all_num_iters_y[r]) continue;
+                        uint32_t their_row = all_y_coords_flat[all_y_coords_offsets[r] + iter_y];
+                        uint32_t their_start = indptr[their_row];
+                        uint32_t their_end = indptr[their_row + 1];
+                        if (their_start + vstep >= their_end) continue;
 
-                    uint32_t their_col = col_indices[their_start + vstep];
-                    if (their_col == my_col) {
-                        share_set_size++;
-                        // injector = max core_idx_y in share set
-                        if (r > injector_idx) {
-                            injector_idx = r;
-                        }
-                        // my_sender_idx = smallest r > my_core_idx_y in share set
-                        if (r > my_core_idx_y) {
-                            if (!found_sender || r < my_sender_idx) {
-                                my_sender_idx = r;
-                                found_sender = true;
+                        uint32_t their_col = col_indices[their_start + vstep];
+                        if (their_col == my_col) {
+                            share_set_size++;
+                            // injector = max core_idx_y in share set
+                            if (r > injector_idx) {
+                                injector_idx = r;
                             }
-                        }
-                        // my_downstream_idx = largest r < my_core_idx_y in share set
-                        if (r < my_core_idx_y) {
-                            if (!found_downstream || r > my_downstream_idx) {
-                                my_downstream_idx = r;
-                                found_downstream = true;
+                            // my_sender_idx = smallest r > my_core_idx_y in share set
+                            if (r > my_core_idx_y) {
+                                if (!found_sender || r < my_sender_idx) {
+                                    my_sender_idx = r;
+                                    found_sender = true;
+                                }
+                            }
+                            // my_downstream_idx = largest r < my_core_idx_y in share set
+                            if (r < my_core_idx_y) {
+                                if (!found_downstream || r > my_downstream_idx) {
+                                    my_downstream_idx = r;
+                                    found_downstream = true;
+                                }
                             }
                         }
                     }
-                }
 
-                // ── Determine action ──
-                uint32_t action;
-                if (share_set_size <= 1) {
-                    action = CDA_SOLO;
-                } else if (my_core_idx_y == injector_idx) {
-                    action = CDA_DRAM_READ;
-                } else {
-                    action = CDA_RECEIVE;
-                }
+                    // ── Determine action ──
+                    uint32_t action;
+                    if (share_set_size <= 1) {
+                        action = CDA_SOLO;
+                    } else if (my_core_idx_y == injector_idx) {
+                        action = CDA_DRAM_READ;
+                    } else {
+                        action = CDA_RECEIVE;
+                    }
 
-                // ── Execute action ──
-                cb_reserve_back(spmm::cb_id_in1, in1_block_num_tiles);
-                uint32_t l1_write_addr_in1 = get_write_ptr(spmm::cb_id_in1);
-                uint32_t l1_write_addr_in1_start = l1_write_addr_in1;  // Save before read_block_by_tile mutates it
+                    // ── Execute action ──
+                    cb_reserve_back(spmm::cb_id_in1, in1_block_num_tiles);
+                    uint32_t l1_write_addr_in1 = get_write_ptr(spmm::cb_id_in1);
+                    uint32_t l1_write_addr_in1_start = l1_write_addr_in1;  // Save before read_block_by_tile mutates it
 
-                if (action == CDA_SOLO || action == CDA_DRAM_READ) {
+                    if (action == CDA_SOLO || action == CDA_DRAM_READ) {
 #if SKIP_IN1_DRAM_READ == 0
-                    // DRAM read
+                        // DRAM read
 #if PROFILE_READ_IN1 == 1
-                    DeviceZoneScopedN("SpMM Zone: CDA Reading dense block of in1 from DRAM");
+                        DeviceZoneScopedN("SpMM Zone: CDA Reading dense block of in1 from DRAM");
 #endif
-                    DPRINT_DATA0(DPRINT << "in1 DRAM Read: " << action << ENDL());
+                        DPRINT_DATA0(DPRINT << "in1 DRAM Read: " << action << ENDL());
 
-                    spmm::read_block_by_tile(
-                        in1_tensor_start_tile_id + my_col * in1_block_stride,
-                        s1, l1_write_addr_in1,
-                        ti.in1_tile_size, in1_block_h, in1_block_w,
-                        in1_tensor_stride_h, in1_tensor_stride_w);
-                    noc_async_read_barrier();
+                        spmm::read_block_by_tile(
+                            in1_tensor_start_tile_id + my_col * in1_block_stride,
+                            s1, l1_write_addr_in1,
+                            ti.in1_tile_size, in1_block_h, in1_block_w,
+                            in1_tensor_stride_h, in1_tensor_stride_w);
+                        noc_async_read_barrier();
 #endif
-                } else {
-                    // RECEIVE — wait for data from sender
-                    DPRINT_DATA0(DPRINT << "in1 receiving from x: " << noc_x_for_column << ", y: " << noc_y_table[my_sender_idx] << ENDL());
+                    } else {
+                        // RECEIVE — wait for data from sender
+                        DPRINT_DATA0(DPRINT << "in1 receiving from x: " << noc_x_for_column << ", y: " << noc_y_table[my_sender_idx] << ENDL());
 
-                    noc_semaphore_set(in1_receiver_sem_ptr, 0);
-                    DPRINT_DATA0(DPRINT << "Receiving set local semaphore"<< ENDL());
-                    uint64_t sender_sem_noc = get_noc_addr(noc_x_for_column, noc_y_table[my_sender_idx], in1_sender_semaphore_addr);
-                    uint32_t my_slot_bit = (l1_write_addr_in1_start != in1_cb_base) ? 1 : 0;
-                    noc_semaphore_inc(sender_sem_noc, 1 + my_slot_bit);
-                    DPRINT_DATA0(DPRINT << "Receiving set NoC sender semaphore, slot=" << my_slot_bit << ENDL());
-                    noc_semaphore_wait(in1_receiver_sem_ptr, 1);
-                    DPRINT_DATA0(DPRINT << "Receiving got past commit"<< ENDL());
+                        noc_semaphore_set(in1_receiver_sem_ptr, 0);
+                        DPRINT_DATA0(DPRINT << "Receiving set local semaphore"<< ENDL());
+                        uint64_t sender_sem_noc = get_noc_addr(noc_x_for_column, noc_y_table[my_sender_idx], in1_sender_semaphore_addr);
+                        uint32_t my_slot_bit = (l1_write_addr_in1_start != in1_cb_base) ? 1 : 0;
+                        noc_semaphore_inc(sender_sem_noc, 1 + my_slot_bit);
+                        DPRINT_DATA0(DPRINT << "Receiving set NoC sender semaphore, slot=" << my_slot_bit << ENDL());
+                        noc_semaphore_wait(in1_receiver_sem_ptr, 1);
+                        DPRINT_DATA0(DPRINT << "Receiving got past commit"<< ENDL());
 
-                }
+                    }
 
-                cb_push_back(spmm::cb_id_in1, in1_block_num_tiles);
+                    cb_push_back(spmm::cb_id_in1, in1_block_num_tiles);
 
-                // Forward to downstream if applicable
-                if (found_downstream && action != CDA_SOLO) {
-                    DPRINT_DATA0(DPRINT << "in1 sharing to x:" << noc_x_for_column << ", y: " << noc_y_table[my_downstream_idx] << ENDL());
+                    // Forward to downstream if applicable
+                    if (found_downstream && action != CDA_SOLO) {
+                        DPRINT_DATA0(DPRINT << "in1 sharing to x:" << noc_x_for_column << ", y: " << noc_y_table[my_downstream_idx] << ENDL());
 
-                    // Wait for downstream readiness — value encodes CB slot bit
-                    while (*in1_sender_sem_ptr == 0) {}
-                    uint32_t receiver_slot_bit = *in1_sender_sem_ptr - 1;
-                    DPRINT_DATA0(DPRINT << "Sharing got past waiting semaphore, recv_slot=" << receiver_slot_bit << ENDL());
-                    noc_semaphore_set(in1_sender_sem_ptr, 0);
-                    DPRINT_DATA0(DPRINT << "Sharing got past setting semaphore"<< ENDL());
+                        // Wait for downstream readiness — value encodes CB slot bit
+                        while (*in1_sender_sem_ptr == 0) {}
+                        uint32_t receiver_slot_bit = *in1_sender_sem_ptr - 1;
+                        DPRINT_DATA0(DPRINT << "Sharing got past waiting semaphore, recv_slot=" << receiver_slot_bit << ENDL());
+                        noc_semaphore_set(in1_sender_sem_ptr, 0);
+                        DPRINT_DATA0(DPRINT << "Sharing got past setting semaphore"<< ENDL());
 
-                    uint32_t receiver_dest_addr = in1_cb_base + receiver_slot_bit * in1_single_buf_size;
-                    uint64_t dest_data_addr = get_noc_addr(noc_x_for_column, noc_y_table[my_downstream_idx], receiver_dest_addr);
-                    noc_async_write(l1_write_addr_in1_start, dest_data_addr, current_block_bytes);
-                    noc_async_write_barrier();
-                    DPRINT_DATA0(DPRINT << "Sharing got past write barrier"<< ENDL());
+                        uint32_t receiver_dest_addr = in1_cb_base + receiver_slot_bit * in1_single_buf_size;
+                        uint64_t dest_data_addr = get_noc_addr(noc_x_for_column, noc_y_table[my_downstream_idx], receiver_dest_addr);
+                        noc_async_write(l1_write_addr_in1_start, dest_data_addr, current_block_bytes);
+                        noc_async_write_barrier();
+                        DPRINT_DATA0(DPRINT << "Sharing got past write barrier"<< ENDL());
 
-                    uint64_t dest_recv_sem = get_noc_addr(noc_x_for_column, noc_y_table[my_downstream_idx], in1_receiver_semaphore_addr);
-                    noc_semaphore_inc(dest_recv_sem, 1);
-                    noc_async_atomic_barrier();
-                    DPRINT_DATA0(DPRINT << "Sharing got past commit"<< ENDL());
+                        uint64_t dest_recv_sem = get_noc_addr(noc_x_for_column, noc_y_table[my_downstream_idx], in1_receiver_semaphore_addr);
+                        noc_semaphore_inc(dest_recv_sem, 1);
+                        noc_async_atomic_barrier();
+                        DPRINT_DATA0(DPRINT << "Sharing got past commit"<< ENDL());
 
+                    }
+                } // end has_work_this_vstep
+
+                // ── Column-wide vstep barrier (star topology, dynamic leader per iter_y) ──
+                // Ensures no core races ahead to vstep V+1 and contaminates
+                // another core's sender_sem while that core is still at vstep V.
+                if (barrier_participants > 1) {
+                    if (is_barrier_leader) {
+                        // Leader: wait for all other participants to check in
+                        noc_semaphore_wait(in1_barrier_sem_ptr, barrier_participants - 1);
+                        noc_semaphore_set(in1_barrier_sem_ptr, 0);
+                        // Broadcast release to all other participants
+                        for (uint32_t r = 0; r < num_cores_in_column; r++) {
+                            if (r == my_core_idx_y) continue;
+                            if (iter_y >= all_num_iters_y[r]) continue;
+                            uint64_t their_release = get_noc_addr(
+                                noc_x_for_column, noc_y_table[r], in1_release_semaphore_addr);
+                            noc_semaphore_inc(their_release, 1);
+                        }
+                        noc_async_atomic_barrier();
+                    } else {
+                        // Non-leader: check in with leader, then wait for release
+                        noc_semaphore_inc(leader_barrier_noc_addr, 1);
+                        noc_async_atomic_barrier();
+                        noc_semaphore_wait(in1_release_sem_ptr, 1);
+                        noc_semaphore_set(in1_release_sem_ptr, 0);
+                    }
                 }
             }
 

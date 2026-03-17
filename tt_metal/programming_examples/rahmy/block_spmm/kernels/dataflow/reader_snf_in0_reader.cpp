@@ -145,7 +145,7 @@ void kernel_main(){
         col_indices = spmm::wait_for_indexing(spmm::cb_id_col_indices, col_indices_num_tiles);
     }
 
-    DPRINT_DATA0(DPRINT << "RK got all args" << ENDL());
+    //DPRINT_DATA1(DPRINT << "RK got all args" << ENDL());
 
     // Writer setup
     uint32_t out_subblock_num_tiles = out_subblock_h * out_subblock_w;
@@ -194,7 +194,7 @@ void kernel_main(){
                         in0_tensor_stride_h, in0_tensor_stride_w);
                     noc_async_read_barrier();
 #endif
-                    DPRINT_DATA0(DPRINT << " done injecting" << ENDL());
+                    //DPRINT_DATA1(DPRINT << " done injecting" << ENDL());
                 }
                 else {
 #if PROFILE_WAIT_IN0 == 1
@@ -204,7 +204,7 @@ void kernel_main(){
                     noc_semaphore_set(in0_receiver_semaphore_addr_ptr, 0);
                     noc_semaphore_inc(in0_sender_semaphore_noc_addr, 1);
                     noc_semaphore_wait(in0_receiver_semaphore_addr_ptr, 1);
-                    DPRINT_DATA0(DPRINT << " done receiving" << ENDL());
+                    //DPRINT_DATA1(DPRINT << " done receiving" << ENDL());
                 }
                 
                 cb_push_back(spmm::cb_id_in0, in0_block_num_tiles);
@@ -253,6 +253,6 @@ void kernel_main(){
     }
     cb_pop_front(spmm::cb_id_col_indices, col_indices_num_tiles);
     cb_pop_front(spmm::cb_id_indptr, indptr_num_tiles);
-    DPRINT_DATA0(DPRINT << "in0 kernel complete" << ENDL());
+    //DPRINT_DATA1(DPRINT << "in0 kernel complete" << ENDL());
 
 }

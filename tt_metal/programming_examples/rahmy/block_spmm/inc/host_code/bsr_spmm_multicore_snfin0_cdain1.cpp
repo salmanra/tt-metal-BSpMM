@@ -418,6 +418,26 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
         in1_receiver_semaphore_id,                               // [27]
     };
 
+    if constexpr (verbose) {
+        log_info(tt::LogVerif, " -- in1 CDA reader compile-time args (size={}) --", in1_reader_compile_time_args.size());
+        const char* in1_ct_labels[] = {
+            "src0_is_dram", "src1_is_dram", "col_indices_is_dram", "indptr_is_dram",
+            "in0_tensor_addr", "in0_tensor_stride_w", "in0_tensor_stride_h",
+            "in0_block_w", "in0_block_h(Rt)", "in0_block_num_tiles",
+            "in1_tensor_addr", "in1_tensor_stride_w", "in1_tensor_stride_h",
+            "in1_block_w", "in1_block_h", "in1_block_num_tiles",
+            "col_indices_addr", "indptr_addr",
+            "num_tiles_col_indices", "num_tiles_indptr",
+            "is_output_writer", "out_tensor_addr", "RtNt", "Nt",
+            "out_subblock_w", "out_subblock_h",
+            "in1_sender_sem", "in1_receiver_sem"
+        };
+        for (uint32_t i = 0; i < in1_reader_compile_time_args.size(); i++) {
+            const char* label = (i < 28) ? in1_ct_labels[i] : "???";
+            log_info(tt::LogVerif, "   ct_arg[{}] ({}) = {}", i, label, in1_reader_compile_time_args[i]);
+        }
+    }
+
     std::vector<uint32_t> compute_kernel_compile_time_args = {
         (std::uint32_t)in0_block_w,
         (std::uint32_t)in0_num_subblocks,
@@ -504,6 +524,17 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
     std::vector<int> perm(nnz_row_diffs.size());
     sortingPermutation(nnz_row_diffs, perm);
 
+    if constexpr (verbose) {
+        log_info(tt::LogVerif, " -- nnz_row_diffs (size={}) --", nnz_row_diffs.size());
+        for (uint32_t i = 0; i < nnz_row_diffs.size(); i++) {
+            log_info(tt::LogVerif, "   nnz_row_diffs[{}] = {}", i, nnz_row_diffs[i]);
+        }
+        log_info(tt::LogVerif, " -- perm (size={}) --", perm.size());
+        for (uint32_t i = 0; i < perm.size(); i++) {
+            log_info(tt::LogVerif, "   perm[{}] = {} (nnz_row_diffs[perm[{}]] = {})", i, perm[i], i, nnz_row_diffs[perm[i]]);
+        }
+    }
+
     // 1. initialize a vector for each row of cores
     std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
     // 2. While count is less than num output blocks, sweep the core grid
@@ -561,6 +592,11 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
             uint32_t num_iters_y_this_core = output_y_indices[core_idx_y].size();
             uint32_t num_iters_x_this_core = std::min(num_iters_x, num_blocks_x - output_idx_x_start + 1);
 
+            if constexpr (verbose) {
+                log_info(tt::LogVerif, " -- Core ({},{}) iter assignment: num_iters_x={}, num_iters_y={}, output_idx_x_start={} --",
+                    core_idx_x, core_idx_y, num_iters_x_this_core, num_iters_y_this_core, output_idx_x_start);
+            }
+
             // ── in0 SNF reader runtime args (IDENTICAL to SNF version) ──
             in0_snf_reader_runtime_args.push_back(num_iters_x_this_core);
             in0_snf_reader_runtime_args.push_back(num_iters_y_this_core);
@@ -581,6 +617,15 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
             for (uint32_t r = 0; r < num_cores_r; r++) {
                 auto phys_core = device->worker_core_from_logical_core(CoreCoord(core_idx_x, r));
                 in1_reader_runtime_args.push_back((std::uint32_t)phys_core.y);
+            }
+
+            if constexpr (verbose) {
+                log_info(tt::LogVerif, " -- Core ({},{}) CDA noc coords: noc_x_for_column={} --",
+                    core_idx_x, core_idx_y, (uint32_t)column_phys_core.x);
+                for (uint32_t r = 0; r < num_cores_r; r++) {
+                    auto phys_core = device->worker_core_from_logical_core(CoreCoord(core_idx_x, r));
+                    log_info(tt::LogVerif, "   noc_y_table[{}] = {} (logical row {})", r, (uint32_t)phys_core.y, r);
+                }
             }
 
             // ── compute runtime args ──
@@ -650,6 +695,22 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
                     uint32_t resolved_row = folded_bsr_matrix_indices[output_y_indices[r][iy]];
                     in1_reader_runtime_args.push_back(resolved_row);
                 }
+            }
+
+            if constexpr (verbose) {
+                log_info(tt::LogVerif, " -- Core ({},{}) CDA column-wide schedule --", core_idx_x, core_idx_y);
+                log_info(tt::LogVerif, "   all_num_iters_y:");
+                for (uint32_t r = 0; r < num_cores_r; r++) {
+                    log_info(tt::LogVerif, "     core_row[{}] num_iters_y = {}", r, output_y_indices[r].size());
+                }
+                log_info(tt::LogVerif, "   all_y_coords (flattened):");
+                for (uint32_t r = 0; r < num_cores_r; r++) {
+                    for (uint32_t iy = 0; iy < output_y_indices[r].size(); iy++) {
+                        uint32_t resolved_row = folded_bsr_matrix_indices[output_y_indices[r][iy]];
+                        log_info(tt::LogVerif, "     core_row[{}] iy[{}] -> resolved BSR row = {}", r, iy, resolved_row);
+                    }
+                }
+                log_info(tt::LogVerif, "   total in1_reader_runtime_args size = {}", in1_reader_runtime_args.size());
             }
 
             // Set runtime args for in0 reader

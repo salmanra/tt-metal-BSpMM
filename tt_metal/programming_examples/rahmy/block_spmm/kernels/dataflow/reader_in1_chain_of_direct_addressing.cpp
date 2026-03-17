@@ -275,6 +275,8 @@ void kernel_main(){
 #if PROFILE_READ_IN1 == 1
                     DeviceZoneScopedN("SpMM Zone: CDA Reading dense block of in1 from DRAM");
 #endif
+                    DPRINT_DATA0(DPRINT << "in1 DRAM Read: " << action << ENDL());
+
                     spmm::read_block_by_tile(
                         in1_tensor_start_tile_id + my_col * in1_block_stride,
                         s1, l1_write_addr_in1,
@@ -284,25 +286,39 @@ void kernel_main(){
 #endif
                 } else {
                     // RECEIVE — wait for data from sender
+                    DPRINT_DATA0(DPRINT << "in1 receiving from x: " << noc_x_for_column << ", y: " << noc_y_table[my_sender_idx] << ENDL());
+
                     noc_semaphore_set(in1_receiver_sem_ptr, 0);
+                    DPRINT_DATA0(DPRINT << "Receiving set local semaphore"<< ENDL());
                     uint64_t sender_sem_noc = get_noc_addr(noc_x_for_column, noc_y_table[my_sender_idx], in1_sender_semaphore_addr);
                     noc_semaphore_inc(sender_sem_noc, 1);
+                    DPRINT_DATA0(DPRINT << "Receiving set NoC sender semaphore"<< ENDL());
                     noc_semaphore_wait(in1_receiver_sem_ptr, 1);
+                    DPRINT_DATA0(DPRINT << "Receiving got past commit"<< ENDL());
+
                 }
 
                 cb_push_back(spmm::cb_id_in1, in1_block_num_tiles);
 
                 // Forward to downstream if applicable
                 if (found_downstream && action != CDA_SOLO) {
+                    DPRINT_DATA0(DPRINT << "in1 sharing to x:" << noc_x_for_column << ", y: " << noc_y_table[my_downstream_idx] << ENDL());
+
                     noc_semaphore_wait(in1_sender_sem_ptr, 1);
+                    DPRINT_DATA0(DPRINT << "Sharing got past waiting semaphore"<< ENDL());
                     noc_semaphore_set(in1_sender_sem_ptr, 0);
+                    DPRINT_DATA0(DPRINT << "Sharing got past setting semaphore"<< ENDL());
+
 
                     uint64_t dest_data_addr = get_noc_addr(noc_x_for_column, noc_y_table[my_downstream_idx], l1_write_addr_in1_start);
                     noc_async_write(l1_write_addr_in1_start, dest_data_addr, current_block_bytes);
                     noc_async_write_barrier();
+                    DPRINT_DATA0(DPRINT << "Sharing got past write barrier"<< ENDL());
 
                     uint64_t dest_recv_sem = get_noc_addr(noc_x_for_column, noc_y_table[my_downstream_idx], in1_receiver_semaphore_addr);
                     noc_semaphore_inc(dest_recv_sem, 1);
+                    DPRINT_DATA0(DPRINT << "Sharing got past commit"<< ENDL());
+
                 }
             }
 

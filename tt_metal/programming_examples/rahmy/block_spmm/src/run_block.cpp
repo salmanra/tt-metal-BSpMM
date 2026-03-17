@@ -128,15 +128,17 @@ void run_full_test(int host_code_num, int test_num, TestFunctionPtr* registry){
 }
 
 int main(int argc, char** argv) {
+    bool run_all = true;
+
     int test_num = 0;
     int host_code_index = 0;
     if (argc > 1) {
-        test_num = std::stoi(argv[1]);
+        run_all = std::string(argv[1]) == "all";
     }
     if (argc > 2) {
         host_code_index = std::stoi(argv[2]);
     }
-
+    size_t num_tests = 0;
     // Registry selection (mirrors profile_block.cpp)
     int registry_number = argc > 3 ? std::stoi(argv[3]) : -1;
     std::string registry_name = "";
@@ -145,61 +147,96 @@ int main(int argc, char** argv) {
         case 0:
             Registry = ProfileCaseRegistry;
             registry_name = "ProfileSuiteSparseVersioning";
+            num_tests = sizeof(ProfileCaseRegistry) / sizeof(ProfileCaseRegistry[0]);
             break;
         case 1:
             Registry = ProfileDenseAblationRegistry;
             registry_name = "DenseAblationKProfileSuite";
+            num_tests = sizeof(ProfileDenseAblationRegistry) / sizeof(ProfileDenseAblationRegistry[0]);
             break;
         case 2:
             Registry = ProfileLargeSparseRegistry;
             registry_name = "ProfileSuiteLargeSparseVersioning";
+            num_tests = sizeof(ProfileLargeSparseRegistry) / sizeof(ProfileLargeSparseRegistry[0]);
             break;
         case 3:
             Registry = ProfileLargeSparseLargeBlocksRegistry;
             registry_name = "ProfileSuiteLargeSparseLargeBlocksVersioning";
+            num_tests = sizeof(ProfileLargeSparseLargeBlocksRegistry) / sizeof(ProfileLargeSparseLargeBlocksRegistry[0]);
             break;
         case 4:
             Registry = ProfileSweepNRegistry;
             registry_name = "ProfileSweepN";
+            num_tests = sizeof(ProfileSweepNRegistry) / sizeof(ProfileSweepNRegistry[0]);
             break;
         case 5:
             Registry = ProfileSweepDensityRegistry;
             registry_name = "ProfileSweepDensity";
+            num_tests = sizeof(ProfileSweepDensityRegistry) / sizeof(ProfileSweepDensityRegistry[0]);
             break;
         case 6:
             Registry = ProfileSweepKRegistry;
             registry_name = "ProfileSweepK";
+            num_tests = sizeof(ProfileSweepKRegistry) / sizeof(ProfileSweepKRegistry[0]);
             break;
         case 7:
             Registry = ProfileSweepBlockSizeRegistry;
             registry_name = "ProfileSweepBlockSize";
+            num_tests = sizeof(ProfileSweepBlockSizeRegistry) / sizeof(ProfileSweepBlockSizeRegistry[0]);
             break;
         case 8:
             Registry = ProfileSweepSparsityPatternRegistry;
             registry_name = "ProfileSweepSparsityPattern";
+            num_tests = sizeof(ProfileSweepSparsityPatternRegistry) / sizeof(ProfileSweepSparsityPatternRegistry[0]);
             break;
         case 9:
             Registry = ProfileSweepSparsityPatternRegistryD10;
             registry_name = "ProfileSweepSparsityPatternD10";
+            num_tests = sizeof(ProfileSweepSparsityPatternRegistryD10) / sizeof(ProfileSweepSparsityPatternRegistryD10[0]);
             break;
         case 10:
             Registry = ProfileSweepSparsityPatternRegistryD5;
             registry_name = "ProfileSweepSparsityPatternD5";
+            num_tests = sizeof(ProfileSweepSparsityPatternRegistryD5) / sizeof(ProfileSweepSparsityPatternRegistryD5[0]);
             break;
         case 11:
             Registry = ProfileSweepSparsityPatternRegistryD50;
             registry_name = "ProfileSweepSparsityPatternD50";
+            num_tests = sizeof(ProfileSweepSparsityPatternRegistryD50) / sizeof(ProfileSweepSparsityPatternRegistryD50[0]);
             break;
         default:
             Registry = TestRegistry;
+            num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
             break;
     }
 
-    test_num = argc > 1 ? std::stoi(argv[1]) : -1;
-    if (test_num == -1) {
-        console_printf("No test specified. Returning.\n");
-        return 0;
+    if (run_all) {
+        int saved_stdout = ::dup(STDOUT_FILENO);
+        if (saved_stdout == -1) {
+            std::perror("dup");
+            return 1;
+        }
+        int log_fd = ::open("std.out.log", O_CREAT | O_WRONLY | O_TRUNC, 0644);
+        if (log_fd == -1) {
+            std::perror("open");
+            return 1;
+        }
+        if (::dup2(log_fd, STDOUT_FILENO) == -1) {
+            std::perror("dup2");
+            return 1;
+        }
+        ::close(log_fd);
+
+        for (size_t i = 0; i < num_tests; i++) {
+            run_full_test(host_code_index, i, Registry);
+        }
+    } else {
+        test_num = argc > 1 ? std::stoi(argv[1]) : -1;
+        if (test_num == -1) {
+            console_printf("No test specified. Returning.\n");
+            return 0;
+        }
+        run_full_test(host_code_index, test_num, Registry);
+        console_printf("Leaving the test program\n");
     }
-    run_full_test(host_code_index, test_num, Registry);
-    console_printf("Leaving the test program\n");
 }

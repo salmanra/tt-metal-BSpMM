@@ -389,6 +389,10 @@ int main(int argc, char** argv) {
             registry = ProfileLargeSparseRegistry;
             num_tests = sizeof(ProfileLargeSparseRegistry) / sizeof(ProfileLargeSparseRegistry[0]);
             break;
+        case 3:
+            registry = ProfileLargeSparseLargeBlocksRegistry;
+            num_tests = sizeof(ProfileLargeSparseLargeBlocksRegistry) / sizeof(ProfileLargeSparseLargeBlocksRegistry[0]);
+            break;
         default:
             registry = TestRegistry;
             num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);

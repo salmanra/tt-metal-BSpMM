@@ -28,6 +28,7 @@ import pandas as pd
 
 # Ordered from fastest to slowest (for consistent legend / bar ordering)
 ALGOS = [
+    "bsr_spmm_multicore_snfin0_cdain1",
     "bsr_spmm_multicore_snf",
     "bsr_spmm_multicore_load_balanced_new_DM",
     "bsr_spmm_multicore_naive_new_DM",
@@ -36,14 +37,16 @@ ALGOS = [
 ]
 
 ALGO_LABEL = {
+    "bsr_spmm_multicore_snfin0_cdain1":       "SNF in0 CDA in1",
     "bsr_spmm_multicore_snf":                 "SNF",
     "bsr_spmm_multicore_load_balanced_new_DM": "LB (new DM)",
     "bsr_spmm_multicore_naive_new_DM":         "Naive (new DM)",
     "bsr_spmm_multicore_load_balanced":        "Load Balanced",
-    "bsr_spmm_multicore_reuse_iteration":      "Reuse Iter.",
+    "bsr_spmm_multicore_reuse_iteration":      "Naive",
 }
 
 ALGO_COLOR = {
+    "bsr_spmm_multicore_snfin0_cdain1":       "#BB6500",
     "bsr_spmm_multicore_snf":                 "#1565C0",
     "bsr_spmm_multicore_load_balanced_new_DM": "#E53935",
     "bsr_spmm_multicore_naive_new_DM":         "#43A047",
@@ -1339,7 +1342,7 @@ def make_figure16(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
         fig.legend(handles, labels, loc="upper center", ncol=len(labels),
                    fontsize=9, frameon=False, bbox_to_anchor=(0.5, 1.0))
         fig.suptitle(
-            "SpMM Throughput vs. Sparsity Pattern (grouped by algorithm)",
+            "SpMM Throughput vs. Sparsity Pattern (grouped by algorithm).\n8192x8192x8192, R=C=256",
             fontsize=13, fontweight="bold", y=1.04,
         )
 
@@ -1430,7 +1433,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--data-dir", type=Path,
-        default=Path("/home/user/tt-metal/profiles_opt_noc_flip_writer/csvs"),
+        default=Path("/home/user/tt-metal/profiles_opt_noc_full_profiling_suite/csvs"),
         help="Root directory containing the registry subdirectories (*.csv files)",
     )
     parser.add_argument(

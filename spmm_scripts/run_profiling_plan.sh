@@ -13,17 +13,17 @@
 # Phases:
 #   ablation  - Run 4 skip-ablation variants (no_a_read, no_b_read, no_compute,
 #               no_write) for each algorithm against a chosen reference registry.
-#               Host codes 5-24 in HostCodeRegistryProfiling, registry default=2.
-#   sweep     - Run the 5 base algorithms against the 4 parametric sweep registries
+#               Host codes 6-29 in HostCodeRegistryProfiling, registry default=2.
+#   sweep     - Run the 6 base algorithms against the 4 parametric sweep registries
 #               (N sweep, density sweep, K sweep, block-size sweep).
-#               Host codes 0-4 in HostCodeRegistryProfiling, registries 4-7.
+#               Host codes 0-5 in HostCodeRegistryProfiling, registries 4-7.
 #   flip_noc  - Run the non-optimal NoC assignment variants (full + 4 ablation groups)
 #               against a chosen reference registry.
-#               Host codes 25-49 in HostCodeRegistryProfiling, registry default=2.
+#               Host codes 30-59 in HostCodeRegistryProfiling, registry default=2.
 #   all       - Run ablation + sweep phases (default). Does NOT include flip_noc.
 #
 # Options:
-#   --host-code <i|all>       Override host-code index (0-4 for base, 5-24 for ablation)
+#   --host-code <i|all>       Override host-code index (0-5 for base, 6-29 for ablation)
 #   --registry <i|all>        Override profile registry for sweep phase (4-7, or all 4-7)
 #   --ablation-registry <i|all> Registry to use for ablation/flip_noc phase (default: 2)
 #                             Use "all" to run against all registries (0-7)
@@ -46,16 +46,16 @@
 #  11  ProfileSweepSparsityPatternD50 (parametric, sweep sparsity pattern, density=50%)
 #
 # Host code index map in HostCodeRegistryProfiling:
-#   [0-4]   Full algorithms: snf, load_balanced, reuse_iteration, naive_new_DM, lb_new_DM
-#   [5-9]   no_a_read  variants (SKIP_IN0_DRAM_READ=1)
-#   [10-14] no_b_read  variants (SKIP_IN1_DRAM_READ=1)
-#   [15-19] no_compute variants (SKIP_COMPUTE=1)
-#   [20-24] no_write   variants (SKIP_DRAM_WRITE=1)
-#   [25-29] flip_noc full algorithms (non-optimal NoC assignment)
-#   [30-34] flip_noc no_a_read
-#   [35-39] flip_noc no_b_read
-#   [40-44] flip_noc no_compute
-#   [45-49] flip_noc no_write
+#   [0-5]   Full algorithms: snf, load_balanced, reuse_iteration, naive_new_DM, lb_new_DM, snfin0_cdain1
+#   [6-11]  no_a_read  variants (SKIP_IN0_DRAM_READ=1)
+#   [12-17] no_b_read  variants (SKIP_IN1_DRAM_READ=1)
+#   [18-23] no_compute variants (SKIP_COMPUTE=1)
+#   [24-29] no_write   variants (SKIP_DRAM_WRITE=1)
+#   [30-35] flip_noc full algorithms (non-optimal NoC assignment)
+#   [36-41] flip_noc no_a_read
+#   [42-47] flip_noc no_b_read
+#   [48-53] flip_noc no_compute
+#   [54-59] flip_noc no_write
 
 set -euo pipefail
 
@@ -150,16 +150,16 @@ function list_plan {
     local i=0
     for entry in "${hc_entries[@]}"; do
         local group=""
-        if   (( i >= 0  && i <= 4  )); then group="[full]"
-        elif (( i >= 5  && i <= 9  )); then group="[no_a_read]"
-        elif (( i >= 10 && i <= 14 )); then group="[no_b_read]"
-        elif (( i >= 15 && i <= 19 )); then group="[no_compute]"
-        elif (( i >= 20 && i <= 24 )); then group="[no_write]"
-        elif (( i >= 25 && i <= 29 )); then group="[flip_noc]"
-        elif (( i >= 30 && i <= 34 )); then group="[flip_noc no_a]"
-        elif (( i >= 35 && i <= 39 )); then group="[flip_noc no_b]"
-        elif (( i >= 40 && i <= 44 )); then group="[flip_noc no_c]"
-        elif (( i >= 45 && i <= 49 )); then group="[flip_noc no_w]"
+        if   (( i >= 0  && i <= 5  )); then group="[full]"
+        elif (( i >= 6  && i <= 11 )); then group="[no_a_read]"
+        elif (( i >= 12 && i <= 17 )); then group="[no_b_read]"
+        elif (( i >= 18 && i <= 23 )); then group="[no_compute]"
+        elif (( i >= 24 && i <= 29 )); then group="[no_write]"
+        elif (( i >= 30 && i <= 35 )); then group="[flip_noc]"
+        elif (( i >= 36 && i <= 41 )); then group="[flip_noc no_a]"
+        elif (( i >= 42 && i <= 47 )); then group="[flip_noc no_b]"
+        elif (( i >= 48 && i <= 53 )); then group="[flip_noc no_c]"
+        elif (( i >= 54 && i <= 59 )); then group="[flip_noc no_w]"
         fi
         printf "  [%2d] %-12s %s\n" "$i" "$group" "$entry"
         i=$(( i + 1 ))
@@ -289,13 +289,13 @@ function run_registry {
 ###############################################################################
 
 # Run the 4 ablation groups (no_a_read, no_b_read, no_compute, no_write)
-# for the 5 algorithms against a single reference registry.
+# for the 6 algorithms against a single reference registry.
 #
 # Host code index layout in HostCodeRegistryProfiling:
-#   group 0 (no_a_read):  host codes 5-9   (5 algorithms)
-#   group 1 (no_b_read):  host codes 10-14
-#   group 2 (no_compute): host codes 15-19
-#   group 3 (no_write):   host codes 20-24
+#   group 0 (no_a_read):  host codes 6-11  (6 algorithms)
+#   group 1 (no_b_read):  host codes 12-17
+#   group 2 (no_compute): host codes 18-23
+#   group 3 (no_write):   host codes 24-29
 function run_ablation_phase {
     local ablation_registry="$1"   # reference registry index or "all"
     local hc_override="${2:-all}"  # "all" or a single algorithm index 0-4
@@ -313,10 +313,10 @@ function run_ablation_phase {
     read_registry_into hc_entries "$HOST_CODE_HPP" "HostCodeRegistryProfiling"
 
     local ABLATION_GROUPS=(
-        "no_a_read:5:9"
-        "no_b_read:10:14"
-        "no_compute:15:19"
-        "no_write:20:24"
+        "no_a_read:6:11"
+        "no_b_read:12:17"
+        "no_compute:18:23"
+        "no_write:24:29"
     )
 
     echo ""
@@ -359,7 +359,7 @@ function run_ablation_phase {
 # Sweep phase
 ###############################################################################
 
-# Run the 5 base algorithms (host codes 0-4) against all 4 sweep registries (4-7).
+# Run the 6 base algorithms (host codes 0-5) against all 4 sweep registries (4-7).
 function run_sweep_phase {
     local registry_override="${1:-all}"  # "all" or a single registry index 4-7
     local hc_override="${2:-all}"        # "all" or a single algorithm index 0-4
@@ -367,11 +367,11 @@ function run_sweep_phase {
     local hc_entries=()
     read_registry_into hc_entries "$HOST_CODE_HPP" "HostCodeRegistryProfiling"
 
-    # Base algorithm host codes: 0-4
+    # Base algorithm host codes: 0-5
     local hc_start hc_end
     if [[ "$hc_override" == "all" ]]; then
         hc_start=0
-        hc_end=4
+        hc_end=5
     else
         hc_start="$hc_override"
         hc_end="$hc_override"
@@ -403,11 +403,11 @@ function run_sweep_phase {
 
 # Run the non-optimal NoC assignment variants against a reference registry.
 # Host code index layout in HostCodeRegistryProfiling:
-#   group 0 (full):       host codes 25-29 (5 algorithms)
-#   group 1 (no_a_read):  host codes 30-34
-#   group 2 (no_b_read):  host codes 35-39
-#   group 3 (no_compute): host codes 40-44
-#   group 4 (no_write):   host codes 45-49
+#   group 0 (full):       host codes 30-35 (6 algorithms)
+#   group 1 (no_a_read):  host codes 36-41
+#   group 2 (no_b_read):  host codes 42-47
+#   group 3 (no_compute): host codes 48-53
+#   group 4 (no_write):   host codes 54-59
 function run_flip_noc_phase {
     local ablation_registry="$1"   # reference registry index or "all"
     local hc_override="${2:-all}"  # "all" or a single algorithm index 0-4
@@ -425,11 +425,11 @@ function run_flip_noc_phase {
     read_registry_into hc_entries "$HOST_CODE_HPP" "HostCodeRegistryProfiling"
 
     local FLIP_NOC_GROUPS=(
-        "flip_noc_full:25:29"
-        "flip_noc_no_a_read:30:34"
-        "flip_noc_no_b_read:35:39"
-        "flip_noc_no_compute:40:44"
-        "flip_noc_no_write:45:49"
+        "flip_noc_full:30:35"
+        "flip_noc_no_a_read:36:41"
+        "flip_noc_no_b_read:42:47"
+        "flip_noc_no_compute:48:53"
+        "flip_noc_no_write:54:59"
     )
 
     echo ""

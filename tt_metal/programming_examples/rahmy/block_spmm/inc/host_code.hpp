@@ -221,6 +221,7 @@ DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_load_balanced)
 DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_reuse_iteration)
 DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_naive_new_DM)
 DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_load_balanced_new_DM)
+DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_snfin0_cdain1)
 
 #undef DECLARE_ABLATION_WRAPPERS
 
@@ -269,67 +270,77 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryVerbose[] = {
 };
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryProfiling[] = {
-    // [0-4] Full algorithms
+    // [0-5] Full algorithms
     {bsr_spmm_multicore_snf<false, true>, "bsr_spmm_multicore_snf"},
     // {bsr_spmm_multicore_sparse_mcast<false, true>, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced<false, true>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<false, true>, "bsr_spmm_multicore_reuse_iteration"},
     {bsr_spmm_multicore_naive_new_DM<false, true>, "bsr_spmm_multicore_naive_new_DM"},
     {bsr_spmm_multicore_load_balanced_new_DM<false, true>, "bsr_spmm_multicore_load_balanced_new_DM"},
-    // [5-9] no_a_read ablations (SKIP_IN0_DRAM_READ=1)
+    {bsr_spmm_multicore_snfin0_cdain1<false, true>, "bsr_spmm_multicore_snfin0_cdain1"},
+    // [6-11] no_a_read ablations (SKIP_IN0_DRAM_READ=1)
     {bsr_spmm_multicore_snf_no_a_read<false, true>, "bsr_spmm_multicore_snf_no_a_read"},
     {bsr_spmm_multicore_load_balanced_no_a_read<false, true>, "bsr_spmm_multicore_load_balanced_no_a_read"},
     {bsr_spmm_multicore_reuse_iteration_no_a_read<false, true>, "bsr_spmm_multicore_reuse_iteration_no_a_read"},
     {bsr_spmm_multicore_naive_new_DM_no_a_read<false, true>, "bsr_spmm_multicore_naive_new_DM_no_a_read"},
     {bsr_spmm_multicore_load_balanced_new_DM_no_a_read<false, true>, "bsr_spmm_multicore_load_balanced_new_DM_no_a_read"},
-    // [10-14] no_b_read ablations (SKIP_IN1_DRAM_READ=1)
+    {bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true>, "bsr_spmm_multicore_snfin0_cdain1_no_a_read"},
+    // [12-17] no_b_read ablations (SKIP_IN1_DRAM_READ=1)
     {bsr_spmm_multicore_snf_no_b_read<false, true>, "bsr_spmm_multicore_snf_no_b_read"},
     {bsr_spmm_multicore_load_balanced_no_b_read<false, true>, "bsr_spmm_multicore_load_balanced_no_b_read"},
     {bsr_spmm_multicore_reuse_iteration_no_b_read<false, true>, "bsr_spmm_multicore_reuse_iteration_no_b_read"},
     {bsr_spmm_multicore_naive_new_DM_no_b_read<false, true>, "bsr_spmm_multicore_naive_new_DM_no_b_read"},
     {bsr_spmm_multicore_load_balanced_new_DM_no_b_read<false, true>, "bsr_spmm_multicore_load_balanced_new_DM_no_b_read"},
-    // [15-19] no_compute ablations (SKIP_COMPUTE=1)
+    {bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true>, "bsr_spmm_multicore_snfin0_cdain1_no_b_read"},
+    // [18-23] no_compute ablations (SKIP_COMPUTE=1)
     {bsr_spmm_multicore_snf_no_compute<false, true>, "bsr_spmm_multicore_snf_no_compute"},
     {bsr_spmm_multicore_load_balanced_no_compute<false, true>, "bsr_spmm_multicore_load_balanced_no_compute"},
     {bsr_spmm_multicore_reuse_iteration_no_compute<false, true>, "bsr_spmm_multicore_reuse_iteration_no_compute"},
     {bsr_spmm_multicore_naive_new_DM_no_compute<false, true>, "bsr_spmm_multicore_naive_new_DM_no_compute"},
     {bsr_spmm_multicore_load_balanced_new_DM_no_compute<false, true>, "bsr_spmm_multicore_load_balanced_new_DM_no_compute"},
-    // [20-24] no_write ablations (SKIP_DRAM_WRITE=1)
+    {bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true>, "bsr_spmm_multicore_snfin0_cdain1_no_compute"},
+    // [24-29] no_write ablations (SKIP_DRAM_WRITE=1)
     {bsr_spmm_multicore_snf_no_write<false, true>, "bsr_spmm_multicore_snf_no_write"},
     {bsr_spmm_multicore_load_balanced_no_write<false, true>, "bsr_spmm_multicore_load_balanced_no_write"},
     {bsr_spmm_multicore_reuse_iteration_no_write<false, true>, "bsr_spmm_multicore_reuse_iteration_no_write"},
     {bsr_spmm_multicore_naive_new_DM_no_write<false, true>, "bsr_spmm_multicore_naive_new_DM_no_write"},
     {bsr_spmm_multicore_load_balanced_new_DM_no_write<false, true>, "bsr_spmm_multicore_load_balanced_new_DM_no_write"},
-    // [25-29] flip_noc full algorithms
+    {bsr_spmm_multicore_snfin0_cdain1_no_write<false, true>, "bsr_spmm_multicore_snfin0_cdain1_no_write"},
+    // [30-35] flip_noc full algorithms
     {bsr_spmm_multicore_snf<false, true, false>, "bsr_spmm_multicore_snf_flip_noc"},
     {bsr_spmm_multicore_load_balanced<false, true, false>, "bsr_spmm_multicore_load_balanced_flip_noc"},
     {bsr_spmm_multicore_reuse_iteration<false, true, false>, "bsr_spmm_multicore_reuse_iteration_flip_noc"},
     {bsr_spmm_multicore_naive_new_DM<false, true, false>, "bsr_spmm_multicore_naive_new_DM_flip_noc"},
     {bsr_spmm_multicore_load_balanced_new_DM<false, true, false>, "bsr_spmm_multicore_load_balanced_new_DM_flip_noc"},
-    // [30-34] flip_noc no_a_read
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, false>, "bsr_spmm_multicore_snfin0_cdain1_flip_noc"},
+    // [36-41] flip_noc no_a_read
     {bsr_spmm_multicore_snf_no_a_read<false, true, false>, "bsr_spmm_multicore_snf_no_a_read_flip_noc"},
     {bsr_spmm_multicore_load_balanced_no_a_read<false, true, false>, "bsr_spmm_multicore_load_balanced_no_a_read_flip_noc"},
     {bsr_spmm_multicore_reuse_iteration_no_a_read<false, true, false>, "bsr_spmm_multicore_reuse_iteration_no_a_read_flip_noc"},
     {bsr_spmm_multicore_naive_new_DM_no_a_read<false, true, false>, "bsr_spmm_multicore_naive_new_DM_no_a_read_flip_noc"},
     {bsr_spmm_multicore_load_balanced_new_DM_no_a_read<false, true, false>, "bsr_spmm_multicore_load_balanced_new_DM_no_a_read_flip_noc"},
-    // [35-39] flip_noc no_b_read
+    {bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true, false>, "bsr_spmm_multicore_snfin0_cdain1_no_a_read_flip_noc"},
+    // [42-47] flip_noc no_b_read
     {bsr_spmm_multicore_snf_no_b_read<false, true, false>, "bsr_spmm_multicore_snf_no_b_read_flip_noc"},
     {bsr_spmm_multicore_load_balanced_no_b_read<false, true, false>, "bsr_spmm_multicore_load_balanced_no_b_read_flip_noc"},
     {bsr_spmm_multicore_reuse_iteration_no_b_read<false, true, false>, "bsr_spmm_multicore_reuse_iteration_no_b_read_flip_noc"},
     {bsr_spmm_multicore_naive_new_DM_no_b_read<false, true, false>, "bsr_spmm_multicore_naive_new_DM_no_b_read_flip_noc"},
     {bsr_spmm_multicore_load_balanced_new_DM_no_b_read<false, true, false>, "bsr_spmm_multicore_load_balanced_new_DM_no_b_read_flip_noc"},
-    // [40-44] flip_noc no_compute
+    {bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true, false>, "bsr_spmm_multicore_snfin0_cdain1_no_b_read_flip_noc"},
+    // [48-53] flip_noc no_compute
     {bsr_spmm_multicore_snf_no_compute<false, true, false>, "bsr_spmm_multicore_snf_no_compute_flip_noc"},
     {bsr_spmm_multicore_load_balanced_no_compute<false, true, false>, "bsr_spmm_multicore_load_balanced_no_compute_flip_noc"},
     {bsr_spmm_multicore_reuse_iteration_no_compute<false, true, false>, "bsr_spmm_multicore_reuse_iteration_no_compute_flip_noc"},
     {bsr_spmm_multicore_naive_new_DM_no_compute<false, true, false>, "bsr_spmm_multicore_naive_new_DM_no_compute_flip_noc"},
     {bsr_spmm_multicore_load_balanced_new_DM_no_compute<false, true, false>, "bsr_spmm_multicore_load_balanced_new_DM_no_compute_flip_noc"},
-    // [45-49] flip_noc no_write
+    {bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true, false>, "bsr_spmm_multicore_snfin0_cdain1_no_compute_flip_noc"},
+    // [54-59] flip_noc no_write
     {bsr_spmm_multicore_snf_no_write<false, true, false>, "bsr_spmm_multicore_snf_no_write_flip_noc"},
     {bsr_spmm_multicore_load_balanced_no_write<false, true, false>, "bsr_spmm_multicore_load_balanced_no_write_flip_noc"},
     {bsr_spmm_multicore_reuse_iteration_no_write<false, true, false>, "bsr_spmm_multicore_reuse_iteration_no_write_flip_noc"},
     {bsr_spmm_multicore_naive_new_DM_no_write<false, true, false>, "bsr_spmm_multicore_naive_new_DM_no_write_flip_noc"},
     {bsr_spmm_multicore_load_balanced_new_DM_no_write<false, true, false>, "bsr_spmm_multicore_load_balanced_new_DM_no_write_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_write<false, true, false>, "bsr_spmm_multicore_snfin0_cdain1_no_write_flip_noc"},
     // {bsr_spmm_multicore_reuse_many_blocks_per_core<false, true>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
     // {bsr_spmm_multicore_reuse<false, true>, "bsr_spmm_multicore_reuse"},
     // {bsr_spmm_multicore_reuse_naive<false, true>, "bsr_spmm_multicore_reuse_naive"},

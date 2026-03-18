@@ -13,6 +13,12 @@
 #ifndef PROFILE_READ_IN1
 #define PROFILE_READ_IN1 1
 #endif
+#ifndef PROFILE_WAIT_IN1
+#define PROFILE_WAIT_IN1 1
+#endif
+#ifndef PROFILE_FORWARD_IN1
+#define PROFILE_FORWARD_IN1 1
+#endif
 #ifndef PROFILE_WRITE_OUT
 #define PROFILE_WRITE_OUT 1
 #endif
@@ -322,6 +328,9 @@ void kernel_main(){
 #endif
                     } else {
                         // RECEIVE — wait for data from sender
+#if PROFILE_WAIT_IN1 == 1
+                        DeviceZoneScopedN("SpMM Zone: CDA Waiting on dense block of in1 from neighbor");
+#endif
                         DPRINT_DATA0(DPRINT << "in1 receiving from x: " << noc_x_for_column << ", y: " << noc_y_table[my_sender_idx] << ENDL());
 
                         noc_semaphore_set(in1_receiver_sem_ptr, 0);
@@ -339,6 +348,9 @@ void kernel_main(){
 
                     // Forward to downstream if applicable
                     if (found_downstream && action != CDA_SOLO) {
+#if PROFILE_FORWARD_IN1 == 1
+                        DeviceZoneScopedN("SpMM Zone: CDA Forwarding dense block of in1 to neighbor");
+#endif
                         DPRINT_DATA0(DPRINT << "in1 sharing to x:" << noc_x_for_column << ", y: " << noc_y_table[my_downstream_idx] << ENDL());
 
                         // Wait for downstream readiness — value encodes CB slot bit

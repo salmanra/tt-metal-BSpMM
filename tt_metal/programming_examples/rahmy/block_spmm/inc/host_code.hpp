@@ -148,7 +148,8 @@ void bsr_spmm_multicore_snf(
     uint32_t B,
     IDevice* device);
 
-template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true>
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true,
+         bool in0_left_to_right = true, bool in1_bottom_to_top = true>
 void bsr_spmm_multicore_snfin0_cdain1(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
@@ -221,9 +222,38 @@ DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_load_balanced)
 DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_reuse_iteration)
 DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_naive_new_DM)
 DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_load_balanced_new_DM)
-DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_snfin0_cdain1)
-
 #undef DECLARE_ABLATION_WRAPPERS
+
+// 5-param version for snfin0_cdain1 (adds in0_left_to_right, in1_bottom_to_top)
+#define DECLARE_ABLATION_WRAPPERS_5(func_name) \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true, \
+         bool in0_left_to_right = true, bool in1_bottom_to_top = true> \
+void func_name##_no_a_read( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true, \
+         bool in0_left_to_right = true, bool in1_bottom_to_top = true> \
+void func_name##_no_b_read( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true, \
+         bool in0_left_to_right = true, bool in1_bottom_to_top = true> \
+void func_name##_no_compute( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true, \
+         bool in0_left_to_right = true, bool in1_bottom_to_top = true> \
+void func_name##_no_write( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+
+DECLARE_ABLATION_WRAPPERS_5(bsr_spmm_multicore_snfin0_cdain1)
+
+#undef DECLARE_ABLATION_WRAPPERS_5
 
 
 using HostCodeFunctionPtr = void (*)(
@@ -244,35 +274,24 @@ using HostCodeFunctionPtr = void (*)(
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
     {bsr_spmm_multicore_snf<false, false>, "bsr_spmm_multicore_snf"},
     {bsr_spmm_multicore_snfin0_cdain1<false, false>, "bsr_spmm_multicore_snfin0_cdain1"},
-    // {bsr_spmm_multicore_sparse_mcast<false, false>, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced<false, false>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<false, false>, "bsr_spmm_multicore_reuse_iteration"},
     {bsr_spmm_multicore_naive_new_DM<false, false>, "bsr_spmm_multicore_naive_new_DM"},
     {bsr_spmm_multicore_load_balanced_new_DM<false, false>, "bsr_spmm_multicore_load_balanced_new_DM"},
-    // {bsr_spmm_multicore_reuse_many_blocks_per_core<false, false>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
-    // {bsr_spmm_multicore_reuse<false, false>, "bsr_spmm_multicore_reuse"},
-    // {bsr_spmm_multicore_reuse_naive<false, false>, "bsr_spmm_multicore_reuse_naive"},
-    // {bsr_spmm_multicore_host_reuse_device_iter<false, false>, "bsr_spmm_multicore_host_reuse_device_iter"} // TEST
 };
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryVerbose[] = {
     {bsr_spmm_multicore_snf<true, false>, "bsr_spmm_multicore_snf"},
     {bsr_spmm_multicore_snfin0_cdain1<true, false>, "bsr_spmm_multicore_snfin0_cdain1"},
-    // {bsr_spmm_multicore_sparse_mcast<true, false>, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced<true, false>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<true, false>, "bsr_spmm_multicore_reuse_iteration"},
     {bsr_spmm_multicore_naive_new_DM<true, false>, "bsr_spmm_multicore_naive_new_DM"},
     {bsr_spmm_multicore_load_balanced_new_DM<true, false>, "bsr_spmm_multicore_load_balanced_new_DM"},
-    // // {bsr_spmm_multicore_reuse_many_blocks_per_core<true, false>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
-    // {bsr_spmm_multicore_reuse<true, false>, "bsr_spmm_multicore_reuse"},
-    // {bsr_spmm_multicore_reuse_naive<true, false>, "bsr_spmm_multicore_reuse_naive"},
-    // {bsr_spmm_multicore_host_reuse_device_iter<true, false>, "bsr_spmm_multicore_host_reuse_device_iter"} // TEST
 };
 
 static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryProfiling[] = {
     // [0-5] Full algorithms
     {bsr_spmm_multicore_snf<false, true>, "bsr_spmm_multicore_snf"},
-    // {bsr_spmm_multicore_sparse_mcast<false, true>, "bsr_spmm_multicore_sparse_mcast"},
     {bsr_spmm_multicore_load_balanced<false, true>, "bsr_spmm_multicore_load_balanced"},
     {bsr_spmm_multicore_reuse_iteration<false, true>, "bsr_spmm_multicore_reuse_iteration"},
     {bsr_spmm_multicore_naive_new_DM<false, true>, "bsr_spmm_multicore_naive_new_DM"},
@@ -341,10 +360,35 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryProfiling[] =
     {bsr_spmm_multicore_naive_new_DM_no_write<false, true, false>, "bsr_spmm_multicore_naive_new_DM_no_write_flip_noc"},
     {bsr_spmm_multicore_load_balanced_new_DM_no_write<false, true, false>, "bsr_spmm_multicore_load_balanced_new_DM_no_write_flip_noc"},
     {bsr_spmm_multicore_snfin0_cdain1_no_write<false, true, false>, "bsr_spmm_multicore_snfin0_cdain1_no_write_flip_noc"},
-    // {bsr_spmm_multicore_reuse_many_blocks_per_core<false, true>, "bsr_spmm_multicore_reuse_many_blocks_per_core"}, // Defunct!
-    // {bsr_spmm_multicore_reuse<false, true>, "bsr_spmm_multicore_reuse"},
-    // {bsr_spmm_multicore_reuse_naive<false, true>, "bsr_spmm_multicore_reuse_naive"},
-    // {bsr_spmm_multicore_host_reuse_device_iter<false, true>, "bsr_spmm_multicore_host_reuse_device_iter"} // TEST
+};
+
+// Direction sweep registry: all 4 in0×in1 direction combos × 2 NoC configs
+//                                                                         verbose prof opt_noc L2R   B2T
+static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryDirectionSweep[] = {
+    // optimal NoC
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, true, true, true>,   "snfin0_cdain1_L2R_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, true, true, false>,  "snfin0_cdain1_L2R_T2B"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, true, false, true>,  "snfin0_cdain1_R2L_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, true, false, false>, "snfin0_cdain1_R2L_T2B"},
+    // flip NoC
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, false, true, true>,   "snfin0_cdain1_L2R_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, false, true, false>,  "snfin0_cdain1_L2R_T2B_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, false, false, true>,  "snfin0_cdain1_R2L_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, false, false, false>, "snfin0_cdain1_R2L_T2B_flip_noc"},
+};
+
+// Direction sweep registry (verbose, non-profiling): all 4 in0×in1 direction combos
+//                                                                            verbose prof opt_noc L2R   B2T
+static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryDirectionSweepVerbose[] = {
+    {bsr_spmm_multicore_snfin0_cdain1<true, false, true, true, true>,   "snfin0_cdain1_L2R_B2T"}, // 0
+    {bsr_spmm_multicore_snfin0_cdain1<true, false, true, true, false>,  "snfin0_cdain1_L2R_T2B"}, // 1
+    {bsr_spmm_multicore_snfin0_cdain1<true, false, true, false, true>,  "snfin0_cdain1_R2L_B2T"}, // 2
+    {bsr_spmm_multicore_snfin0_cdain1<true, false, true, false, false>, "snfin0_cdain1_R2L_T2B"}, // 3
+    // flip NoC
+    {bsr_spmm_multicore_snfin0_cdain1<true, false, false, true, true>,   "snfin0_cdain1_L2R_B2T_flip_noc"}, // 4
+    {bsr_spmm_multicore_snfin0_cdain1<true, false, false, true, false>,  "snfin0_cdain1_L2R_T2B_flip_noc"}, // 5
+    {bsr_spmm_multicore_snfin0_cdain1<true, false, false, false, true>,  "snfin0_cdain1_R2L_B2T_flip_noc"}, // 6
+    {bsr_spmm_multicore_snfin0_cdain1<true, false, false, false, false>, "snfin0_cdain1_R2L_T2B_flip_noc"}, // 7
 };
 
 CoreCoord clamped_prev(const std::vector<CoreCoord>& order, uint32_t index);

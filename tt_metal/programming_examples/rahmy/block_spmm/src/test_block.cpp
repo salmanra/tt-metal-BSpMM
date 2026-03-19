@@ -256,14 +256,7 @@ bool print_and_assess_results(std::vector<TestResult> &test_results, std::string
     return all_pass;
 }
 
-void test_suite(uint32_t host_code_function_index, TestFunctionPtr* registry, size_t num_tests){
-    /*
-    1. Reserve a vector of <test_name, PCC> pairs.
-    2. call run_test(test_func(), emit_output) for each test, adding to the vector
-    3. iter over vector and pretty print passes and fails to the console
-    */
-
-    auto [host_function_ptr, host_function_name] = HostCodeRegistry[host_code_function_index];
+void test_suite(HostCodeFunctionPtr host_function_ptr, std::string host_function_name, TestFunctionPtr* registry, size_t num_tests){
     // 1. Print Header
     //
     console_printf("---------------------------------------------------------------------------------\n");
@@ -325,15 +318,15 @@ void test_suite(uint32_t host_code_function_index, TestFunctionPtr* registry, si
     console_printf("---------------------------------------------------------------------------------\n");
 }
 
-void run_verbose_test(int host_code_num, int test_num, TestFunctionPtr* registry){
+void run_verbose_test(HostCodeFunctionPtr host_func, std::string host_func_name, int test_num, TestFunctionPtr* registry){
     auto [a, b, test_name] = registry[test_num]();
-    TestResult res = run_test(HostCodeRegistryVerbose[host_code_num].first, a, b, test_name, true);
+    TestResult res = run_test(host_func, a, b, test_name, true);
 
     console_printf("--------------------------------------------------------\n");
     console_printf("--- Single Test results --------------------------------\n");
     console_printf("--------------------------------------------------------\n");
     console_printf("--- Host Code function: ");
-    console_printf(HostCodeRegistryVerbose[host_code_num].second.c_str());
+    console_printf(host_func_name.c_str());
     console_printf("\n");
     console_printf("--------------------------------------------------------\n");
 
@@ -399,6 +392,25 @@ int main(int argc, char** argv) {
             break;
     }
 
+    // Host-code registry selection via argv[4]
+    //   -1 (default): HostCodeRegistryVerbose
+    //    0:            HostCodeRegistryDirectionSweepVerbose
+    int host_registry_number = argc > 4 ? std::stoi(argv[4]) : -1;
+    HostCodeFunctionPtr host_func;
+    std::string host_func_name;
+    switch (host_registry_number) {
+        case 0: {
+            auto [f, n] = HostCodeRegistryDirectionSweepVerbose[host_code_index];
+            host_func = f; host_func_name = n;
+            break;
+        }
+        default: {
+            auto [f, n] = HostCodeRegistryVerbose[host_code_index];
+            host_func = f; host_func_name = n;
+            break;
+        }
+    }
+
     if (test_all) {
         //
         // Redirect TT-Metal output to some file.
@@ -424,7 +436,7 @@ int main(int argc, char** argv) {
         ::close(log_fd); // not needed after dup2
         //
         //
-        test_suite(host_code_index, registry, num_tests);
+        test_suite(host_func, host_func_name, registry, num_tests);
     }
     else {
         //
@@ -434,7 +446,7 @@ int main(int argc, char** argv) {
             console_printf("No test specified. Returning.\n");
             return 0;
         }
-        run_verbose_test(host_code_index, test_num, registry);
+        run_verbose_test(host_func, host_func_name, test_num, registry);
         console_printf("Leaving the test program\n");
 
     }

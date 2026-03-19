@@ -391,6 +391,58 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryDirectionSwee
     {bsr_spmm_multicore_snfin0_cdain1<true, false, false, false, false>, "snfin0_cdain1_R2L_T2B_flip_noc"}, // 7
 };
 
+// Direction sweep profiling registry: base + ablation (40 entries)
+// [0-7] base, [8-15] no_a_read, [16-23] no_b_read, [24-31] no_compute, [32-39] no_write
+// Each group: [+0] L2R_B2T, [+1] L2R_T2B, [+2] R2L_B2T, [+3] R2L_T2B,
+//             [+4] L2R_B2T_flip, [+5] L2R_T2B_flip, [+6] R2L_B2T_flip, [+7] R2L_T2B_flip
+static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryDirectionSweepProfiling[] = {
+    // [0-7] base
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, true, true, true>,    "snfin0_cdain1_L2R_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, true, true, false>,   "snfin0_cdain1_L2R_T2B"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, true, false, true>,   "snfin0_cdain1_R2L_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, true, false, false>,  "snfin0_cdain1_R2L_T2B"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, false, true, true>,   "snfin0_cdain1_L2R_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, false, true, false>,  "snfin0_cdain1_L2R_T2B_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, false, false, true>,  "snfin0_cdain1_R2L_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1<false, true, false, false, false>, "snfin0_cdain1_R2L_T2B_flip_noc"},
+    // [8-15] no_a_read
+    {bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true, true, true, true>,    "snfin0_cdain1_no_a_read_L2R_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true, true, true, false>,   "snfin0_cdain1_no_a_read_L2R_T2B"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true, true, false, true>,   "snfin0_cdain1_no_a_read_R2L_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true, true, false, false>,  "snfin0_cdain1_no_a_read_R2L_T2B"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true, false, true, true>,   "snfin0_cdain1_no_a_read_L2R_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true, false, true, false>,  "snfin0_cdain1_no_a_read_L2R_T2B_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true, false, false, true>,  "snfin0_cdain1_no_a_read_R2L_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true, false, false, false>, "snfin0_cdain1_no_a_read_R2L_T2B_flip_noc"},
+    // [16-23] no_b_read
+    {bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true, true, true, true>,    "snfin0_cdain1_no_b_read_L2R_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true, true, true, false>,   "snfin0_cdain1_no_b_read_L2R_T2B"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true, true, false, true>,   "snfin0_cdain1_no_b_read_R2L_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true, true, false, false>,  "snfin0_cdain1_no_b_read_R2L_T2B"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true, false, true, true>,   "snfin0_cdain1_no_b_read_L2R_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true, false, true, false>,  "snfin0_cdain1_no_b_read_L2R_T2B_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true, false, false, true>,  "snfin0_cdain1_no_b_read_R2L_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true, false, false, false>, "snfin0_cdain1_no_b_read_R2L_T2B_flip_noc"},
+    // [24-31] no_compute
+    {bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true, true, true, true>,    "snfin0_cdain1_no_compute_L2R_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true, true, true, false>,   "snfin0_cdain1_no_compute_L2R_T2B"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true, true, false, true>,   "snfin0_cdain1_no_compute_R2L_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true, true, false, false>,  "snfin0_cdain1_no_compute_R2L_T2B"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true, false, true, true>,   "snfin0_cdain1_no_compute_L2R_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true, false, true, false>,  "snfin0_cdain1_no_compute_L2R_T2B_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true, false, false, true>,  "snfin0_cdain1_no_compute_R2L_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true, false, false, false>, "snfin0_cdain1_no_compute_R2L_T2B_flip_noc"},
+    // [32-39] no_write
+    {bsr_spmm_multicore_snfin0_cdain1_no_write<false, true, true, true, true>,    "snfin0_cdain1_no_write_L2R_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_write<false, true, true, true, false>,   "snfin0_cdain1_no_write_L2R_T2B"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_write<false, true, true, false, true>,   "snfin0_cdain1_no_write_R2L_B2T"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_write<false, true, true, false, false>,  "snfin0_cdain1_no_write_R2L_T2B"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_write<false, true, false, true, true>,   "snfin0_cdain1_no_write_L2R_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_write<false, true, false, true, false>,  "snfin0_cdain1_no_write_L2R_T2B_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_write<false, true, false, false, true>,  "snfin0_cdain1_no_write_R2L_B2T_flip_noc"},
+    {bsr_spmm_multicore_snfin0_cdain1_no_write<false, true, false, false, false>, "snfin0_cdain1_no_write_R2L_T2B_flip_noc"},
+};
+
 CoreCoord clamped_prev(const std::vector<CoreCoord>& order, uint32_t index);
 
 CoreCoord clamped_next(const std::vector<CoreCoord>& order, uint32_t index);

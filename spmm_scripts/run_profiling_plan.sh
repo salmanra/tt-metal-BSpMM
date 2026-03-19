@@ -2,7 +2,7 @@
 # run_profiling_plan.sh - Orchestrate the full SpMM profiling plan
 #
 # Usage:
-#   ./run_profiling_plan.sh [--phase <ablation|sweep|flip_noc|all>]
+#   ./run_profiling_plan.sh [--phase <ablation|sweep|flip_noc|direction|all>]
 #                           [--host-code <index|all>]
 #                           [--registry <index|all>]
 #                           [--ablation-registry <index>]
@@ -20,7 +20,10 @@
 #   flip_noc  - Run the non-optimal NoC assignment variants (full + 4 ablation groups)
 #               against a chosen reference registry.
 #               Host codes 30-59 in HostCodeRegistryProfiling, registry default=2.
-#   all       - Run ablation + sweep phases (default). Does NOT include flip_noc.
+#   direction - Run 8 direction sweep variants (4 dirs × 2 NoC) + 4 ablation groups
+#               against a chosen reference registry.
+#               Host codes 0-39 in HostCodeRegistryDirectionSweepProfiling (argv[4]=1).
+#   all       - Run ablation + sweep phases (default). Does NOT include flip_noc or direction.
 #
 # Options:
 #   --host-code <i|all>       Override host-code index (0-5 for base, 6-29 for ablation)
@@ -56,6 +59,13 @@
 #   [42-47] flip_noc no_b_read
 #   [48-53] flip_noc no_compute
 #   [54-59] flip_noc no_write
+#
+# Host code index map in HostCodeRegistryDirectionSweepProfiling (argv[4]=1):
+#   [0-7]   base:       8 direction×NoC combos for snfin0_cdain1
+#   [8-15]  no_a_read:  same 8 with SKIP_IN0_DRAM_READ=1
+#   [16-23] no_b_read:  same 8 with SKIP_IN1_DRAM_READ=1
+#   [24-31] no_compute: same 8 with SKIP_COMPUTE=1
+#   [32-39] no_write:   same 8 with SKIP_DRAM_WRITE=1
 
 set -euo pipefail
 
@@ -166,6 +176,23 @@ function list_plan {
     done
     echo ""
 
+    echo "=== HostCodeRegistryDirectionSweepProfiling (argv[4]=1) ==="
+    local ds_entries=()
+    read_registry_into ds_entries "$HOST_CODE_HPP" "HostCodeRegistryDirectionSweepProfiling"
+    local di=0
+    for entry in "${ds_entries[@]}"; do
+        local dgroup=""
+        if   (( di >= 0  && di <= 7  )); then dgroup="[base]"
+        elif (( di >= 8  && di <= 15 )); then dgroup="[no_a_read]"
+        elif (( di >= 16 && di <= 23 )); then dgroup="[no_b_read]"
+        elif (( di >= 24 && di <= 31 )); then dgroup="[no_compute]"
+        elif (( di >= 32 && di <= 39 )); then dgroup="[no_write]"
+        fi
+        printf "  [%2d] %-12s %s\n" "$di" "$dgroup" "$entry"
+        di=$(( di + 1 ))
+    done
+    echo ""
+
     local num_regs=${#PROFILE_REGISTRY_ARRAY_NAMES[@]}
     for (( reg=0; reg<num_regs; reg++ )); do
         local arr_name="${PROFILE_REGISTRY_ARRAY_NAMES[$reg]}"
@@ -228,14 +255,15 @@ function run_one {
     local host_code="$2"
     local registry="$3"
     local hc_name="${4:-?}"
+    local hc_registry="${5:-0}"  # 0=HostCodeRegistryProfiling, 1=DirectionSweepProfiling
 
     local reg_name="${PROFILE_REGISTRY_DISPLAY_NAMES[$registry]:-registry$registry}"
 
-    echo "  → registry=$registry ($reg_name)  host_code=$host_code ($hc_name)  profile_case=$profile_case"
+    echo "  → registry=$registry ($reg_name)  host_code=$host_code ($hc_name)  profile_case=$profile_case  hc_registry=$hc_registry"
 
     if [[ "$OPT_DRY_RUN" == "1" ]]; then
-        echo "    [dry-run] TT_METAL_DEVICE_PROFILER=1 profile_block $profile_case $host_code $registry"
-        echo "    [dry-run] export_to_csv $profile_case $host_code $registry"
+        echo "    [dry-run] TT_METAL_DEVICE_PROFILER=1 profile_block $profile_case $host_code $registry $hc_registry"
+        echo "    [dry-run] export_to_csv $profile_case $host_code $registry $hc_registry"
         return
     fi
 
@@ -249,10 +277,10 @@ function run_one {
 
     TT_METAL_DEVICE_PROFILER=1 \
         "$TT_METAL_DIR/build/programming_examples/rahmy/profile_block" \
-        "$profile_case" "$host_code" "$registry"
+        "$profile_case" "$host_code" "$registry" "$hc_registry"
 
     "$TT_METAL_DIR/build/programming_examples/rahmy/export_to_csv" \
-        "$profile_case" "$host_code" "$registry"
+        "$profile_case" "$host_code" "$registry" "$hc_registry"
 }
 
 ###############################################################################
@@ -469,6 +497,78 @@ function run_flip_noc_phase {
 }
 
 ###############################################################################
+# Direction phase
+###############################################################################
+
+# Run the 8 direction sweep base programs + 4 ablation groups against a reference registry.
+# Uses HostCodeRegistryDirectionSweepProfiling (argv[4]=1).
+# Host code index layout:
+#   [0-7]   base (8 direction×NoC combos)
+#   [8-15]  no_a_read
+#   [16-23] no_b_read
+#   [24-31] no_compute
+#   [32-39] no_write
+function run_direction_phase {
+    local ablation_registry="$1"   # reference registry index or "all"
+    local hc_override="${2:-all}"  # "all" or a single direction index 0-7
+
+    # If "all", recurse for each registry
+    if [[ "$ablation_registry" == "all" ]]; then
+        local num_regs=${#PROFILE_REGISTRY_ARRAY_NAMES[@]}
+        for (( r=0; r<num_regs; r++ )); do
+            run_direction_phase "$r" "$hc_override"
+        done
+        return
+    fi
+
+    local hc_entries=()
+    read_registry_into hc_entries "$HOST_CODE_HPP" "HostCodeRegistryDirectionSweepProfiling"
+
+    local DIRECTION_GROUPS=(
+        "direction_full:0:7"
+        "direction_no_a_read:8:15"
+        "direction_no_b_read:16:23"
+        "direction_no_compute:24:31"
+        "direction_no_write:32:39"
+    )
+
+    echo ""
+    echo "###################################################################"
+    echo "### DIRECTION PHASE — registry=$ablation_registry              ###"
+    echo "###################################################################"
+
+    local arr_name="${PROFILE_REGISTRY_ARRAY_NAMES[$ablation_registry]}"
+    local num_profiles
+    num_profiles=$(registry_size "$PROFILING_SUITE_HPP" "$arr_name")
+
+    for group_spec in "${DIRECTION_GROUPS[@]}"; do
+        local group_name="${group_spec%%:*}"
+        local rest="${group_spec#*:}"
+        local group_hc_start="${rest%%:*}"
+        local group_hc_end="${rest#*:}"
+
+        # If user passed a specific direction index (0-7), map it into this group
+        local hc_start hc_end
+        if [[ "$hc_override" == "all" ]]; then
+            hc_start="$group_hc_start"
+            hc_end="$group_hc_end"
+        else
+            hc_start=$(( group_hc_start + hc_override ))
+            hc_end="$hc_start"
+        fi
+
+        echo ""
+        echo "--- Direction group: $group_name (host codes $hc_start..$hc_end) ---"
+
+        for (( pc=0; pc<num_profiles; pc++ )); do
+            for (( hc=hc_start; hc<=hc_end; hc++ )); do
+                run_one "$pc" "$hc" "$ablation_registry" "${hc_entries[$hc]:-?}" "1"
+            done
+        done
+    done
+}
+
+###############################################################################
 # Main
 ###############################################################################
 function main {
@@ -500,7 +600,7 @@ function main {
                 OPT_DRY_RUN=1; shift ;;
             *)
                 echo "Unknown option: $1"
-                echo "Usage: $0 [--phase ablation|sweep|flip_noc|all] [--host-code <i|all>]"
+                echo "Usage: $0 [--phase ablation|sweep|flip_noc|direction|all] [--host-code <i|all>]"
                 echo "          [--registry <i|all>] [--ablation-registry <i|all>]"
                 echo "          [--no-build] [--dry-run] [--list]"
                 exit 1
@@ -510,9 +610,9 @@ function main {
 
     # Validate phase
     case "$OPT_PHASE" in
-        ablation|sweep|flip_noc|all) ;;
+        ablation|sweep|flip_noc|direction|all) ;;
         *)
-            echo "Error: --phase must be 'ablation', 'sweep', 'flip_noc', or 'all'"
+            echo "Error: --phase must be 'ablation', 'sweep', 'flip_noc', 'direction', or 'all'"
             exit 1
             ;;
     esac
@@ -529,6 +629,9 @@ function main {
             ;;
         flip_noc)
             run_flip_noc_phase "$OPT_ABLATION_REGISTRY" "$OPT_HOST_CODE"
+            ;;
+        direction)
+            run_direction_phase "$OPT_ABLATION_REGISTRY" "$OPT_HOST_CODE"
             ;;
         all)
             run_ablation_phase "$OPT_ABLATION_REGISTRY" "$OPT_HOST_CODE"

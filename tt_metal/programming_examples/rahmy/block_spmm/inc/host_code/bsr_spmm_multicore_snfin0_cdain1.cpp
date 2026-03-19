@@ -970,5 +970,57 @@ template void bsr_spmm_multicore_snfin0_cdain1<true, false, true, false, false>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+// verbose flip_noc direction sweep
+template void bsr_spmm_multicore_snfin0_cdain1<true, false, false, true, true>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_snfin0_cdain1<true, false, false, true, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_snfin0_cdain1<true, false, false, false, true>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_snfin0_cdain1<true, false, false, false, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+
+// ── Direction sweep ablation instantiations (profiling) ──
+// For each ablation type × 6 new direction combos (2 already exist with defaults)
+#define INSTANTIATE_DIRECTION_ABLATION(func) \
+template void func<false, true, true, true, false>( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
+template void func<false, true, true, false, true>( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
+template void func<false, true, true, false, false>( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
+template void func<false, true, false, true, false>( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
+template void func<false, true, false, false, true>( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
+template void func<false, true, false, false, false>( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+
+INSTANTIATE_DIRECTION_ABLATION(bsr_spmm_multicore_snfin0_cdain1_no_a_read)
+INSTANTIATE_DIRECTION_ABLATION(bsr_spmm_multicore_snfin0_cdain1_no_b_read)
+INSTANTIATE_DIRECTION_ABLATION(bsr_spmm_multicore_snfin0_cdain1_no_compute)
+INSTANTIATE_DIRECTION_ABLATION(bsr_spmm_multicore_snfin0_cdain1_no_write)
+
+#undef INSTANTIATE_DIRECTION_ABLATION
 
 }

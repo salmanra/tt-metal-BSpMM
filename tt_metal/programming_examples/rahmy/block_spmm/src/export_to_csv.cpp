@@ -20,10 +20,12 @@ using namespace tt::tt_metal;
 using namespace bsr_host_code;
 using namespace profiling_suite;
 
-void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Registry, std::string registry_name){
+using HostCodeRegistryType = std::pair<HostCodeFunctionPtr, std::string>;
+
+void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Registry, std::string registry_name, HostCodeRegistryType* hc_registry){
     // get the host code and test case
-    HostCodeFunctionPtr host_function = HostCodeRegistryProfiling[host_code_num].first;
-    std::string host_function_name = HostCodeRegistryProfiling[host_code_num].second;
+    HostCodeFunctionPtr host_function = hc_registry[host_code_num].first;
+    std::string host_function_name = hc_registry[host_code_num].second;
     auto [a, b, test_name] = Registry[test_num]();
 
     auto zone_defines = spmm_zone_config::get_zone_defines();
@@ -105,24 +107,38 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
 }
 
 int main(int argc, char** argv) {
-
-    const int num_host_programs = sizeof(HostCodeRegistryProfiling) / sizeof(HostCodeRegistryProfiling[0]);
-
     const int test_id = 0;
     const int host_code_id = 0;
-     
+
     bool export_all_profiles = argc > 1 ? std::string(argv[1]) == "all" : true;
     bool export_all_host_codes = argc > 2 ? std::string(argv[2]) == "all" : true;
     int test_num = 0;
     int host_code_num = 0;
     // let's make the test registry and test index required arguments
     // and the host code index
-    if (!export_all_profiles) 
+    if (!export_all_profiles)
         test_num = argc > 1 ? std::stoi(argv[1]) : test_id;
     if (!export_all_host_codes)
         host_code_num = argc > 2 ? std::stoi(argv[2]) : host_code_id;
-    
+
     int registry_number = argc > 3 ? std::stoi(argv[3]) : 2;
+
+    // argv[4]: host code registry selector
+    //   0 (default): HostCodeRegistryProfiling
+    //   1:           HostCodeRegistryDirectionSweepProfiling
+    int hc_registry_number = argc > 4 ? std::stoi(argv[4]) : 0;
+    HostCodeRegistryType* hc_registry;
+    int num_host_programs;
+    switch (hc_registry_number) {
+        case 1:
+            hc_registry = HostCodeRegistryDirectionSweepProfiling;
+            num_host_programs = sizeof(HostCodeRegistryDirectionSweepProfiling) / sizeof(HostCodeRegistryDirectionSweepProfiling[0]);
+            break;
+        default:
+            hc_registry = HostCodeRegistryProfiling;
+            num_host_programs = sizeof(HostCodeRegistryProfiling) / sizeof(HostCodeRegistryProfiling[0]);
+            break;
+    }
 
     ProfileCaseFunctionPtr *Registry = nullptr;
     std::string registry_name = "";
@@ -180,18 +196,18 @@ int main(int argc, char** argv) {
     int num_profiles = sizeof(Registry) / sizeof(Registry[0]);
     if (export_all_profiles && !export_all_host_codes){
         for (int i = 0; i < num_profiles; i++){
-            export_to_csv(host_code_num, i, Registry, registry_name);
+            export_to_csv(host_code_num, i, Registry, registry_name, hc_registry);
         }
     }
     else if (export_all_profiles && export_all_host_codes){
         for (int i = 0; i < num_profiles; i++){
             for (int j = 0; j < num_host_programs; j++){
-                export_to_csv(j, i, Registry, registry_name);
+                export_to_csv(j, i, Registry, registry_name, hc_registry);
             }
         }
     }
     else {
-        export_to_csv(host_code_num, test_num, Registry, registry_name);
+        export_to_csv(host_code_num, test_num, Registry, registry_name, hc_registry);
     }
 
     return 0;

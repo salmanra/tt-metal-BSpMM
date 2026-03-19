@@ -152,6 +152,10 @@ def run_minimal_matmul(
 
     # Report results
     total_flops = 2 * M * N * K
+    # Data movement: read A (M*K) + read B (K*N) + write C (M*N), bfloat16 = 2 bytes
+    dtype_bytes = {ttnn.bfloat16: 2, ttnn.bfloat8_b: 1, ttnn.bfloat4_b: 0.5}
+    elem_size = dtype_bytes.get(dtype, 2)
+    total_bytes = (M * K + K * N + M * N) * elem_size
     print(f"\n  Results:")
     print(f"    PCC:            {pcc:.7f}")
     print(f"    Relative RMSE:  {rel_rmse:.6f}")
@@ -163,14 +167,18 @@ def run_minimal_matmul(
         print(f"    Min device:     {min_dur*1000:.2f} ms")
         print(f"    Avg TFLOP/s:    {total_flops / avg_dur / 1e12:.2f}")
         print(f"    Max TFLOP/s:   {total_flops / min_dur / 1e12:.2f}")
+        print(f"    Avg GB/s:       {total_bytes / avg_dur / 1e9:.2f}")
+        print(f"    Max GB/s:      {total_bytes / min_dur / 1e9:.2f}")
     elif num_iterations == 1:
         print(f"    Host duration:  {durations[0]*1000:.2f} ms")
         print(f"    TFLOP/s:        {total_flops / durations[0] / 1e12:.2f}")
+        print(f"    GB/s:           {total_bytes / durations[0] / 1e9:.2f}")
     else:
         print(f"    First iter:     {durations[0]*1000:.2f} ms (includes compile)")
         avg_cached = sum(durations[1:]) / (num_iterations - 1)
         print(f"    Avg cached:     {avg_cached*1000:.2f} ms ({num_iterations} iters)")
         print(f"    Avg TFLOP/s:    {total_flops / avg_cached / 1e12:.2f}")
+        print(f"    Avg GB/s:       {total_bytes / avg_cached / 1e9:.2f}")
 
     return {"pcc": pcc, "relative_rmse": rel_rmse, "durations": durations}
 

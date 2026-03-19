@@ -1354,6 +1354,157 @@ def make_figure16(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
     print(f"Saved {out}")
 
 
+# ── Figure 17: Fig 16 + cuSPARSE (4090) as 7th algorithm ─────────────────────
+
+CUSPARSE_CSV = Path("spmm_scripts/cusparse4090.csv")
+
+# Registry ID → density string (matches _FIG16_PANELS ordering)
+_CUSPARSE_REG_DENSITY = {8: "25%", 9: "10%", 10: "5%", 11: "50%"}
+
+
+def _parse_cusparse_pattern(case_name: str) -> str | None:
+    """Extract sparsity pattern from a cuSPARSE case name, skipping bare 'diag'."""
+    m = re.match(r"parametric_(?:(multi_diag|col|row)_)?M", case_name)
+    if not m:
+        # Check if it's bare diag — skip it
+        if re.match(r"parametric_diag_", case_name):
+            return None
+        return None
+    return m.group(1) or "random"
+
+
+def load_cusparse(csv_path: Path) -> pd.DataFrame:
+    """
+    Load cuSPARSE benchmark CSV.
+    Columns: registry_id, case_name, M, N, K, R, C, ms, tflops_avg, tflops_max, gbs_avg, gbs_max
+    Returns DataFrame with columns: pattern, density, tflops (avg TFLOPs/s).
+    Bare 'diag' cases are excluded.
+    """
+    rows = []
+    try:
+        with open(csv_path) as f:
+            for line in f:
+                parts = line.strip().split(",")
+                if len(parts) < 12:
+                    continue
+                reg_id = int(parts[0])
+                case_name = parts[1]
+                density = _CUSPARSE_REG_DENSITY.get(reg_id)
+                if density is None:
+                    continue
+                pattern = _parse_cusparse_pattern(case_name)
+                if pattern is None:
+                    continue
+                rows.append({
+                    "pattern": pattern,
+                    "density": density,
+                    "tflops": float(parts[8]),
+                })
+    except FileNotFoundError:
+        pass
+    return pd.DataFrame(rows)
+
+
+CUSPARSE_ALGO = "cusparse_4090"
+CUSPARSE_LABEL = "cuSPARSE (4090)"
+CUSPARSE_COLOR = "#212121"
+
+
+def make_figure17(data_dir: Path, out_dir: Path, cusparse_csv: Path = CUSPARSE_CSV,
+                  clean: bool = False) -> None:
+    """
+    Figure 17: Same as fig 16 but with cuSPARSE (4090) added as a 7th algorithm.
+    """
+    cusparse_df = load_cusparse(cusparse_csv)
+    if cusparse_df.empty:
+        print("WARNING: No cuSPARSE data found. Skipping Figure 17.")
+        return
+
+    all_algos = ALGOS + [CUSPARSE_ALGO]
+    all_labels = {**ALGO_LABEL, CUSPARSE_ALGO: CUSPARSE_LABEL}
+    all_colors = {**ALGO_COLOR, CUSPARSE_ALGO: CUSPARSE_COLOR}
+
+    fig, axes = plt.subplots(2, 2, figsize=(18, 10), sharey=True)
+
+    for ax, (registry, density_label) in zip(axes.flat, _FIG16_PANELS):
+        df = load_sweep_sparsity_pattern(data_dir, registry)
+        # Merge cuSPARSE data for this density
+        cuda_sub = cusparse_df[cusparse_df["density"] == density_label].copy()
+        if not cuda_sub.empty:
+            cuda_sub["algo"] = CUSPARSE_ALGO
+            if not df.empty:
+                df = pd.concat([df, cuda_sub[["algo", "pattern", "tflops"]]],
+                               ignore_index=True)
+            else:
+                df = cuda_sub[["algo", "pattern", "tflops"]].copy()
+
+        if df.empty:
+            ax.set_title(f"Density = {density_label} (no data)")
+            continue
+
+        patterns = [p for p in _SPARSITY_PATTERN_ORDER if p in df["pattern"].values]
+        algos_present = [a for a in all_algos if a in df["algo"].values]
+        n_patterns = len(patterns)
+        x = np.arange(len(algos_present))
+        total_bar_width = 0.75
+        bar_w = total_bar_width / max(n_patterns, 1)
+
+        for j, pat in enumerate(patterns):
+            ys = []
+            for algo in algos_present:
+                row = df[(df["algo"] == algo) & (df["pattern"] == pat)]
+                ys.append(row["tflops"].iloc[0] if not row.empty else 0)
+            offset = (j - (n_patterns - 1) / 2) * bar_w
+            bars = ax.bar(x + offset, ys, bar_w,
+                          label=_SPARSITY_PATTERN_LABELS.get(pat, pat),
+                          color=_PATTERN_COLOR[pat],
+                          edgecolor="white", linewidth=0.5, zorder=3)
+            if not clean:
+                for bar in bars:
+                    h = bar.get_height()
+                    if h > 0:
+                        ax.text(bar.get_x() + bar.get_width() / 2, h + 0.002,
+                                f"{h:.3f}", ha="left", va="bottom",
+                                fontsize=5.5, rotation=45)
+
+        ax.set_xticks(x)
+        ax.set_xticklabels([all_labels[a] for a in algos_present],
+                           fontsize=7, rotation=20, ha="right")
+        if not clean:
+            ax.set_title(f"Density = {density_label}", fontweight="bold")
+            ax.grid(axis="y", alpha=0.25)
+            ax.set_axisbelow(True)
+        else:
+            ax.set_title(f"Density = {density_label}")
+            ax.tick_params(axis="both", length=0)
+
+    # Shared y-axis: start at 0, with headroom for value labels
+    global_max = max(ax.get_ylim()[1] for ax in axes.flat)
+    axes.flat[0].set_ylim(0, global_max * 1.12)
+
+    # Common y-label on the left subplots
+    for ax in axes[:, 0]:
+        ax.set_ylabel("Throughput (TFLOPs/s)")
+
+    # Single shared legend at the top
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    if not clean:
+        fig.legend(handles, labels, loc="upper center", ncol=len(labels),
+                   fontsize=9, frameon=False, bbox_to_anchor=(0.5, 1.0))
+        fig.suptitle(
+            "SpMM Throughput vs. Sparsity Pattern — TT vs cuSPARSE (4090)\n"
+            "8192x8192x8192, R=C=256",
+            fontsize=13, fontweight="bold", y=1.04,
+        )
+
+    fig.tight_layout()
+    suffix = "_clean" if clean else ""
+    out = out_dir / f"fig17_sparsity_pattern_vs_cuda{suffix}.png"
+    fig.savefig(out, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved {out}")
+
+
 # ── Figure 12: Throughput across densities (bar chart like fig 11) ────────────
 
 DENSITY_SWEEP_DATA_DIR = Path("/home/user/tt-metal/profiles_opt_noc_full_profiling_suite/csvs")
@@ -1472,6 +1623,7 @@ def main() -> None:
     make_figure14(args.data_dir, args.out_dir)
     make_figure15(args.data_dir, args.out_dir)
     make_figure16(args.data_dir, args.out_dir)
+    make_figure17(args.data_dir, args.out_dir)
     clean_dir = args.out_dir / "clean"
     clean_dir.mkdir(parents=True, exist_ok=True)
     make_figure1(args.data_dir, clean_dir, clean=True)
@@ -1488,6 +1640,7 @@ def main() -> None:
     make_figure14(args.data_dir, clean_dir, clean=True)
     make_figure15(args.data_dir, clean_dir, clean=True)
     make_figure16(args.data_dir, clean_dir, clean=True)
+    make_figure17(args.data_dir, clean_dir, clean=True)
 
 
 if __name__ == "__main__":

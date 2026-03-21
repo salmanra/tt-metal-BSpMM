@@ -56,7 +56,7 @@ public:
                 break;
             case ID:
                 for (auto it = data.begin(); it != data.end(); it++){
-                    *it = static_cast<T>(static_cast<T>(((k / W) == (k % W)) ? 1.0 : 0.0));
+                    *it = static_cast<T>(((k / W) == (k % W)) ? 1.0f : 0.0f);
                     k++;
                 }
                 break;
@@ -67,7 +67,7 @@ public:
                 break;
             case ARANGE:
                 for (auto it = data.begin(); it != data.end(); it++){
-                    *it = static_cast<T>(k++);
+                    *it = static_cast<T>(static_cast<float>(k++));
                 }
                 break;
         }
@@ -807,6 +807,53 @@ public:
 
         return bsr_matrix<T>(std::move(out_data), std::move(out_indptr), std::move(out_indices),
                               H, B.W, R, B.C, out_nblocks);
+    }
+
+    // Naive CPU SDDMM: A = this ⊙ (C × D)
+    // this: BSR M×N (sampling mask), C: dense M×K, D: dense K×N
+    // Output: BSR M×N with same sparsity pattern as this
+    // Uses float accumulation internally for bfloat16 compatibility.
+    bsr_matrix<T> sddmm(const dense_matrix<T>& C_mat, const dense_matrix<T>& D_mat) const {
+        assert(H == C_mat.H);       // M dimension matches
+        assert(W == D_mat.W);       // N dimension matches
+        assert(C_mat.W == D_mat.H); // K dimension matches
+
+        size_t K_dim = C_mat.W;
+
+        // Output has identical sparsity structure to this (the sampling mask)
+        std::vector<int> out_indptr(indptr);
+        std::vector<int> out_indices(indices);
+        std::vector<T> out_data;
+        out_data.reserve(nblocks * R * C);
+
+        // For each block row i
+        for (size_t i = 0; i < indptr.size() - 1; i++) {
+            // For each nonzero block (i, j) in the mask
+            for (size_t blk_idx = indptr[i]; blk_idx < indptr[i + 1]; blk_idx++) {
+                size_t j = indices[blk_idx];
+                auto mask_block = data.begin() + blk_idx * R * C;
+
+                // Compute dense block of (C × D) at block position (i, j)
+                // Block rows [i*R, (i+1)*R) of C times block cols [j*C_block, (j+1)*C_block) of D
+                // Then element-wise multiply with mask block
+                for (size_t r = 0; r < R; r++) {
+                    for (size_t c = 0; c < C; c++) {
+                        // Dot product: C[i*R+r, :] · D[:, j*C+c]
+                        float dot = 0.0f;
+                        for (size_t k = 0; k < K_dim; k++) {
+                            dot += static_cast<float>(C_mat.data[(i * R + r) * K_dim + k])
+                                 * static_cast<float>(D_mat.data[k * D_mat.W + (j * C + c)]);
+                        }
+                        // Hadamard with mask: output = mask_val * dot
+                        float mask_val = static_cast<float>(*(mask_block + r * C + c));
+                        out_data.push_back(T(mask_val * dot));
+                    }
+                }
+            }
+        }
+
+        return bsr_matrix<T>(std::move(out_data), std::move(out_indptr), std::move(out_indices),
+                              H, W, R, C, nblocks);
     }
 
     dense_matrix<T> spmm(dense_matrix<T> &B) {

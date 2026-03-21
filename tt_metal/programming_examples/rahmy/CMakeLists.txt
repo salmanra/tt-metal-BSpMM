@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.22...3.30)
 add_subdirectory(sparse_common)
 add_subdirectory(block_spmm)
 add_subdirectory(block_spgemm)
+add_subdirectory(block_sddmm)
 
 set(RAHMY_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/test_block.cpp
@@ -12,6 +13,9 @@ set(RAHMY_SRCS
     # SpGEMM entry points
     ${CMAKE_CURRENT_SOURCE_DIR}/block_spgemm/src/test_spgemm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/block_spgemm/src/run_spgemm.cpp
+    # SDDMM entry points
+    ${CMAKE_CURRENT_SOURCE_DIR}/block_sddmm/src/test_sddmm.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/block_sddmm/src/run_sddmm.cpp
 #    ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/profile_dense.cpp
 )
 
@@ -28,7 +32,7 @@ CREATE_PGM_EXAMPLES_EXE("${RAHMY_SRCS}" "rahmy") # output binaries to build/prog
 
 foreach(target ${PROGRAMMING_EXAMPLES_TEST_TARGETS})
     if(TARGET ${target})
-        target_link_libraries(${target} PRIVATE spmm_host_code spgemm_host_code sparse_common)
+        target_link_libraries(${target} PRIVATE spmm_host_code spgemm_host_code sddmm_host_code sparse_common)
     endif()
 endforeach()
 

@@ -490,6 +490,8 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
         all_cores,
         tt_metal::ComputeConfig{
             .math_fidelity = math_fidelity,
+            .fp32_dest_acc_en=false,
+            .math_approx_mode=false,
             .compile_args = compute_kernel_compile_time_args,
             .defines = zone_defines});
 

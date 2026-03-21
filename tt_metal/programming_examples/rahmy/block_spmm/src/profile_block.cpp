@@ -158,7 +158,7 @@ void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Re
     auto [a, b, test_name] = Registry[test_num]();
 
     auto zone_defines = spmm_zone_config::get_zone_defines();
-    
+
     std::string disabled_zones = zone_defines.empty() ? "" : "_Disable_";
     for (auto it = zone_defines.begin(); it != zone_defines.end(); it++){
         std::string zone_name = it->first;
@@ -167,7 +167,7 @@ void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Re
 
     // set up command strings to direct and capture the trace (and its csv file)
     char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_opt_noc_CDAV2/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_opt_noc_CDA_no_mathapprox/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
     std::string trace_file_location = trace_directory + test_name + disabled_zones + ".tracy";
 
@@ -198,9 +198,9 @@ void profile_test(
     std::cout << "Checking for tracy profiler connection to device" << std::endl;
     while (!tracy::GetProfiler().IsConnected()){
         std::cout << "Waiting for tracy profiler to connect to device" << std::endl;
-        sleep(1); // spin on this until the device is actually connected 
+        sleep(1); // spin on this until the device is actually connected
     }
-    
+
     {
         ZoneScopedNC("Post-device setup", tracy::Color::DarkOliveGreen);
         // matmul params setup
@@ -220,7 +220,7 @@ void profile_test(
         // I wonder, do we even need to do this?
         dense_matrix<float> tmp(M, N, 0.0f);
         dense_matrix<bfloat16> output = tmp.bfloat16_cast();
-        
+
         host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
 
     }

@@ -23,6 +23,8 @@
 #   direction - Run 8 direction sweep variants (4 dirs × 2 NoC) + 4 ablation groups
 #               against a chosen reference registry.
 #               Host codes 0-39 in HostCodeRegistryDirectionSweepProfiling (argv[4]=1).
+#   direction_sweep - Sweep the 8 base direction host codes (0-7) across the
+#               sparsity pattern registries (8-11).
 #   all       - Run ablation + sweep phases (default). Does NOT include flip_noc or direction.
 #
 # Options:
@@ -294,6 +296,7 @@ function run_registry {
     local hc_start="$2"
     local hc_end="$3"
     local -n hc_entries_ref=$4
+    local hc_registry="${5:-0}"  # 0=HostCodeRegistryProfiling, 1=DirectionSweepProfiling
 
     local arr_name="${PROFILE_REGISTRY_ARRAY_NAMES[$registry]}"
     local disp_name="${PROFILE_REGISTRY_DISPLAY_NAMES[$registry]}"
@@ -302,12 +305,12 @@ function run_registry {
 
     echo "========================================================================"
     echo "  Registry $registry: $disp_name  ($num_profiles cases)"
-    echo "  Host codes: $hc_start .. $hc_end"
+    echo "  Host codes: $hc_start .. $hc_end  (hc_registry=$hc_registry)"
     echo "========================================================================"
 
     for (( pc=0; pc<num_profiles; pc++ )); do
         for (( hc=hc_start; hc<=hc_end; hc++ )); do
-            run_one "$pc" "$hc" "$registry" "${hc_entries_ref[$hc]:-?}"
+            run_one "$pc" "$hc" "$registry" "${hc_entries_ref[$hc]:-?}" "$hc_registry"
         done
     done
 }
@@ -569,6 +572,50 @@ function run_direction_phase {
 }
 
 ###############################################################################
+# Direction sweep phase
+###############################################################################
+
+# Sweep the 8 base direction host codes (0-7) across the sparsity pattern
+# registries (8-11), similar to how run_sweep_phase sweeps base algorithms
+# across parametric registries 4-7.
+function run_direction_sweep_phase {
+    local registry_override="${1:-all}"  # "all" or a single registry index 8-11
+    local hc_override="${2:-all}"        # "all" or a single direction index 0-7
+
+    local hc_entries=()
+    read_registry_into hc_entries "$HOST_CODE_HPP" "HostCodeRegistryDirectionSweepProfiling"
+
+    # Base direction host codes: 0-7
+    local hc_start hc_end
+    if [[ "$hc_override" == "all" ]]; then
+        hc_start=0
+        hc_end=7
+    else
+        hc_start="$hc_override"
+        hc_end="$hc_override"
+    fi
+
+    # Sparsity pattern registries: 8-11
+    local reg_start reg_end
+    if [[ "$registry_override" == "all" ]]; then
+        reg_start=8
+        reg_end=11
+    else
+        reg_start="$registry_override"
+        reg_end="$registry_override"
+    fi
+
+    echo ""
+    echo "###################################################################"
+    echo "### DIRECTION SWEEP PHASE — registries $reg_start..$reg_end    ###"
+    echo "###################################################################"
+
+    for (( reg=reg_start; reg<=reg_end; reg++ )); do
+        run_registry "$reg" "$hc_start" "$hc_end" hc_entries "1"
+    done
+}
+
+###############################################################################
 # Main
 ###############################################################################
 function main {
@@ -600,7 +647,7 @@ function main {
                 OPT_DRY_RUN=1; shift ;;
             *)
                 echo "Unknown option: $1"
-                echo "Usage: $0 [--phase ablation|sweep|flip_noc|direction|all] [--host-code <i|all>]"
+                echo "Usage: $0 [--phase ablation|sweep|flip_noc|direction|direction_sweep|all] [--host-code <i|all>]"
                 echo "          [--registry <i|all>] [--ablation-registry <i|all>]"
                 echo "          [--no-build] [--dry-run] [--list]"
                 exit 1
@@ -610,9 +657,9 @@ function main {
 
     # Validate phase
     case "$OPT_PHASE" in
-        ablation|sweep|flip_noc|direction|all) ;;
+        ablation|sweep|flip_noc|direction|direction_sweep|all) ;;
         *)
-            echo "Error: --phase must be 'ablation', 'sweep', 'flip_noc', 'direction', or 'all'"
+            echo "Error: --phase must be 'ablation', 'sweep', 'flip_noc', 'direction', 'direction_sweep', or 'all'"
             exit 1
             ;;
     esac
@@ -632,6 +679,9 @@ function main {
             ;;
         direction)
             run_direction_phase "$OPT_ABLATION_REGISTRY" "$OPT_HOST_CODE"
+            ;;
+        direction_sweep)
+            run_direction_sweep_phase "$OPT_REGISTRY" "$OPT_HOST_CODE"
             ;;
         all)
             run_ablation_phase "$OPT_ABLATION_REGISTRY" "$OPT_HOST_CODE"

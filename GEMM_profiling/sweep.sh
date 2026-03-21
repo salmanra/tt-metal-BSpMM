@@ -5,7 +5,7 @@ echo "N,Avg_TFLOPs,Max_TFLOPs,Avg_GBs,Max_GBs" > "$OUTPUT_CSV"
 
 for N in 1024 2048 4096 8192 16384; do
     echo "Running M=K=N=$N ..."
-    OUTPUT=$(python GEMM_profiling/run_minimal_matmul.py --trace --M $N --K $N --N $N)
+    OUTPUT=$(python GEMM_profiling/run_minimal_matmul.py --ttnn-matmul --trace --M $N --K $N --N $N)
     echo "$OUTPUT" | grep -E "TFLOP/s|GB/s"
 
     AVG_TFLOPS=$(echo "$OUTPUT" | grep "Avg TFLOP/s" | awk '{print $NF}')

@@ -10,6 +10,7 @@ Usage:
     python GEMM_profiling/run_minimal_matmul.py --M 4096 --K 4096 --N 4096 --block 8 --subblock 2 --fidelity HiFi4
     python GEMM_profiling/run_minimal_matmul.py --bias --activation gelu
     python GEMM_profiling/run_minimal_matmul.py --trace --iterations 10  # device-only timing via trace replay
+    python GEMM_profiling/run_minimal_matmul.py --ttnn-matmul  # use ttnn.matmul instead of minimal_matmul
 """
 
 import argparse
@@ -17,6 +18,7 @@ import time
 
 import torch
 import ttnn
+
 
 # TODO: do we want to test with math fidelity less than perfect?
 def run_minimal_matmul(
@@ -37,6 +39,7 @@ def run_minimal_matmul(
     core_grid=None,
     num_iterations=10,
     trace=False,
+    use_ttnn_matmul=False,
 ):
     print(f"\n{'='*60}")
     print(f"  Minimal MatMul: ({M}, {K}) x ({K}, {N})")
@@ -45,6 +48,7 @@ def run_minimal_matmul(
     print(f"  Bias: {use_bias}, Activation: {activation}")
     print(f"  Iterations: {num_iterations}")
     print(f"  Trace mode: {trace}")
+    print(f"  Op: {'ttnn.matmul' if use_ttnn_matmul else 'minimal_matmul'}")
     print(f"{'='*60}")
 
     # Create random input tensors in float32 for golden reference
@@ -77,7 +81,7 @@ def run_minimal_matmul(
         device.arch(),
         math_fidelity=math_fidelity,
         math_approx_mode=False,
-        fp32_dest_acc_en=fp32_acc,
+        fp32_dest_acc_en=False,
         packer_l1_acc=True,
     )
 
@@ -95,15 +99,29 @@ def run_minimal_matmul(
     print(f"  Core grid: {core_grid}")
     print(f"  Running...")
 
-    def _run_op():
-        return ttnn.experimental.minimal_matmul(
-            tt_input,
-            tt_weight,
-            bias_tensor=tt_bias,
-            fused_activation=activation_fn,
-            compute_kernel_config=compute_config,
-            config=matmul_config,
-        )
+    if use_ttnn_matmul:
+        ttnn_core_grid = ttnn.CoreGrid(y=core_grid.y, x=core_grid.x)
+
+        def _run_op():
+            return ttnn.matmul(
+                tt_input,
+                tt_weight,
+                core_grid=ttnn_core_grid,
+                compute_kernel_config=compute_config,
+                memory_config=ttnn.DRAM_MEMORY_CONFIG,
+            )
+
+    else:
+
+        def _run_op():
+            return ttnn.experimental.minimal_matmul(
+                tt_input,
+                tt_weight,
+                bias_tensor=tt_bias,
+                fused_activation=activation_fn,
+                compute_kernel_config=compute_config,
+                config=matmul_config,
+            )
 
     durations = []
 
@@ -126,11 +144,10 @@ def run_minimal_matmul(
 
         ttnn.release_trace(device, trace_id)
     else:
-        # First call compiles, subsequent calls use cache
-        start = time.perf_counter()
-        tt_output = _run_op()
-        ttnn.synchronize_device(device)
-        durations.append(time.perf_counter() - start)
+        # Warmup: first call compiles, rest warm up caches
+        for i in range(5):
+            tt_output = _run_op()
+            ttnn.synchronize_device(device)
 
         for i in range(num_iterations):
             start = time.perf_counter()
@@ -169,16 +186,16 @@ def run_minimal_matmul(
         print(f"    Max TFLOP/s:   {total_flops / min_dur / 1e12:.2f}")
         print(f"    Avg GB/s:       {total_bytes / avg_dur / 1e9:.2f}")
         print(f"    Max GB/s:      {total_bytes / min_dur / 1e9:.2f}")
-    elif num_iterations == 1:
-        print(f"    Host duration:  {durations[0]*1000:.2f} ms")
-        print(f"    TFLOP/s:        {total_flops / durations[0] / 1e12:.2f}")
-        print(f"    GB/s:           {total_bytes / durations[0] / 1e9:.2f}")
     else:
-        print(f"    First iter:     {durations[0]*1000:.2f} ms (includes compile)")
-        avg_cached = sum(durations[1:]) / (num_iterations - 1)
-        print(f"    Avg cached:     {avg_cached*1000:.2f} ms ({num_iterations} iters)")
-        print(f"    Avg TFLOP/s:    {total_flops / avg_cached / 1e12:.2f}")
-        print(f"    Avg GB/s:       {total_bytes / avg_cached / 1e9:.2f}")
+        avg_dur = sum(durations) / len(durations)
+        min_dur = min(durations)
+        print(f"    Iterations:     {num_iterations} (after 5 warmup)")
+        print(f"    Avg duration:   {avg_dur*1000:.2f} ms")
+        print(f"    Min duration:   {min_dur*1000:.2f} ms")
+        print(f"    Avg TFLOP/s:    {total_flops / avg_dur / 1e12:.2f}")
+        print(f"    Max TFLOP/s:    {total_flops / min_dur / 1e12:.2f}")
+        print(f"    Avg GB/s:       {total_bytes / avg_dur / 1e9:.2f}")
+        print(f"    Max GB/s:       {total_bytes / min_dur / 1e9:.2f}")
 
     return {"pcc": pcc, "relative_rmse": rel_rmse, "durations": durations}
 
@@ -213,8 +230,11 @@ def main():
         help="Data type",
     )
     parser.add_argument("--iterations", type=int, default=10, help="Number of iterations to run")
+    parser.add_argument("--ttnn-matmul", action="store_true", help="Use ttnn.matmul instead of minimal_matmul")
     parser.add_argument("--trace", action="store_true", help="Use trace capture/replay for device-only timing")
-    parser.add_argument("--trace-region-size", type=int, default=400000, help="Trace region size in bytes (only with --trace)")
+    parser.add_argument(
+        "--trace-region-size", type=int, default=400000, help="Trace region size in bytes (only with --trace)"
+    )
     parser.add_argument("--device-id", type=int, default=0, help="Device ID")
     args = parser.parse_args()
 
@@ -265,6 +285,7 @@ def main():
             dtype=dtype,
             num_iterations=args.iterations,
             trace=args.trace,
+            use_ttnn_matmul=args.ttnn_matmul,
         )
 
         print(f"\n{'='*60}")

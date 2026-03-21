@@ -1,6 +1,12 @@
 #include "../host_code.hpp"
+#include "sparse_common/host_code_utils.hpp"
 
 namespace bsr_host_code {
+
+// Re-export shared buffer helpers so existing SpMM code can call them unqualified
+using sparse_common::MakeBuffer;
+using sparse_common::MakeCircularBuffer;
+using sparse_common::MakeCircularBufferFP32;
 
 CoreCoord clamped_prev(const std::vector<CoreCoord>& order, uint32_t index) {
     return order.at(index == 0 ? 0 : index - 1);
@@ -9,32 +15,6 @@ CoreCoord clamped_prev(const std::vector<CoreCoord>& order, uint32_t index) {
 CoreCoord clamped_next(const std::vector<CoreCoord>& order, uint32_t index) {
     const uint32_t last = static_cast<uint32_t>(order.size() - 1);
     return order.at(index >= last ? last : index + 1);
-}
-
-std::shared_ptr<Buffer> MakeBuffer(IDevice* device, uint32_t size, uint32_t page_size, bool sram) {
-    InterleavedBufferConfig config{
-        .device = device,
-        .size = size,
-        .page_size = page_size,
-        .buffer_type = (sram ? BufferType::L1 : BufferType::DRAM)};
-    return CreateBuffer(config);
-}
-
-std::shared_ptr<Buffer> MakeBuffer(IDevice* device, uint32_t n_tiles, size_t element_size, bool sram) {
-    const uint32_t tile_size = element_size * TILE_WIDTH * TILE_HEIGHT;
-    const uint32_t page_tiles = sram ? n_tiles : 1;
-    return MakeBuffer(device, tile_size * n_tiles, page_tiles * tile_size, sram);
-}
-
-CBHandle MakeCircularBuffer(
-    Program& program, const CoreSpec& core, tt::CBIndex cb, uint32_t size, uint32_t page_size, tt::DataFormat format) {
-    CircularBufferConfig cb_src0_config = CircularBufferConfig(size, {{cb, format}}).set_page_size(cb, page_size);
-    return CreateCircularBuffer(program, core, cb_src0_config);
-}
-
-CBHandle MakeCircularBufferFP32(Program& program, const CoreSpec& core, tt::CBIndex cb, uint32_t n_tiles) {
-    constexpr uint32_t tile_size = sizeof(float) * TILE_WIDTH * TILE_HEIGHT;
-    return MakeCircularBuffer(program, core, cb, n_tiles * tile_size, tile_size, tt::DataFormat::Float32);
 }
 
 uint32_t _get_maximum_block_dim_with_NoC_args(int32_t block_dim, int32_t in0_block_w, int32_t num_tiles_in_NoC_args) {

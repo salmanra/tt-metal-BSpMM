@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "include_me.hpp"
+#include "sparse_common/host_code_utils.hpp"
 #include "tt-metalium/assert.hpp"
 #include "tt-metalium/bfloat16.hpp"
 // #include "tt-metalium/buffer_constants.hpp"
@@ -25,6 +26,11 @@ using namespace tt::tt_metal;
 using CoreSpec = std::variant<CoreCoord, CoreRange, CoreRangeSet>;
 
 namespace bsr_host_code {
+
+// Re-export shared buffer helpers so SpMM code can call them unqualified
+using sparse_common::MakeBuffer;
+using sparse_common::MakeCircularBuffer;
+using sparse_common::MakeCircularBufferFP32;
 
 // list of host code function declarations
 template<bool verbose = false, bool is_profiling = false>
@@ -446,16 +452,6 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryDirectionSwee
 CoreCoord clamped_prev(const std::vector<CoreCoord>& order, uint32_t index);
 
 CoreCoord clamped_next(const std::vector<CoreCoord>& order, uint32_t index);
-
-std::shared_ptr<Buffer> MakeBuffer(IDevice* device, uint32_t size, uint32_t page_size, bool sram = false);
-
-std::shared_ptr<Buffer> MakeBuffer(IDevice* device, uint32_t n_tiles, size_t element_size, bool sram = false);
-
-CBHandle MakeCircularBuffer(
-    Program& program, const CoreSpec& core, tt::CBIndex cb, uint32_t size, uint32_t page_size, tt::DataFormat format);
-
-CBHandle MakeCircularBufferFP32(Program& program, const CoreSpec& core, tt::CBIndex cb, uint32_t n_tiles);
-
 
 uint32_t _get_maximum_block_dim_with_NoC_args(int32_t block_dim, int32_t in0_block_w, int32_t num_tiles_in_NoC_args);
 

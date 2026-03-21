@@ -735,6 +735,77 @@ public:
         return output;
     }
 
+    // Naive CPU SpGEMM: this (BSR) * other (BSR) -> BSR
+    // Requires: this->W == other.H and this->C == other.R
+    bsr_matrix<T> spgemm(const bsr_matrix<T> &B) {
+        assert(W == B.H);
+        assert(C == B.R);
+
+        size_t out_brow = H / R;
+        size_t out_bcol = B.W / B.C;
+
+        // Accumulate blocks: (block_row * out_bcol + block_col) -> dense block
+        std::vector<bool> block_present(out_brow * out_bcol, false);
+        std::vector<std::vector<T>> block_accum(out_brow * out_bcol);
+
+        // For each block row i of A
+        for (size_t i = 0; i < indptr.size() - 1; i++) {
+            // For each nonzero block A[i, k]
+            for (size_t a_idx = indptr[i]; a_idx < indptr[i + 1]; a_idx++) {
+                size_t k = indices[a_idx];
+                auto a_block = data.begin() + a_idx * R * C;
+
+                // For each nonzero block B[k, j]
+                for (size_t b_idx = B.indptr[k]; b_idx < B.indptr[k + 1]; b_idx++) {
+                    size_t j = B.indices[b_idx];
+                    auto b_block = B.data.begin() + b_idx * B.R * B.C;
+
+                    size_t flat = i * out_bcol + j;
+                    if (!block_present[flat]) {
+                        block_present[flat] = true;
+                        block_accum[flat].resize(R * B.C, T(0));
+                    }
+                    auto &acc = block_accum[flat];
+
+                    // Dense block multiply: acc += A[i,k] * B[k,j]
+                    for (size_t r = 0; r < R; r++) {
+                        for (size_t p = 0; p < B.C; p++) {
+                            T sum = 0;
+                            for (size_t c = 0; c < C; c++) {
+                                sum += *(a_block + r * C + c) * *(b_block + c * B.C + p);
+                            }
+                            acc[r * B.C + p] += sum;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Build BSR arrays from accumulated blocks (row-major order)
+        std::vector<int> out_indptr(out_brow + 1, 0);
+        std::vector<int> out_indices;
+        std::vector<T> out_data;
+        size_t out_nblocks = 0;
+
+        for (size_t i = 0; i < out_brow; i++) {
+            for (size_t j = 0; j < out_bcol; j++) {
+                size_t flat = i * out_bcol + j;
+                if (block_present[flat]) {
+                    out_indptr[i + 1]++;
+                    out_indices.push_back(j);
+                    out_data.insert(out_data.end(), block_accum[flat].begin(), block_accum[flat].end());
+                    out_nblocks++;
+                }
+            }
+        }
+        for (size_t i = 1; i <= out_brow; i++) {
+            out_indptr[i] += out_indptr[i - 1];
+        }
+
+        return bsr_matrix<T>(std::move(out_data), std::move(out_indptr), std::move(out_indices),
+                              H, B.W, R, B.C, out_nblocks);
+    }
+
     dense_matrix<T> spmm(dense_matrix<T> &B) {
         assert(W == B.H);
         dense_matrix<T> output(H, B.W);

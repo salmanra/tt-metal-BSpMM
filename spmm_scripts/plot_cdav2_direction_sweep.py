@@ -439,9 +439,11 @@ _FIG16_PANELS = [
 
 
 def _parse_sparsity_pattern_stem(stem: str) -> tuple[str | None, dict | None]:
+    # Strip _Disable__... suffix produced by --no-zones profiling runs
+    stem_clean = re.sub(r"_Disable__.*$", "", stem)
     m = re.match(
         r"parametric_(?:(multi_diag|col|row)_)?M(\d+)_N(\d+)_K(\d+)_R(\d+)_C(\d+)_d(\d+)",
-        stem,
+        stem_clean,
     )
     if not m:
         return None, None

@@ -6,6 +6,7 @@
 #                           [--host-code <index|all>]
 #                           [--registry <index|all>]
 #                           [--ablation-registry <index>]
+#                           [--no-zones]
 #                           [--no-build]
 #                           [--dry-run]
 #                           [--list]
@@ -32,6 +33,7 @@
 #   --registry <i|all>        Override profile registry for sweep phase (4-7, or all 4-7)
 #   --ablation-registry <i|all> Registry to use for ablation/flip_noc phase (default: 2)
 #                             Use "all" to run against all registries (0-7)
+#   --no-zones                Disable all device profiling zones (sets PROFILE_* env vars to 0)
 #   --no-build                Skip the build step
 #   --dry-run                 Print commands without running them
 #   --list                    List all registries and host codes, then exit
@@ -624,6 +626,7 @@ function main {
     OPT_REGISTRY="all"
     OPT_ABLATION_REGISTRY=2
     OPT_NO_BUILD=0
+    OPT_NO_ZONES=0
     OPT_DRY_RUN=0
 
     # Parse arguments
@@ -641,6 +644,8 @@ function main {
                 OPT_REGISTRY="$2"; shift 2 ;;
             --ablation-registry)
                 OPT_ABLATION_REGISTRY="$2"; shift 2 ;;
+            --no-zones)
+                OPT_NO_ZONES=1; shift ;;
             --no-build)
                 OPT_NO_BUILD=1; shift ;;
             --dry-run)
@@ -649,7 +654,7 @@ function main {
                 echo "Unknown option: $1"
                 echo "Usage: $0 [--phase ablation|sweep|flip_noc|direction|direction_sweep|all] [--host-code <i|all>]"
                 echo "          [--registry <i|all>] [--ablation-registry <i|all>]"
-                echo "          [--no-build] [--dry-run] [--list]"
+                echo "          [--no-zones] [--no-build] [--dry-run] [--list]"
                 exit 1
                 ;;
         esac
@@ -666,6 +671,16 @@ function main {
 
     tt-smi -r > /dev/null
     build_if_needed
+
+    # Disable all device profiling zones if requested
+    if [[ "$OPT_NO_ZONES" == "1" ]]; then
+        echo "[config] Disabling all device profiling zones"
+        export PROFILE_READ_IN0=0
+        export PROFILE_WAIT_IN0=0
+        export PROFILE_WRITE_OUT=0
+        export PROFILE_READ_IN1=0
+        export PROFILE_COMPUTE=0
+    fi
 
     case "$OPT_PHASE" in
         ablation)

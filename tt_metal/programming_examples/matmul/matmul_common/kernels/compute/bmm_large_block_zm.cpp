@@ -6,6 +6,7 @@
 
 #include "compute_kernel_api/tile_move_copy.h"
 #include "compute_kernel_api/matmul.h"
+#include <tools/profiler/kernel_profiler.hpp>
 
 namespace NAMESPACE {
 void MAIN {
@@ -59,6 +60,7 @@ void MAIN {
                             for (uint32_t inner_dim = 0; inner_dim < in0_block_w; inner_dim++) {
                                 int in0_index = in0_index_subblock_offset + in0_index_h_offset + inner_dim;
                                 int in1_index = in1_index_subblock_offset + in1_index_inner_dim_offset + w;
+                                DeviceZoneScopedN("matmul of the tiles");
                                 matmul_tiles(
                                     tt::CBIndex::c_0,
                                     tt::CBIndex::c_1,

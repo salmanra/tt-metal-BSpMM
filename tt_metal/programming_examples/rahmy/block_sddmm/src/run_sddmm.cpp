@@ -57,6 +57,27 @@ void run_test(
     console_printf("Running SDDMM: mask(%zux%zu, %zu blocks) ⊙ (C(%zux%zu) × D(%zux%zu))\n",
                    mask.H, mask.W, mask.nblocks, c.H, c.W, d.H, d.W);
 
+    // Compute CPU reference BEFORE tilizing inputs
+    bsr_matrix<bfloat16> expected = mask.sddmm(c, d);
+
+    // Tilize inputs for device
+    // Tilize mask: each BSR block of R×C_block independently
+    {
+        std::vector<bfloat16> tilized_mask;
+        tilized_mask.reserve(mask.data.size());
+        size_t block_elems = R * C_block;
+        for (size_t b = 0; b < mask.nblocks; b++) {
+            auto begin = mask.data.begin() + b * block_elems;
+            auto end = begin + block_elems;
+            std::vector<bfloat16> block_data(begin, end);
+            block_data = tilize_nfaces(block_data, R, C_block);
+            tilized_mask.insert(tilized_mask.end(), block_data.begin(), block_data.end());
+        }
+        mask.data = std::move(tilized_mask);
+    }
+    c.data = tilize_nfaces(c.data, M, K);
+    d.data = tilize_nfaces(d.data, K, N);
+
     // Run SDDMM via host code
     bsr_matrix<bfloat16> output;
     host_func(mask, c, d, output, M, N, K, R, C_block, 1, device);
@@ -64,8 +85,20 @@ void run_test(
     console_printf("SDDMM complete. Output: %zux%zu with %zu blocks\n",
                    output.H, output.W, output.nblocks);
 
-    // Verify against CPU reference
-    bsr_matrix<bfloat16> expected = mask.sddmm(c, d);
+    // Untilize output: each BSR block of R×C_block is independently tilized
+    {
+        std::vector<bfloat16> untilized;
+        untilized.reserve(output.data.size());
+        size_t block_elems = R * C_block;
+        for (size_t b = 0; b < output.nblocks; b++) {
+            auto begin = output.data.begin() + b * block_elems;
+            auto end = begin + block_elems;
+            std::vector<bfloat16> block_data(begin, end);
+            block_data = untilize_nfaces(block_data, R, C_block);
+            untilized.insert(untilized.end(), block_data.begin(), block_data.end());
+        }
+        output.data = std::move(untilized);
+    }
 
     // Convert both to dense for comparison
     dense_matrix<bfloat16> output_dense = output.to_dense();

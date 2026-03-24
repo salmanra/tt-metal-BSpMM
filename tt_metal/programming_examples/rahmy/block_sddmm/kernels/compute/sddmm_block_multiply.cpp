@@ -1,235 +1,196 @@
-// STUB: Compute kernel for SDDMM block multiply.
+// SDDMM Compute Kernel
 //
-// For each nonzero block (i,j) in the sampling mask:
-// 1. Compute the dense block product: sum_k C_tile(i,k) × D_tile(k,j)
-//    This is a standard tiled matmul, same as SpMM's bmm_iter
-// 2. Element-wise (Hadamard) multiply with the mask block: A[i,j] = B[i,j] ⊙ (C×D)[i,j]
-//    This requires an additional element-wise multiply operation (SFPU or FPU)
+// For each assigned output block (i,j):
+// 1. Accumulate matmul: sum_k C_block(i,k) × D_block(k,j) via tiled multiply-accumulate
+// 2. Element-wise (Hadamard) multiply with the sparse mask block B[i,j]
+// 3. Push final result to output CB
 //
-// The two-phase nature (matmul then hadamard) may benefit from
-// fusing both operations to avoid writing the intermediate to a CB.
+// The matmul reduction phase is identical to SpMM's bmm_iter, but operates
+// on c_1 (dense C) × c_2 (dense D) instead of c_0 × c_1.
+// The Hadamard multiply is SDDMM-specific.
 
-#include <tools/profiler/kernel_profiler.hpp>
-#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_profiling.hpp"
-
-// Compile-time profiling zone toggle (override to 0 via CreateKernel defines)
-#ifndef PROFILE_COMPUTE
-#define PROFILE_COMPUTE 1
-#endif
+#include <cstdint>
+#include "compute_kernel_api/tile_move_copy.h"
+#include "compute_kernel_api/matmul.h"
+#include "compute_kernel_api/eltwise_binary.h"
 
 // Ablation skip flag (set to 1 via CreateKernel defines to skip compute)
 #ifndef SKIP_COMPUTE
 #define SKIP_COMPUTE 0
 #endif
 
-#include <cstdint>
-#include "hostdevcommon/kernel_structs.h"
-#include "compute_kernel_api/tile_move_copy.h"
-#include "compute_kernel_api/matmul.h"
-#include "circular_buffer.h"
-
-
 namespace NAMESPACE {
 void MAIN {
-    ///////////////////////////////////////////////////////////////////////
-    /// COMPILETIME ARGS //////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////
-
-    constexpr uint32_t in0_block_w = get_compile_time_arg_val(0);              // inner block size in tiles
-    constexpr uint32_t in0_num_subblocks = get_compile_time_arg_val(1);        // outer row block size (in inner row blocks)
-    constexpr uint32_t in0_block_num_tiles = get_compile_time_arg_val(2);      // out_subblock_h*in0_block_w*in0_num_subblocks;
-    constexpr uint32_t in0_subblock_num_tiles = get_compile_time_arg_val(3);   // out_subblock_h*in0_block_w
-    constexpr uint32_t in1_num_subblocks = get_compile_time_arg_val(4);        // outer column block size (in inner column blocks)
-    constexpr uint32_t in1_block_num_tiles = get_compile_time_arg_val(5);      // out_subblock_w*in0_block_w* in1_num_subblocks;
-    constexpr uint32_t in1_per_core_w = get_compile_time_arg_val(6);           // out_subblock_w*in1_num_subblocks
-    constexpr uint32_t out_subblock_h = get_compile_time_arg_val(7);           // inner row block size in tiles
-    constexpr uint32_t out_subblock_w = get_compile_time_arg_val(8);           // inner column block size in tiles
-    constexpr uint32_t out_subblock_num_tiles = get_compile_time_arg_val(9);  // out_subblock_h * out_subblock_w;
-    constexpr uint32_t num_iters_x = get_compile_time_arg_val≈(10);
-    constexpr uint32_t core_idx_x = get_compile_time_arg_val(10);
-    constexpr uint32_t num_blocks = get_compile_time_arg_val(11);
-
-    ///////////////////////////////////////////////////////////////////////
-    /// END COMPILETIME ARGS //////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////
-
-    ///////////////////////////////////////////////////////////////////////
-    /// RUNTIME ARGS //////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////
-    const uint32_t num_iters_x = get_arg_val<uint32_t>(0);
-    const uint32_t num_iters_y = get_arg_val<uint32_t>(1);
-
-    ///////////////////////////////////////////////////////////////////////
-    /// END RUNTIME ARGS //////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////
-
-    ///////////////////////////////////////////////////////////////////////
-    /// PROGRAM BODY //////////////////////////////////////////////////////
-    ///////////////////////////////////////////////////////////////////////
-    mm_init(tt::CBIndex::c_0, tt::CBIndex::c_1, tt::CBIndex::c_16);
-
-    DPRINT_MATH(DPRINT << "CK got all args" << ENDL());
+    // ── Compile-time args ────────────────────────────────────────────
+    constexpr uint32_t in0_block_w            = get_compile_time_arg_val(0);   // block_k
+    constexpr uint32_t in0_num_subblocks      = get_compile_time_arg_val(1);   // Rt / out_subblock_h
+    constexpr uint32_t in0_block_num_tiles    = get_compile_time_arg_val(2);   // Rt * block_k
+    constexpr uint32_t in0_subblock_num_tiles = get_compile_time_arg_val(3);   // out_subblock_h * block_k
+    constexpr uint32_t in1_num_subblocks      = get_compile_time_arg_val(4);   // Ct / out_subblock_w
+    constexpr uint32_t in1_block_num_tiles    = get_compile_time_arg_val(5);   // Ct * block_k
+    constexpr uint32_t in1_per_core_w         = get_compile_time_arg_val(6);   // Ct
+    constexpr uint32_t out_subblock_h         = get_compile_time_arg_val(7);
+    constexpr uint32_t out_subblock_w         = get_compile_time_arg_val(8);
+    constexpr uint32_t out_subblock_num_tiles = get_compile_time_arg_val(9);   // out_subblock_h * out_subblock_w
+    constexpr uint32_t num_blocks             = get_compile_time_arg_val(10);  // num_blocks_k
 
     constexpr uint32_t out_block_num_tiles =
-        out_subblock_num_tiles * in0_num_subblocks * in1_num_subblocks;
-    constexpr uint32_t sparse_read_timing = core_idx_x % num_blocks;
-#if SKIP_COMPUTE == 1
-    // Drain input CBs and push dummy tiles to output so writer does not stall.
-    // c_24 is never touched here since there are no partials to spill.
-    for (uint32_t iter_y = 0; iter_y < num_iters_y; iter_y++){
-        uint32_t num_blocks = row_sizes[iter_y];
-        for (uint32_t iter_x = 0; iter_x < num_iters_x; iter_x++){
-            for (uint32_t input_block = 0; input_block < num_blocks; input_block++){
-                bool last_out = input_block == (num_blocks - 1);
-                cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
-                cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
-                cb_wait_front(cb_id_sparse_data, out_block_num_tiles);
+        out_subblock_num_tiles * in0_num_subblocks * in1_num_subblocks;  // Rt * Ct
 
-                if (last_out) {
-                    cb_reserve_back(tt::CBIndex::c_16, out_block_num_tiles);
-                    cb_push_back(tt::CBIndex::c_16, out_block_num_tiles);
-                }
-                cb_pop_front(tt::CBIndex::c_0, in0_block_num_tiles);
-                cb_pop_front(tt::CBIndex::c_1, in1_block_num_tiles);
-                cb_pop_front(cb_id_sparse_data, out_block_num_tiles);
+    // CB IDs
+    constexpr uint32_t cb_sparse = tt::CBIndex::c_0;   // B mask block
+    constexpr uint32_t cb_dense_c = tt::CBIndex::c_1;  // C reduction blocks
+    constexpr uint32_t cb_dense_d = tt::CBIndex::c_2;  // D reduction blocks
+    constexpr uint32_t cb_out = tt::CBIndex::c_16;      // Output
+    constexpr uint32_t cb_intermed = tt::CBIndex::c_24; // Intermediate
+
+    // ── Runtime args ─────────────────────────────────────────────────
+    const uint32_t num_output_blocks = get_arg_val<uint32_t>(0);
+
+    // ── Init ─────────────────────────────────────────────────────────
+    mm_init(cb_dense_c, cb_dense_d, cb_out);
+
+#if SKIP_COMPUTE == 1
+    // ── Skip compute: drain inputs, push dummy output ────────────────
+    for (uint32_t ob = 0; ob < num_output_blocks; ob++) {
+        for (uint32_t input_block = 0; input_block < num_blocks; input_block++) {
+            cb_wait_front(cb_dense_c, in0_block_num_tiles);
+            cb_wait_front(cb_dense_d, in1_block_num_tiles);
+            bool last_out = (input_block == (num_blocks - 1));
+            if (last_out) {
+                cb_reserve_back(cb_out, out_block_num_tiles);
+                cb_push_back(cb_out, out_block_num_tiles);
             }
+            cb_pop_front(cb_dense_c, in0_block_num_tiles);
+            cb_pop_front(cb_dense_d, in1_block_num_tiles);
         }
+        cb_wait_front(cb_sparse, out_block_num_tiles);
+        cb_pop_front(cb_sparse, out_block_num_tiles);
     }
 #else
-    for (uint32_t iter_y = 0; iter_y < num_iters_y; iter_y++){
-        for (uint32_t iter_x = 0; iter_x < num_iters_x; iter_x++){
-            bool enable_reload = false;
-            bool spill = num_blocks > 1;
-            uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;
-            for (uint32_t input_block = 0; input_block < num_blocks; input_block++){
-                bool last_out = input_block == (num_blocks - 1);
-                cb_wait_front(tt::CBIndex::c_0, in0_block_num_tiles);
-                cb_wait_front(tt::CBIndex::c_1, in1_block_num_tiles);
-                // TODO: test
-                if (input_block == sparse_read_timing)
-                    cb_wait_front(cb_id_sparse_data, out_block_num_tiles);
-#if PROFILE_COMPUTE == 1
-                DeviceZoneScopedN("SpMM Zone: CK using input blocks");
-#endif
-                int in0_index_subblock_offset = 0;
-                for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
-                    int in1_index_subblock_offset = 0;
-                    for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; in1_subblock++) {
-                        acquire_dst();
+    // ── Main compute loop ────────────────────────────────────────────
+    for (uint32_t ob = 0; ob < num_output_blocks; ob++) {
+        bool enable_reload = false;
+        bool spill = num_blocks > 1;
 
-                        if (enable_reload) {
-                            copy_tile_to_dst_init_short(tt::CBIndex::c_24);
-                            cb_wait_front(tt::CBIndex::c_24, out_subblock_num_tiles);
-                            for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
-                                copy_tile(tt::CBIndex::c_24, i, i);
-                            }
-                            cb_pop_front(tt::CBIndex::c_24, out_subblock_num_tiles);
-                            mm_init_short(tt::CBIndex::c_0, tt::CBIndex::c_1);
+        // Wait for sparse mask block (pushed first by BC reader)
+        cb_wait_front(cb_sparse, out_block_num_tiles);
+
+        for (uint32_t input_block = 0; input_block < num_blocks; input_block++) {
+            bool last_out = (input_block == (num_blocks - 1));
+
+            // Wait for C and D reduction blocks
+            cb_wait_front(cb_dense_c, in0_block_num_tiles);
+            cb_wait_front(cb_dense_d, in1_block_num_tiles);
+
+            // ── Subblock matmul (same structure as SpMM bmm_iter) ────
+            int in0_index_subblock_offset = 0;
+            for (uint32_t in0_subblock = 0; in0_subblock < in0_num_subblocks; in0_subblock++) {
+                int in1_index_subblock_offset = 0;
+                for (uint32_t in1_subblock = 0; in1_subblock < in1_num_subblocks; in1_subblock++) {
+                    acquire_dst();
+
+                    if (enable_reload) {
+                        copy_tile_to_dst_init_short(cb_intermed);
+                        cb_wait_front(cb_intermed, out_subblock_num_tiles);
+                        for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
+                            copy_tile(cb_intermed, i, i);
                         }
+                        cb_pop_front(cb_intermed, out_subblock_num_tiles);
+                        mm_init_short(cb_dense_c, cb_dense_d);
+                    }
 
-                        // Compute output sub-block from in0_subblock x in1_subblock
-                        int dst_index = 0;
-                        int in0_index_h_offset = 0;
-                        for (uint32_t h = 0; h < out_subblock_h; h++) {
-                            for (uint32_t w = 0; w < out_subblock_w; w++) {
-                                int in1_index_inner_dim_offset = 0;
-                                for (uint32_t inner_dim = 0; inner_dim < in0_block_w; inner_dim++) {
-                                    int in0_index = in0_index_subblock_offset + in0_index_h_offset + inner_dim;
-                                    int in1_index = in1_index_subblock_offset + in1_index_inner_dim_offset + w;
-
-                                    matmul_tiles(
-                                        tt::CBIndex::c_0,
-                                        tt::CBIndex::c_1,
-                                        in0_index,
-                                        in1_index,
-                                        dst_index, // DST register
-                                        false /* transpose */);
-
-                                    in1_index_inner_dim_offset += in1_per_core_w;
-                                }
-                                dst_index++;
+                    // Tiled multiply-accumulate: C[h,k] × D[k,w]
+                    int dst_index = 0;
+                    int in0_index_h_offset = 0;
+                    for (uint32_t h = 0; h < out_subblock_h; h++) {
+                        for (uint32_t w = 0; w < out_subblock_w; w++) {
+                            int in1_index_inner_dim_offset = 0;
+                            for (uint32_t inner_dim = 0; inner_dim < in0_block_w; inner_dim++) {
+                                int in0_index = in0_index_subblock_offset + in0_index_h_offset + inner_dim;
+                                int in1_index = in1_index_subblock_offset + in1_index_inner_dim_offset + w;
+                                matmul_tiles(
+                                    cb_dense_c, cb_dense_d,
+                                    in0_index, in1_index,
+                                    dst_index,
+                                    false /* transpose */);
+                                in1_index_inner_dim_offset += in1_per_core_w;
                             }
-                            in0_index_h_offset += in0_block_w;
+                            dst_index++;
                         }
+                        in0_index_h_offset += in0_block_w;
+                    }
 
-                        if (last_out) {
-                            // TODO: test
-                            /*
-                            1. pack to intermediate CB
-                            3. mul intermediate CB with B_ij
-                            5. push to output CB
-                            */
-
-                            // 1. Pack to intermediate CB 
-                            cb_reserve_back(tt::CBIndex::c_24, out_subblock_num_tiles);
-                            for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
-                                pack_tile(i, tt::CBIndex::c_24);
-                            }
-                            cb_push_back(tt::CBIndex::c_24, out_subblock_num_tiles);
-
-                            // 3. Element-wise multiplication
-                            // TODO: get the indices into the sparse block right. It's a 2D iteration that starts at the correct subblock index. 
-                            mul_tiles_init(cb_id_sparse_data, cb_id_intermed, cb_id_out);
-                            int dst_index = 0;
-                            int output_index = 0;
-                            for (uint32_t h = 0; h < out_subblock_h; h++) {
-                                for (uint32_t w = 0; w < out_subblock_w; w++) {
-                                    output_index = h * in1_num_subblocks * out_subblock_w + w;
-                                    // overwrites DST register?
-                                    mul_tiles(
-                                        cb_id_sparse_data,
-                                        cb_id_intermed,
-                                        output_index,
-                                        output_index,
-                                        dst_index, // DST register
-                                    );
-
-                                    dst_index++;
-                                }
-                            }
-
-                            // 5. Pack out to output buffer
-                            // TODO: is there some intermediate/output buffer nastiness happening here?
-                            cb_reserve_back(tt::CBIndex::c_16, out_subblock_num_tiles);
-                            for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
-                                pack_tile(i, tt::CBIndex::c_16);
-                            }
-                            cb_push_back(tt::CBIndex::c_16, out_subblock_num_tiles);
-                        } else {
-                            // Wait for tiles in output buffer to be written out since interm and output share memory
-                            if (input_block == 0) {
-                                cb_reserve_back(tt::CBIndex::c_16, out_num_tiles_to_wait);
-                                out_num_tiles_to_wait += out_subblock_num_tiles;
-                            }
-                            // Move partial result to interm buffer
-                            cb_reserve_back(tt::CBIndex::c_24, out_subblock_num_tiles);
-                            for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
-                                pack_tile(i, tt::CBIndex::c_24);
-                            }
-                            cb_push_back(tt::CBIndex::c_24, out_subblock_num_tiles);
-
+                    if (last_out) {
+                        // ── SDDMM Hadamard multiply ─────────────────
+                        // Step 1: Pack matmul result to intermediate c_24
+                        cb_reserve_back(cb_intermed, out_subblock_num_tiles);
+                        for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
+                            pack_tile(i, cb_intermed);
                         }
+                        cb_push_back(cb_intermed, out_subblock_num_tiles);
                         release_dst();
 
-                        in1_index_subblock_offset += out_subblock_w;
+                        // Step 2: Element-wise multiply: B[i,j] (c_0) * intermediate (c_24)
+                        acquire_dst();
+                        mul_tiles_init(cb_sparse, cb_intermed);
+                        cb_wait_front(cb_intermed, out_subblock_num_tiles);
+
+                        // Compute offset into the full Rt*Ct sparse mask for this subblock
+                        uint32_t sparse_subblock_offset =
+                            in0_subblock * out_subblock_h * in1_per_core_w +
+                            in1_subblock * out_subblock_w;
+
+                        int mul_dst_index = 0;
+                        for (uint32_t h = 0; h < out_subblock_h; h++) {
+                            for (uint32_t w = 0; w < out_subblock_w; w++) {
+                                uint32_t sparse_tile_idx = sparse_subblock_offset + h * in1_per_core_w + w;
+                                uint32_t intermed_tile_idx = h * out_subblock_w + w;
+                                mul_tiles(
+                                    cb_sparse, cb_intermed,
+                                    sparse_tile_idx, intermed_tile_idx,
+                                    mul_dst_index);
+                                mul_dst_index++;
+                            }
+                        }
+                        cb_pop_front(cb_intermed, out_subblock_num_tiles);
+
+                        // Step 3: Pack result to output c_16
+                        cb_reserve_back(cb_out, out_subblock_num_tiles);
+                        for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
+                            pack_tile(i, cb_out);
+                        }
+                        cb_push_back(cb_out, out_subblock_num_tiles);
+                        release_dst();
+
+                        // Re-init matmul for next output block
+                        mm_init_short(cb_dense_c, cb_dense_d);
+                    } else {
+                        // ── Spill partial result to c_24 ─────────────
+                        cb_reserve_back(cb_intermed, out_subblock_num_tiles);
+                        for (uint32_t i = 0; i < out_subblock_num_tiles; i++) {
+                            pack_tile(i, cb_intermed);
+                        }
+                        cb_push_back(cb_intermed, out_subblock_num_tiles);
+                        release_dst();
                     }
-                    in0_index_subblock_offset += in0_subblock_num_tiles;
+
+                    in1_index_subblock_offset += out_subblock_w;
                 }
-
-                if (spill) {
-                    enable_reload = true;
-                }
-
-                cb_pop_front(tt::CBIndex::c_0, in0_block_num_tiles);
-                cb_pop_front(tt::CBIndex::c_1, in1_block_num_tiles);
-                cb_pop_front(cb_id_sparse_data, out_block_num_tiles);
-
-                // DPRINT_MATH(DPRINT << "done computing on one input block" << ENDL());
-
+                in0_index_subblock_offset += in0_subblock_num_tiles;
             }
+
+            if (spill) {
+                enable_reload = true;
+            }
+
+            cb_pop_front(cb_dense_c, in0_block_num_tiles);
+            cb_pop_front(cb_dense_d, in1_block_num_tiles);
         }
+
+        // Pop sparse mask ONCE after all reduction steps for this output block
+        cb_pop_front(cb_sparse, out_block_num_tiles);
     }
 #endif // SKIP_COMPUTE
-    DPRINT_MATH(DPRINT << "CK complete" << ENDL());
 };
 }

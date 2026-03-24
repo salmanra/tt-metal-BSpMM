@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "include_me.hpp"
+#include "sparse_common/host_code_utils.hpp"
 #include "tt-metalium/assert.hpp"
 #include "tt-metalium/bfloat16.hpp"
 #include "tt-metalium/core_coord.hpp"
@@ -23,6 +24,9 @@ using namespace tt::tt_metal;
 using CoreSpec = std::variant<CoreCoord, CoreRange, CoreRangeSet>;
 
 namespace bsr_sddmm_host_code {
+
+using sparse_common::MakeBuffer;
+using sparse_common::MakeCircularBuffer;
 
 // SDDMM host code function declarations
 // Signature: A = B ⊙ (C × D)

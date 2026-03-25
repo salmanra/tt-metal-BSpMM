@@ -211,9 +211,12 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
     uint32_t dram_buffer_B_size =
         single_tile_size * Nt * Kt;
 
+    uint32_t src0_block_size = in0_block_w * in0_block_h * single_tile_size;
+    uint32_t src1_block_size = in1_block_w * in0_block_w * single_tile_size;
+
     auto dst_dram_buffer = MakeBuffer(device, dram_buffer_dst_total_size, single_tile_size);
-    auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size);
-    auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
+    auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, src0_block_size); // TODO: will this let the D2Inj performance easaier to reason about?
+    auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, src1_block_size);
     auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, indexing_data_single_tile_size);
     auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, indexing_data_single_tile_size);
 

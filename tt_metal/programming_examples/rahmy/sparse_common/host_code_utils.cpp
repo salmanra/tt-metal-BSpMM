@@ -17,6 +17,16 @@ std::shared_ptr<Buffer> MakeBuffer(IDevice* device, uint32_t n_tiles, size_t ele
     return MakeBuffer(device, tile_size * n_tiles, page_tiles * tile_size, sram);
 }
 
+// std::shared_ptr<Buffer> MakeShardedBuffer(IDevice* device, uint32_t size, uint32_t shard_height, uint32_t shard_width){
+//     auto shard_shape = Shape2D{shard_height, shard_width};
+//     ShardedBufferConfig config{
+//         .global_size = distributed_buffer_size_bytes,
+//         .global_buffer_shape = distributed_buffer_shape,
+//         .shard_shape = shard_shape
+//     };
+//     return CreateBuffer(config);
+// }
+
 CBHandle MakeCircularBuffer(
     Program& program, const CoreSpec& core, tt::CBIndex cb, uint32_t size, uint32_t page_size, tt::DataFormat format) {
     CircularBufferConfig cb_src0_config = CircularBufferConfig(size, {{cb, format}}).set_page_size(cb, page_size);

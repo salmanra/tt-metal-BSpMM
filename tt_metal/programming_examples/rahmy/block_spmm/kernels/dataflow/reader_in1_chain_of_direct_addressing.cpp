@@ -246,6 +246,9 @@ void kernel_main(){
             uint32_t in1_tensor_start_tile_id = in1_block_w * output_idx_x;
             uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
 
+            uint32_t in1_tensor_start_block_id = output_idx_x;
+            uint32_t in1_tensor_block_stride_h = in1_tensor_stride_h / in1_block_w;
+
             for (uint32_t vstep = 0; vstep < max_blocks; vstep++){
                 bool has_work_this_vstep = (my_block_start + vstep < my_block_end);
 
@@ -318,12 +321,14 @@ void kernel_main(){
                         DeviceZoneScopedN("SpMM Zone: CDA Reading dense block of in1 from DRAM");
 #endif
                         DPRINT_DATA0(DPRINT << "in1 DRAM Read: " << action << ENDL());
-
-                        spmm::read_block_by_tile(
-                            in1_tensor_start_tile_id + my_col * in1_block_stride,
-                            s1, l1_write_addr_in1,
-                            ti.in1_tile_size, in1_block_h, in1_block_w,
-                            in1_tensor_stride_h, in1_tensor_stride_w);
+                        
+                        // TODO: figure out the page index we are supposed to use here
+                        noc_async_read_page(in1_tensor_start_block_id + my_col * in1_tensor_block_stride_h, s1, l1_write_addr_in1);
+                        // spmm::read_block_by_tile(
+                        //     in1_tensor_start_tile_id + my_col * in1_block_stride,
+                        //     s1, l1_write_addr_in1,
+                        //     ti.in1_tile_size, in1_block_h, in1_block_w,
+                        //     in1_tensor_stride_h, in1_tensor_stride_w);
                         noc_async_read_barrier();
 #endif
                     } else {

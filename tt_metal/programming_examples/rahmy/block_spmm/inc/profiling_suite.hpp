@@ -196,7 +196,6 @@ namespace profiling_suite {
         profile_case_parametric_random<8192, 8192, 8192,  64,  64, 25>,  // R=C= 64
         profile_case_parametric_random<8192, 8192, 8192, 128, 128, 25>,  // R=C=128
         profile_case_parametric_random<8192, 8192, 8192, 256, 256, 25>,  // R=C=256
-        // profile_case_parametric_random<8192, 8192, 8192, 512, 512, 25>,  // R=C=512
     };
 
     // Registry 8: Sweep sparsity pattern — holds M=N=K=8192, R=C=256, density=25%

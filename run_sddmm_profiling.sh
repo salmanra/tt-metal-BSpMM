@@ -1,0 +1,1 @@
+tt_metal/programming_examples/rahmy/block_sddmm/sddmm_scripts/run_sddmm_profiling.sh

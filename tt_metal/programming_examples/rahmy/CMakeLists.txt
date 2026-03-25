@@ -16,12 +16,14 @@ set(RAHMY_SRCS
     # SDDMM entry points
     ${CMAKE_CURRENT_SOURCE_DIR}/block_sddmm/src/test_sddmm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/block_sddmm/src/run_sddmm.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/block_sddmm/src/export_sddmm.cpp
 #    ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/profile_dense.cpp
 )
 
 if(ENABLE_TRACY)
     list(APPEND RAHMY_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/block_spmm/src/profile_block.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/block_sddmm/src/profile_sddmm.cpp
     )
 endif()
 

@@ -42,4 +42,39 @@ namespace sddmm_profiling_suite {
         profile_case_parametric_random<1024, 1024, 256, 32, 32, 50>,
     };
 
+    // Registry 1: Sweep N (dense output width) — holds M=8192,K=8192,R=C=64,density=25%
+    static ProfileCaseFunctionPtr ProfileSweepNRegistry[] = {
+        profile_case_parametric_random<8192, 512,  8192, 256, 256, 25>,  // N= 512
+        profile_case_parametric_random<8192, 1024, 8192, 256, 256, 25>,  // N=1024
+        profile_case_parametric_random<8192, 2048, 8192, 256, 256, 25>,  // N=2048
+        profile_case_parametric_random<8192, 4096, 8192, 256, 256, 25>,  // N=4096
+        profile_case_parametric_random<8192, 8192, 8192, 256, 256, 25>,  // N=8192
+    };
+
+    // Registry 2: Sweep density — holds M=N=K=8192,R=C=64, vary density
+    static ProfileCaseFunctionPtr ProfileSweepDensityRegistry[] = {
+        profile_case_parametric_random<8192, 8192, 8192, 256, 256,  5>,  //  5%
+        profile_case_parametric_random<8192, 8192, 8192, 256, 256, 10>,  // 10%
+        profile_case_parametric_random<8192, 8192, 8192, 256, 256, 25>,  // 25%
+        profile_case_parametric_random<8192, 8192, 8192, 256, 256, 50>,  // 50%
+        profile_case_parametric_random<8192, 8192, 8192, 256, 256, 75>,  // 75%
+    };
+
+    // Registry 3: Sweep K (reduction dimension) — holds M=N=8192,R=C=64,density=25%
+    static ProfileCaseFunctionPtr ProfileSweepKRegistry[] = {
+        profile_case_parametric_random<8192, 8192,  512, 256, 256, 25>,  // K= 512
+        profile_case_parametric_random<8192, 8192, 1024, 256, 256, 25>,  // K=1024
+        profile_case_parametric_random<8192, 8192, 2048, 256, 256, 25>,  // K=2048
+        profile_case_parametric_random<8192, 8192, 4096, 256, 256, 25>,  // K=4096
+        profile_case_parametric_random<8192, 8192, 8192, 256, 256, 25>,  // K=8192
+    };
+
+    // Registry 4: Sweep block size — holds M=N=K=8192,density=25%
+    static ProfileCaseFunctionPtr ProfileSweepBlockSizeRegistry[] = {
+        profile_case_parametric_random<8192, 8192, 8192,  32,  32, 25>,  // R=C= 32
+        profile_case_parametric_random<8192, 8192, 8192,  64,  64, 25>,  // R=C= 64
+        profile_case_parametric_random<8192, 8192, 8192, 128, 128, 25>,  // R=C=128
+        profile_case_parametric_random<8192, 8192, 8192, 256, 256, 25>,  // R=C=256
+    };
+
 } // namespace sddmm_profiling_suite

@@ -261,6 +261,9 @@ def test_matmul_2d_host_perf(
             "out_storage_type",
             "dtype",
             "math_fidelity",
+            "in0_block_w",
+            "per_core_M",
+            "per_core_N",
             "inference_time_avg [ns]",
             "TFLOPs (avg)",
             f"Host based utilization[%] (vs user selected grid {grid_size[0]}x{grid_size[1]})",
@@ -300,7 +303,7 @@ def test_matmul_2d_host_perf(
                 out_block_w = per_core_N // num_out_blocks_w
                 out_subblock_h, out_subblock_w = get_subblock_sizes(out_block_h, out_block_w, out_sharded)
 
-                logger.info(f"M*K*N = {m}*{k}*{n} out_subblock_h: {out_subblock_h}, out_subblock_w: {out_subblock_w}")
+                logger.info(f"M*K*N = {m}*{k}*{n} in0_block_w: {in0_block_w}, per_core_M: {per_core_M}, per_core_N: {per_core_N}, out_subblock_h: {out_subblock_h}, out_subblock_w: {out_subblock_w}")
 
                 in0 = torch.ones(in0_shape).bfloat16()
                 in1 = torch.randn(in1_shape).bfloat16()
@@ -478,7 +481,7 @@ def test_matmul_2d_host_perf(
                     utilization_user_grid_device = ideal_cycle_user_grid / np.mean(trisc1_kernel_duration)
 
                 logger.info(
-                    f"M*K*N = {m}*{k}*{n} == inference time (avg): {inference_time_avg}, tflops (avg): {tflops}, utilization (vs user selected grid {grid_size[0]}x{grid_size[1]}): {utilization_user_grid * 100:.2f}%, utilization (vs full available grid {compute_grid_size.x}x{compute_grid_size.y}): {utilization_full_grid * 100:.2f}%"
+                    f"M*K*N = {m}*{k}*{n} == in0_block_w: {in0_block_w}, per_core_M: {per_core_M}, per_core_N: {per_core_N}, inference time (avg): {inference_time_avg}, tflops (avg): {tflops}, utilization (vs user selected grid {grid_size[0]}x{grid_size[1]}): {utilization_user_grid * 100:.2f}%, utilization (vs full available grid {compute_grid_size.x}x{compute_grid_size.y}): {utilization_full_grid * 100:.2f}%"
                 )
 
                 output_tensor = ttnn.to_torch(output_t)
@@ -498,6 +501,9 @@ def test_matmul_2d_host_perf(
                     out_storage_type,
                     dtype,
                     math_fidelity,
+                    in0_block_w,
+                    per_core_M,
+                    per_core_N,
                     f"{inference_time_avg * 1e9:.2f}",
                     f"{tflops:.2f}",
                     f"{utilization_user_grid * 100:.2f}",

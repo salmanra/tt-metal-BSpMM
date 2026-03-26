@@ -669,8 +669,8 @@ function main {
             ;;
     esac
 
-    tt-smi -r > /dev/null
-    build_if_needed
+    # tt-smi -r > /dev/null
+    # build_if_needed
 
     # Disable all device profiling zones if requested
     if [[ "$OPT_NO_ZONES" == "1" ]]; then

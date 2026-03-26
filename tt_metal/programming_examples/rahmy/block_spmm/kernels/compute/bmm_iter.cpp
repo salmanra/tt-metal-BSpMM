@@ -26,6 +26,8 @@ CK is neutral to order, but it's probably worth naming loop vars
 
 namespace NAMESPACE {
 void MAIN {
+    // I'm gonna run this unconditionally... i just want to be sure i capture what i need
+    MATH(DeviceZoneScopedN("SpMM Zone: MATH core total runtime"));
     ///////////////////////////////////////////////////////////////////////
     /// COMPILETIME ARGS //////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////

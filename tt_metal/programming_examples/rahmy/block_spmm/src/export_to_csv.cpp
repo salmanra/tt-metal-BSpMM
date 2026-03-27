@@ -104,6 +104,12 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
     uint32_t in1_block_w = get_Npc_from_BSR_block_size(Nt, Rt, Ct, num_cores_x, num_cores_y, num_tiles_indexing, nnz_rows);
     os_dense << "Dense block width (in1_block_w): " << in1_block_w << " tiles"
              << " (" << in1_block_w * TILE_WIDTH << " columns)" << std::endl;
+
+    
+    n = sprintf(buf, "python GEMM_profiling/read_spmm_profiler.py --nblocks %zu --R %zu --C %zu --N %zu --M %zu --K %zu >> %s ", a.nblocks, a.R, a.C, b.W, a.H, a.W, sparse_log_file.c_str());
+    std::string python_TFLOPs_command(buf);
+    std::system(python_TFLOPs_command.c_str());
+
 }
 
 int main(int argc, char** argv) {

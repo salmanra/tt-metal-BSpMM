@@ -285,6 +285,7 @@ function run_one {
 
     "$TT_METAL_DIR/build/programming_examples/rahmy/export_to_csv" \
         "$profile_case" "$host_code" "$registry" "$hc_registry"
+    
 }
 
 ###############################################################################

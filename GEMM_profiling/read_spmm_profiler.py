@@ -48,6 +48,7 @@ def main():
     parser.add_argument("--grid-x", type=int, default=8)
     parser.add_argument("--grid-y", type=int, default=8)
     parser.add_argument("--fidelity", type=str, default="HiFi4", choices=["LoFi", "HiFi2", "HiFi3", "HiFi4"])
+    parser.add_argument("--warmup", type=int, default=1, help="Number of warmup invocations to skip per core")
     args = parser.parse_args()
 
     if not profiler_log_path.exists():
@@ -90,27 +91,42 @@ def main():
     print(f"  Fidelity:    {args.fidelity} on {args.grid_x}x{args.grid_y} grid")
     print(f"  Ideal cycles: {ideal_cycles:.0f}\n")
 
-    key = "spmm_trisc1_kernel_duration"
-    if key in device_analysis:
-        stats = device_analysis[key]["stats"]
-        avg_cycles = stats["Average"]
+    # Collect per-core series data, dropping warmup invocations
+    analysis_key = "spmm_trisc1_kernel_duration"
+    all_durations = []
+    cores = deviceData["devices"][0]["cores"]
+    for core_key, core_data in cores.items():
+        if core_key == "DEVICE":
+            continue
+        for risc_data in core_data.get("riscs", {}).values():
+            if "analysis" not in risc_data or analysis_key not in risc_data["analysis"]:
+                continue
+            series = risc_data["analysis"][analysis_key]["series"]
+            # Skip warmup invocations, keep the rest
+            for entry in series[args.warmup:]:
+                all_durations.append(entry["duration_cycles"])
+
+    if all_durations:
+        durations = np.array(all_durations)
+        avg_cycles = durations.mean()
         avg_time_ms = avg_cycles / device_freq / 1e3
         device_tflops = total_flops / (avg_cycles / device_freq / 1e6) / 1e12
         utilization = ideal_cycles / avg_cycles
 
-        print(f"  TRISC1 kernel duration:")
-        print(f"    Count:          {stats['Count']:.0f}")
+        print(f"  TRISC1 kernel duration (warmup={args.warmup} dropped per core):")
+        print(f"    Count:          {len(durations)} (across all cores)")
         print(f"    Avg:            {avg_cycles:.0f} cycles ({avg_time_ms:.3f} ms)")
-        print(f"    Min:            {stats['Min']:.0f} cycles")
-        print(f"    Max:            {stats['Max']:.0f} cycles")
+        print(f"    Min:            {durations.min():.0f} cycles")
+        print(f"    Max:            {durations.max():.0f} cycles")
+        print(f"    Std:            {durations.std():.0f} cycles")
         print(f"    Device util:    {utilization * 100:.2f}%")
         print(f"    Device TFLOP/s: {device_tflops:.2f}")
         print()
     else:
-        print(f"  {key}: NOT FOUND\n")
+        print(f"  {analysis_key}: NOT FOUND (no per-core TRISC-KERNEL zones)\n")
 
     # List all other available analysis keys
-    other_keys = sorted(k for k in device_analysis if k != key)
+    other_keys = sorted(k for k in device_analysis if k != analysis_key)
     if other_keys:
         print(f"  Other available analyses ({len(other_keys)}):")
         for key in other_keys:

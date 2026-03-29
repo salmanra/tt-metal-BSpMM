@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.22...3.30)
 set(HOST_CODE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/host_code_utils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/bsr_sddmm_multicore_naive.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/bsr_sddmm_multicore_CDA.cpp
     # bsr_sddmm_multicore_SnF_C.cpp excluded — kernel stub not ready yet
 )
 

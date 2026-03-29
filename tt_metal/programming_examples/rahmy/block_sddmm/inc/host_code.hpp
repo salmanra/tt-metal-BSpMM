@@ -54,6 +54,20 @@ void bsr_sddmm_multicore_naive(
     uint32_t B,
     IDevice* device);
 
+template<bool verbose = false, bool is_profiling = false>
+void bsr_sddmm_multicore_CDA(
+    bsr_matrix<bfloat16>& sampling_mask,
+    dense_matrix<bfloat16>& c,
+    dense_matrix<bfloat16>& d,
+    bsr_matrix<bfloat16>& output,
+    uint32_t M,
+    uint32_t N,
+    uint32_t K,
+    uint32_t R,
+    uint32_t C_block,
+    uint32_t B,
+    IDevice* device);
+
 // Function pointer type for SDDMM host code
 using SDDMMHostCodeFunctionPtr = void (*)(
     bsr_matrix<bfloat16>& sampling_mask,
@@ -68,17 +82,19 @@ using SDDMMHostCodeFunctionPtr = void (*)(
     uint32_t B,
     IDevice* device);
 
-// Registry: only one algorithm (naive) for now
 static std::pair<SDDMMHostCodeFunctionPtr, std::string> HostCodeRegistry[] = {
     {bsr_sddmm_multicore_naive<false, false>, "bsr_sddmm_multicore_naive"},
+    {bsr_sddmm_multicore_CDA<false, false>, "bsr_sddmm_multicore_CDA"},
 };
 
 static std::pair<SDDMMHostCodeFunctionPtr, std::string> HostCodeRegistryVerbose[] = {
     {bsr_sddmm_multicore_naive<true, false>, "bsr_sddmm_multicore_naive"},
+    {bsr_sddmm_multicore_CDA<true, false>, "bsr_sddmm_multicore_CDA"},
 };
 
 static std::pair<SDDMMHostCodeFunctionPtr, std::string> HostCodeRegistryProfiling[] = {
     {bsr_sddmm_multicore_naive<false, true>, "bsr_sddmm_multicore_naive"},
+    {bsr_sddmm_multicore_CDA<false, true>, "bsr_sddmm_multicore_CDA"},
 };
 
 } // namespace bsr_sddmm_host_code

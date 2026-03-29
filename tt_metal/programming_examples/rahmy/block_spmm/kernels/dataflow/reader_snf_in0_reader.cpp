@@ -187,12 +187,11 @@ void kernel_main(){
 #endif
                     // Read in0 block from DRAM
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
-                    noc_async_read_page(reduction_iter, s0, l1_write_addr_in0);
-                    // spmm::read_block_by_tile(
-                    //     in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
-                    //     s0, l1_write_addr_in0,
-                    //     tile_info.in0_tile_size, in0_block_h, in0_block_w,
-                    //     in0_tensor_stride_h, in0_tensor_stride_w);
+                    spmm::read_block_by_tile(
+                        in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
+                        s0, l1_write_addr_in0,
+                        tile_info.in0_tile_size, in0_block_h, in0_block_w,
+                        in0_tensor_stride_h, in0_tensor_stride_w);
                     noc_async_read_barrier();
 #endif
                     //DPRINT_DATA1(DPRINT << " done injecting" << ENDL());

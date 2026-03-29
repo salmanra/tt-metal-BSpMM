@@ -4,10 +4,10 @@
 #include "hostdevcommon/kernel_structs.h"
 #include "debug/dprint.h"
 #include <tools/profiler/kernel_profiler.hpp>
-#include "tt_metal/programming_examples/rahmy/SC26_submission/block_spmm/kernels/common/spmm_reader_common.hpp"
-#include "tt_metal/programming_examples/rahmy/SC26_submission/block_spmm/kernels/common/spmm_tile_ops.hpp"
-#include "tt_metal/programming_examples/rahmy/SC26_submission/block_spmm/kernels/common/spmm_indexing.hpp"
-#include "tt_metal/programming_examples/rahmy/SC26_submission/block_spmm/kernels/common/spmm_profiling.hpp"
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_reader_common.hpp"
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_indexing.hpp"
+#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_profiling.hpp"
 
 // Compile-time profiling zone toggles (override to 0 via CreateKernel defines)
 #ifndef PROFILE_READ_IN0
@@ -187,11 +187,12 @@ void kernel_main(){
 #endif
                     // Read in0 block from DRAM
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
-                    spmm::read_block_by_tile(
-                        in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
-                        s0, l1_write_addr_in0,
-                        tile_info.in0_tile_size, in0_block_h, in0_block_w,
-                        in0_tensor_stride_h, in0_tensor_stride_w);
+                    noc_async_read_page(reduction_iter, s0, l1_write_addr_in0);
+                    // spmm::read_block_by_tile(
+                    //     in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
+                    //     s0, l1_write_addr_in0,
+                    //     tile_info.in0_tile_size, in0_block_h, in0_block_w,
+                    //     in0_tensor_stride_h, in0_tensor_stride_w);
                     noc_async_read_barrier();
 #endif
                     //DPRINT_DATA1(DPRINT << " done injecting" << ENDL());

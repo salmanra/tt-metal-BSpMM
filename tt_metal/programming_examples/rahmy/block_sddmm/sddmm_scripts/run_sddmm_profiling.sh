@@ -28,7 +28,8 @@ declare -A REGISTRY_NAMES=(
     [4]="SDDMMSweepBlockSize"
 )
 
-NUM_HOST_CODES=1
+NUM_HOST_CODES=2
+HOST_CODES=()  # empty = run all
 
 usage() {
     cat <<EOF
@@ -49,6 +50,7 @@ Options:
   --profile-only   Run profiling only (skip CSV export)
   --export-only    Run CSV export only (skip profiling)
   --registry N     Only run registry N (0-4); can be repeated
+  --host-code N    Only run host code N (0-$((NUM_HOST_CODES-1))); can be repeated
   --dry-run        Print commands without executing
   -h, --help       Show this help
 EOF
@@ -63,6 +65,7 @@ while [[ $# -gt 0 ]]; do
         --profile-only) DO_EXPORT=false; shift ;;
         --export-only)  DO_PROFILE=false; shift ;;
         --registry)     CUSTOM_REGISTRIES+=("$2"); shift 2 ;;
+        --host-code)    HOST_CODES+=("$2"); shift 2 ;;
         --dry-run)      DRY_RUN=true; shift ;;
         -h|--help)      usage ;;
         *) echo "Unknown option: $1"; usage ;;
@@ -73,9 +76,16 @@ if [[ ${#CUSTOM_REGISTRIES[@]} -gt 0 ]]; then
     REGISTRIES=("${CUSTOM_REGISTRIES[@]}")
 fi
 
+# Default host codes: all of them
+if [[ ${#HOST_CODES[@]} -eq 0 ]]; then
+    for (( i=0; i<NUM_HOST_CODES; i++ )); do
+        HOST_CODES+=("$i")
+    done
+fi
+
 run_cmd() {
     echo "+ $*"
-    if [[ "$DRY_RUN" == false ]]; then
+    if [[ $DRY_RUN == false ]]; then
         "$@"
     fi
 }
@@ -109,8 +119,8 @@ if [[ "$DO_PROFILE" == true ]]; then
         num_cases=${REGISTRY_SIZES[$reg]}
         echo "=== Profiling registry ${reg} (${REGISTRY_NAMES[$reg]}, ${num_cases} cases) ==="
         for (( tc=0; tc<num_cases; tc++ )); do
-            for (( hc=0; hc<NUM_HOST_CODES; hc++ )); do
-                just_build
+            for hc in "${HOST_CODES[@]}"; do
+                run_cmd just_build
                 TT_METAL_DEVICE_PROFILER=1
                 run_cmd "$PROFILE_BIN" "$tc" "$hc" "$reg"
             done
@@ -125,7 +135,7 @@ if [[ "$DO_EXPORT" == true ]]; then
         num_cases=${REGISTRY_SIZES[$reg]}
         echo "=== Exporting registry ${reg} (${REGISTRY_NAMES[$reg]}, ${num_cases} cases) ==="
         for (( tc=0; tc<num_cases; tc++ )); do
-            for (( hc=0; hc<NUM_HOST_CODES; hc++ )); do
+            for hc in "${HOST_CODES[@]}"; do
                 run_cmd "$EXPORT_BIN" "$tc" "$hc" "$reg"
             done
         done

@@ -99,7 +99,7 @@ void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Re
     }
 
     char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/sddmm_profiles/naive/traces/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    size_t n = sprintf(buf, "/home/user/tt-metal/sddmm_profiles/opt/traces/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
     std::string trace_file_location = trace_directory + test_name + disabled_zones + ".tracy";
 

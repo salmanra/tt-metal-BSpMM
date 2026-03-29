@@ -60,7 +60,19 @@ void kernel_main() {
         uint32_t blk_data_idx = get_arg_val<uint32_t>(arg_idx++);
 
         // ── Stream D blocks for reduction ────────────────────────────
+        // TODO: Discover what my role is, then do CDA, then do a barrier at the end of the output_block iter instead of the reduction step
+        //      This is now symmetric with the reading of C!
+        //      The only added complication is the discovery of my share set
+        /*
+        my share set is the cores IN THIS CORE COLUMN which have the same block_col_j.
+        -> T2B: My injector core is the max over core_idx_y in this share set
+        -> My sender is the max over core_idx_y in the share set which are less than my core_idx_y
+        -> My reeiver is the min over core_idx_y in the share set which are greater than my core_idx_y
+        Which data structures does the host have to send over for the cores to know this data?
+            Just block_col_j for all cores in this grid column for each num output blocks (can differ across cores)
+        */
         for (uint32_t k = 0; k < num_blocks_k; k++) {
+            // TODO: replace this block with CDA-like code for each k
             cb_reserve_back(cb_dense_d, dense_d_block_num_tiles);
             uint32_t l1_addr_d = get_write_ptr(cb_dense_d);
 
@@ -99,5 +111,6 @@ void kernel_main() {
         }
         noc_async_write_barrier();
         cb_pop_front(cb_out, out_block_num_tiles);
+        // TODO: barrier with my entire column of cores (not just the share set!), leader is min core_idx_y
     }
 }

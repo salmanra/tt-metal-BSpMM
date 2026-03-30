@@ -35,7 +35,6 @@ SDDMM_ALGO_COLOR = {
 
 SDDMM_DATA_DIR = Path("sddmm_profiles/naive/csvs")
 
-NUM_ITERS = 10
 
 
 # ── Helpers (from spmm_scripts/plot_profiling_plan.py) ─────────────────────────
@@ -59,16 +58,6 @@ def parse_log_metadata(filepath):
     return result
 
 
-def get_metric(csv_path: Path, zone: str = "Device program Loop") -> float | None:
-    """Read total_ns for one profiler zone from a host-code CSV."""
-    try:
-        df = pd.read_csv(csv_path, usecols=["name", "total_ns"])
-        row = df[df["name"] == zone]
-        return float(row["total_ns"].iloc[0]) if not row.empty else None
-    except Exception:
-        return None
-
-
 def _parse_parametric(stem: str) -> dict | None:
     m = re.match(
         r"parametric_M(\d+)_N(\d+)_K(\d+)_R(\d+)_C(\d+)_d(\d+)", stem
@@ -81,21 +70,29 @@ def _parse_parametric(stem: str) -> dict | None:
 
 # ── SDDMM-specific ────────────────────────────────────────────────────────────
 
-def _sddmm_tflops_per_sec(nblocks: int, R: int, C: int, K: int, ms: float) -> float:
-    """
-    SDDMM throughput in TFLOPs/s.
-    A = B ⊙ (C × D)  where C is (M×K), D is (K×N), B is sparse mask (M×N).
-    For each nonzero block: (R×K) × (K×C) matmul.
-    FLOPs = 2 × nblocks × R × C × K
-    """
-    flops = 2 * nblocks * R * C * K
-    return flops / 1e12 / (ms / 1e3)
+def extract_device_tflops(log_path: Path) -> float | None:
+    """Extract Device TFLOP/s from a mask log file (appended by read_sddmm_profiler.py)."""
+    if not log_path.exists():
+        return None
+    try:
+        with open(log_path) as f:
+            content = f.read()
+    except Exception:
+        return None
+    for pat in [
+        r"Device\s+TFLOP/s:\s*([\d.]+)",
+        r"TFLOP/?s:\s*([\d.]+)",
+    ]:
+        match = re.search(pat, content, re.IGNORECASE)
+        if match:
+            return float(match.group(1))
+    return None
 
 
 def load_sddmm_sweep(data_dir: Path, registry: str, sweep_param: str) -> pd.DataFrame:
     """
     Load timing data for all SDDMM algorithms in a parametric sweep.
-    Returns a DataFrame with columns: algo, <sweep_param>, ..., ms, tflops
+    Returns a DataFrame with columns: algo, <sweep_param>, ..., tflops
     """
     rows = []
     reg_dir = data_dir / registry
@@ -112,15 +109,12 @@ def load_sddmm_sweep(data_dir: Path, registry: str, sweep_param: str) -> pd.Data
             log = csv.parent / f"{csv.stem}_mask.log"
             meta = parse_log_metadata(log)
             nblocks = meta.get("nblocks")
-            ns = get_metric(csv)
-            if ns is not None and nblocks is not None:
-                ns = ns / NUM_ITERS
-                ms = ns / 1e6
+            tflops = extract_device_tflops(log)
+            if tflops is not None and nblocks is not None:
                 rows.append({
-                    "algo": algo, **params, "ms": ms,
+                    "algo": algo, **params,
                     "nblocks": nblocks,
-                    "tflops": _sddmm_tflops_per_sec(
-                        nblocks, params["R"], params["C"], params["K"], ms),
+                    "tflops": tflops,
                 })
     df = pd.DataFrame(rows)
     if not df.empty:

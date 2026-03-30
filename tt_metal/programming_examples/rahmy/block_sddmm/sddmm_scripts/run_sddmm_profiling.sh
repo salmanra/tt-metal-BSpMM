@@ -113,34 +113,22 @@ fi
 PROFILE_BIN="${BUILD_DIR}/profile_sddmm"
 EXPORT_BIN="${BUILD_DIR}/export_sddmm"
 
-# Profile
-if [[ "$DO_PROFILE" == true ]]; then
-    for reg in "${REGISTRIES[@]}"; do
-        num_cases=${REGISTRY_SIZES[$reg]}
-        echo "=== Profiling registry ${reg} (${REGISTRY_NAMES[$reg]}, ${num_cases} cases) ==="
-        for (( tc=0; tc<num_cases; tc++ )); do
-            for hc in "${HOST_CODES[@]}"; do
-                run_cmd just_build
-                TT_METAL_DEVICE_PROFILER=1
-                run_cmd "$PROFILE_BIN" "$tc" "$hc" "$reg"
-            done
-        done
-        echo ""
-    done
-fi
-
-# Export
-if [[ "$DO_EXPORT" == true ]]; then
-    for reg in "${REGISTRIES[@]}"; do
-        num_cases=${REGISTRY_SIZES[$reg]}
-        echo "=== Exporting registry ${reg} (${REGISTRY_NAMES[$reg]}, ${num_cases} cases) ==="
-        for (( tc=0; tc<num_cases; tc++ )); do
-            for hc in "${HOST_CODES[@]}"; do
+# Profile + Export (combined so device profiler log is read before next run overwrites it)
+for reg in "${REGISTRIES[@]}"; do
+    num_cases=${REGISTRY_SIZES[$reg]}
+    echo "=== Registry ${reg} (${REGISTRY_NAMES[$reg]}, ${num_cases} cases) ==="
+    for (( tc=0; tc<num_cases; tc++ )); do
+        for hc in "${HOST_CODES[@]}"; do
+            run_cmd just_build
+            if [[ "$DO_PROFILE" == true ]]; then
+                run_cmd env TT_METAL_DEVICE_PROFILER=1 "$PROFILE_BIN" "$tc" "$hc" "$reg"
+            fi
+            if [[ "$DO_EXPORT" == true ]]; then
                 run_cmd "$EXPORT_BIN" "$tc" "$hc" "$reg"
-            done
+            fi
         done
-        echo ""
     done
-fi
+    echo ""
+done
 
 echo "=== Done ==="

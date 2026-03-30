@@ -62,9 +62,11 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
 
     // Log mask (sparse BSR)
     std::string mask_log_file = csv_directory + test_file_name + "_mask.log";
-    std::ofstream os_mask(mask_log_file);
-    mask.pretty_print(os_mask);
-    os_mask << "Block Size (R x C): " << mask.R << " x " << mask.C << std::endl;
+    {
+        std::ofstream os_mask(mask_log_file);
+        mask.pretty_print(os_mask);
+        os_mask << "Block Size (R x C): " << mask.R << " x " << mask.C << std::endl;
+    }  // close before Python appends via >>
 
     // Log C (dense M×K)
     std::string c_log_file = csv_directory + test_file_name + "_C.log";
@@ -77,6 +79,12 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
     std::ofstream os_d(d_log_file);
     d.pretty_print(os_d);
     os_d << "Dimensions: " << d.H << " x " << d.W << std::endl;
+
+    // Compute device TFLOPs via profiler log
+    n = sprintf(buf, "python GEMM_profiling/read_sddmm_profiler.py --nblocks %zu --R %zu --C %zu --N %zu --M %zu --K %zu >> %s ",
+                mask.nblocks, mask.R, mask.C, mask.W, mask.H, c.W, mask_log_file.c_str());
+    std::string python_TFLOPs_command(buf);
+    std::system(python_TFLOPs_command.c_str());
 }
 
 int main(int argc, char** argv) {

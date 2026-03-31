@@ -72,8 +72,6 @@ ABLATION_COLORS = {
 OPT_DATA_DIR = Path("sddmm_profiles/opt/csvs")
 NAIVE_DATA_DIR = Path("sddmm_profiles/naive/csvs")
 
-# The "Device program Loop" zone wraps 10 EnqueueProgram calls (1 warmup outside).
-NUM_ITERS = 10
 
 
 # ── Style ─────────────────────────────────────────────────────────────────────
@@ -121,18 +119,8 @@ def _parse_parametric(stem: str) -> dict | None:
                     [int(x) for x in m.groups()]))
 
 
-def get_metric(csv_path: Path, zone: str = "Device program Loop") -> float | None:
-    """Extract total_ns for a named zone from a host profiler CSV."""
-    try:
-        df = pd.read_csv(csv_path, usecols=["name", "total_ns"])
-        row = df[df["name"] == zone]
-        return float(row["total_ns"].iloc[0]) if not row.empty else None
-    except Exception:
-        return None
-
-
-def extract_device_tflops(log_path: Path) -> float | None:
-    """Extract Device TFLOP/s from a mask log file (appended by read_sddmm_profiler.py)."""
+def extract_device_metrics(log_path: Path) -> dict | None:
+    """Extract Device TFLOP/s and avg kernel time (ms) from a mask log file."""
     if not log_path.exists():
         return None
     try:
@@ -140,14 +128,16 @@ def extract_device_tflops(log_path: Path) -> float | None:
             content = f.read()
     except Exception:
         return None
-    for pat in [
-        r"Device\s+TFLOP/s:\s*([\d.]+)",
-        r"TFLOP/?s:\s*([\d.]+)",
-    ]:
-        match = re.search(pat, content, re.IGNORECASE)
-        if match:
-            return float(match.group(1))
-    return None
+    result = {}
+    m = re.search(r"Device\s+TFLOP/s:\s*([\d.]+)", content, re.IGNORECASE)
+    if m:
+        result["tflops"] = float(m.group(1))
+    m = re.search(r"Avg:\s+\d+\s+cycles\s+\(([\d.]+)\s+ms\)", content)
+    if m:
+        result["avg_ms"] = float(m.group(1))
+    if "tflops" not in result:
+        return None
+    return result
 
 
 def extract_device_kernel_stats(log_path: Path) -> dict | None:
@@ -182,23 +172,14 @@ def extract_device_kernel_stats(log_path: Path) -> dict | None:
     return result
 
 
-def _host_tflops(nblocks: int, R: int, C: int, K: int, total_ns: float) -> float:
-    """
-    Compute host-side TFLOPs/s from total nanoseconds.
-    SDDMM FLOPs = 2*nblocks*R*C*K (matmul) + nblocks*R*C (Hadamard)
-    """
-    flops = 2 * nblocks * R * C * K + nblocks * R * C
-    return flops / 1e12 / (total_ns / 1e9)
-
-
 # ── Sweep data loading ────────────────────────────────────────────────────────
 
 def load_sddmm_sweep(data_dir: Path, registry: str, sweep_param: str,
                       algos: list | None = None) -> pd.DataFrame:
     """
     Load timing data for SDDMM algorithms in a parametric sweep.
-    Uses host-side "Device program Loop" timing to compute TFLOPs/s
-    (captures CDA's data movement benefits, unlike device TFLOP/s).
+
+    Uses device-side TRISC1 kernel duration from mask log files.
     """
     if algos is None:
         algos = SDDMM_ALGOS
@@ -208,27 +189,21 @@ def load_sddmm_sweep(data_dir: Path, registry: str, sweep_param: str,
         algo_dir = reg_dir / algo
         if not algo_dir.exists():
             continue
-        for csv in sorted(algo_dir.glob("*.csv")):
-            if csv.suffix != ".csv" or csv.stem.endswith(".device"):
-                continue
-            params = _parse_parametric(csv.stem)
+        for log in sorted(algo_dir.glob("*_mask.log")):
+            stem = log.stem.removesuffix("_mask")
+            params = _parse_parametric(stem)
             if params is None:
                 continue
-            log = csv.parent / f"{csv.stem}_mask.log"
+            metrics = extract_device_metrics(log)
+            if metrics is None:
+                continue
             meta = parse_log_metadata(log)
-            nblocks = meta.get("nblocks")
-            ns = get_metric(csv)
-            if ns is not None and nblocks is not None:
-                ns_per_iter = ns / NUM_ITERS
-                ms = ns_per_iter / 1e6
-                rows.append({
-                    "algo": algo, **params,
-                    "nblocks": nblocks,
-                    "ms": ms,
-                    "tflops": _host_tflops(nblocks, params["R"],
-                                           params["C"], params["K"],
-                                           ns_per_iter),
-                })
+            rows.append({
+                "algo": algo, **params,
+                "nblocks": meta.get("nblocks"),
+                "ms": metrics.get("avg_ms", 0),
+                "tflops": metrics["tflops"],
+            })
     df = pd.DataFrame(rows)
     if not df.empty:
         df = df.sort_values(["algo", sweep_param]).reset_index(drop=True)
@@ -250,20 +225,20 @@ def load_sddmm_ablation(data_dir: Path, registry: str) -> pd.DataFrame:
             if not algo_dir.exists():
                 continue
             variant = suffix.lstrip("_") or "full"
-            for csv in sorted(algo_dir.glob("*.csv")):
-                if csv.suffix != ".csv" or csv.stem.endswith(".device"):
-                    continue
-                params = _parse_parametric(csv.stem)
+            for log in sorted(algo_dir.glob("*_mask.log")):
+                stem = log.stem.removesuffix("_mask")
+                params = _parse_parametric(stem)
                 if params is None:
                     continue
-                ns = get_metric(csv)
-                if ns is not None:
-                    rows.append({
-                        "algo": algo,
-                        "variant": variant,
-                        **params,
-                        "ms": ns / NUM_ITERS / 1e6,
-                    })
+                metrics = extract_device_metrics(log)
+                if metrics is None:
+                    continue
+                rows.append({
+                    "algo": algo,
+                    "variant": variant,
+                    **params,
+                    "ms": metrics.get("avg_ms", 0),
+                })
     return pd.DataFrame(rows)
 
 

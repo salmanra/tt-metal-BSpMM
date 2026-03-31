@@ -1,10 +1,15 @@
 
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include "../inc/include_me.hpp"
 #include "../inc/test_suite.hpp"
 #include "../inc/profiling_suite.hpp"
 #include "../inc/host_code.hpp"
+
+#include <tt-metalium/host_api.hpp>
+#include <tt-metalium/tt_metal.hpp>
+#include <tt-metalium/device.hpp>
 
 using namespace tt::constants;
 using namespace std;
@@ -15,182 +20,128 @@ using namespace bsr_sddmm_test_suite;
 using namespace bsr_sddmm_host_code;
 using namespace sddmm_profiling_suite;
 
-#define ESC "\033["
-#define GREEN_TXT "118"
-#define RED_TXT "196"
-#define RESET "\033[m"
+// Both TestFunctionPtr and ProfileCaseFunctionPtr are the same underlying type
+using TestCaseFunctionPtr = ProfileCaseFunctionPtr;
+using HostCodeEntry = std::pair<SDDMMHostCodeFunctionPtr, std::string>;
 
-void console_printf(const char* fmt, ...) {
-    static int console_fd = -1;
-    if (console_fd == -1) {
-        console_fd = ::open("/dev/tty", O_WRONLY | O_CLOEXEC);
-    }
-    if (console_fd == -1) return;
-
-    va_list ap;
-    va_start(ap, fmt);
-    ::vdprintf(console_fd, fmt, ap);
-    va_end(ap);
+void print_usage() {
+    fprintf(stderr, "Usage: run_sddmm <test_num> <host_code_num> <registry_number>\n");
+    fprintf(stderr, "  Runs device kernel only (no CPU reference). For debugging deadlocks.\n");
+    fprintf(stderr, "  test_num:       index into the selected registry (-1 = run all)\n");
+    fprintf(stderr, "  host_code_num:  index into HostCodeRegistryVerbose\n");
+    fprintf(stderr, "  registry_number:\n");
+    fprintf(stderr, "    0 = ProfileCaseRegistry\n");
+    fprintf(stderr, "    1 = ProfileSweepNRegistry\n");
+    fprintf(stderr, "    2 = ProfileSweepDensityRegistry\n");
+    fprintf(stderr, "    3 = ProfileSweepKRegistry\n");
+    fprintf(stderr, "    4 = ProfileSweepBlockSizeRegistry\n");
+    fprintf(stderr, "    5 = TestRegistry (test_suite.hpp)\n");
 }
 
+struct RegistryInfo {
+    TestCaseFunctionPtr* entries;
+    size_t count;
+    std::string name;
+};
 
-void run_test(
-    SDDMMHostCodeFunctionPtr host_func,
-    bsr_matrix<bfloat16>& mask,
-    dense_matrix<bfloat16>& c,
-    dense_matrix<bfloat16>& d,
-    std::string& test_name) {
-
-    // Device setup
-    console_printf("Setting up the device!\n");
-
-    constexpr int device_id = 0;
-    IDevice* device = CreateDevice(device_id);
-
-    // Matrix params
-    uint32_t M = mask.H;
-    uint32_t N = mask.W;
-    uint32_t K = c.W;
-    uint32_t R = mask.R;
-    uint32_t C_block = mask.C;
-
-    console_printf("Running SDDMM: mask(%zux%zu, %zu blocks) ⊙ (C(%zux%zu) × D(%zux%zu))\n",
-                   mask.H, mask.W, mask.nblocks, c.H, c.W, d.H, d.W);
-
-    // Compute CPU reference BEFORE tilizing inputs
-    bsr_matrix<bfloat16> expected = mask.sddmm(c, d);
-
-    // Tilize inputs for device
-    // Tilize mask: each BSR block of R×C_block independently
-    {
-        std::vector<bfloat16> tilized_mask;
-        tilized_mask.reserve(mask.data.size());
-        size_t block_elems = R * C_block;
-        for (size_t b = 0; b < mask.nblocks; b++) {
-            auto begin = mask.data.begin() + b * block_elems;
-            auto end = begin + block_elems;
-            std::vector<bfloat16> block_data(begin, end);
-            block_data = tilize_nfaces(block_data, R, C_block);
-            tilized_mask.insert(tilized_mask.end(), block_data.begin(), block_data.end());
-        }
-        mask.data = std::move(tilized_mask);
+RegistryInfo get_registry(int registry_number) {
+    switch (registry_number) {
+        case 0: return {ProfileCaseRegistry,
+                        sizeof(ProfileCaseRegistry) / sizeof(ProfileCaseRegistry[0]),
+                        "SDDMMProfileSuite"};
+        case 1: return {ProfileSweepNRegistry,
+                        sizeof(ProfileSweepNRegistry) / sizeof(ProfileSweepNRegistry[0]),
+                        "SDDMMSweepN"};
+        case 2: return {ProfileSweepDensityRegistry,
+                        sizeof(ProfileSweepDensityRegistry) / sizeof(ProfileSweepDensityRegistry[0]),
+                        "SDDMMSweepDensity"};
+        case 3: return {ProfileSweepKRegistry,
+                        sizeof(ProfileSweepKRegistry) / sizeof(ProfileSweepKRegistry[0]),
+                        "SDDMMSweepK"};
+        case 4: return {ProfileSweepBlockSizeRegistry,
+                        sizeof(ProfileSweepBlockSizeRegistry) / sizeof(ProfileSweepBlockSizeRegistry[0]),
+                        "SDDMMSweepBlockSize"};
+        case 5: return {TestRegistry,
+                        sizeof(TestRegistry) / sizeof(TestRegistry[0]),
+                        "TestRegistry"};
+        default:
+            fprintf(stderr, "Unknown registry_number: %d\n", registry_number);
+            exit(1);
     }
-    c.data = tilize_nfaces(c.data, M, K);
-    d.data = tilize_nfaces(d.data, K, N);
-
-    // Run SDDMM via host code
-    bsr_matrix<bfloat16> output;
-    host_func(mask, c, d, output, M, N, K, R, C_block, 1, device);
-
-    console_printf("SDDMM complete. Output: %zux%zu with %zu blocks\n",
-                   output.H, output.W, output.nblocks);
-
-    // Untilize output: each BSR block of R×C_block is independently tilized
-    {
-        std::vector<bfloat16> untilized;
-        untilized.reserve(output.data.size());
-        size_t block_elems = R * C_block;
-        for (size_t b = 0; b < output.nblocks; b++) {
-            auto begin = output.data.begin() + b * block_elems;
-            auto end = begin + block_elems;
-            std::vector<bfloat16> block_data(begin, end);
-            block_data = untilize_nfaces(block_data, R, C_block);
-            untilized.insert(untilized.end(), block_data.begin(), block_data.end());
-        }
-        output.data = std::move(untilized);
-    }
-
-    // Convert both to dense for comparison
-    dense_matrix<bfloat16> output_dense = output.to_dense();
-    dense_matrix<bfloat16> expected_dense = expected.to_dense();
-
-    float pcc = check_bfloat16_vector_pcc(output_dense.data, expected_dense.data);
-    console_printf("PCC against CPU reference: %f\n", pcc);
-
-    if (pcc > 0.99f || (output_dense.data.size() == 0 && expected_dense.data.size() == 0)) {
-        console_printf(ESC "38;5;" GREEN_TXT "m" "PASS" RESET "\n");
-    } else {
-        console_printf(ESC "38;5;" RED_TXT "m" "FAIL (PCC = %f)" RESET "\n", pcc);
-    }
-
-    CloseDevice(device);
-}
-
-void run_full_test(int host_code_num, int test_num, TestFunctionPtr* registry) {
-    auto [mask, c, d, test_name] = registry[test_num]();
-    run_test(HostCodeRegistryVerbose[host_code_num].first, mask, c, d, test_name);
-
-    console_printf("--------------------------------------------------------\n");
-    console_printf("--- SDDMM Test results ---------------------------------\n");
-    console_printf("--------------------------------------------------------\n");
-    console_printf("--- Host Code function: ");
-    console_printf(HostCodeRegistryVerbose[host_code_num].second.c_str());
-    console_printf("\n");
-    console_printf("--------------------------------------------------------\n");
-    console_printf("--- Test #");
-    console_printf(std::to_string(test_num).c_str());
-    console_printf(", ");
-    console_printf(test_name.c_str());
-    console_printf(" ---\n");
-    console_printf("--------------------------------------------------------\n");
-    console_printf("--- COMPLETE!!! ----------------------------------------\n");
-    console_printf("--------------------------------------------------------\n");
 }
 
 int main(int argc, char** argv) {
-    bool run_all = true;
-
-    int test_num = 0;
-    int host_code_index = 0;
-    if (argc > 1) {
-        run_all = std::string(argv[1]) == "all";
-    }
-    if (argc > 2) {
-        host_code_index = std::stoi(argv[2]);
-    }
-    size_t num_tests = 0;
-    int registry_number = argc > 3 ? std::stoi(argv[3]) : -1;
-    std::string registry_name = "";
-    TestFunctionPtr *Registry = nullptr;
-    switch (registry_number) {
-        case 0:
-            Registry = reinterpret_cast<TestFunctionPtr*>(ProfileCaseRegistry);
-            registry_name = "SDDMMProfileSuite";
-            num_tests = sizeof(ProfileCaseRegistry) / sizeof(ProfileCaseRegistry[0]);
-            break;
-        default:
-            Registry = TestRegistry;
-            num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
-            break;
+    if (argc < 4) {
+        print_usage();
+        return 1;
     }
 
-    if (run_all) {
-        int saved_stdout = ::dup(STDOUT_FILENO);
-        if (saved_stdout == -1) {
-            std::perror("dup");
-            return 1;
-        }
-        int log_fd = ::open("std.out.log", O_CREAT | O_WRONLY | O_TRUNC, 0644);
-        if (log_fd == -1) {
-            std::perror("open");
-            return 1;
-        }
-        if (::dup2(log_fd, STDOUT_FILENO) == -1) {
-            std::perror("dup2");
-            return 1;
-        }
-        ::close(log_fd);
+    int test_num = std::stoi(argv[1]);
+    int host_code_num = std::stoi(argv[2]);
+    int registry_number = std::stoi(argv[3]);
 
-        for (size_t i = 0; i < num_tests; i++) {
-            run_full_test(host_code_index, i, Registry);
-        }
-    } else {
-        test_num = argc > 1 ? std::stoi(argv[1]) : -1;
-        if (test_num == -1) {
-            console_printf("No test specified. Returning.\n");
-            return 0;
-        }
-        run_full_test(host_code_index, test_num, Registry);
-        console_printf("Leaving the test program\n");
+    auto [Registry, registry_size, registry_name] = get_registry(registry_number);
+
+    HostCodeEntry* hc_registry = HostCodeRegistryVerbose;
+    std::string hf_name = hc_registry[host_code_num].second;
+    SDDMMHostCodeFunctionPtr host_func = hc_registry[host_code_num].first;
+
+    // Determine test range
+    size_t start = 0, end = registry_size;
+    if (test_num >= 0) {
+        start = (size_t)test_num;
+        end = start + 1;
     }
+    if (start >= registry_size) {
+        fprintf(stderr, "test_num %d out of range (registry has %zu entries)\n", test_num, registry_size);
+        return 1;
+    }
+
+    IDevice* device = CreateDevice(0);
+
+    for (size_t i = start; i < end; i++) {
+        auto [mask, c, d, test_name] = Registry[i]();
+
+        uint32_t M = mask.H;
+        uint32_t N = mask.W;
+        uint32_t K = c.W;
+        uint32_t R = mask.R;
+        uint32_t C_block = mask.C;
+
+        printf("[%s] Test %zu: %s, host_code: %s\n",
+               registry_name.c_str(), i, test_name.c_str(), hf_name.c_str());
+
+        if (test_num >= 0) {
+            mask.pretty_print();
+        }
+
+        printf("Running SDDMM: mask(%zux%zu, %zu blocks) @ (C(%zux%zu) x D(%zux%zu))\n",
+               mask.H, mask.W, mask.nblocks, c.H, c.W, d.H, d.W);
+
+        // Tilize inputs for device
+        {
+            std::vector<bfloat16> tilized_mask;
+            tilized_mask.reserve(mask.data.size());
+            size_t block_elems = R * C_block;
+            for (size_t b = 0; b < mask.nblocks; b++) {
+                auto begin = mask.data.begin() + b * block_elems;
+                auto end = begin + block_elems;
+                std::vector<bfloat16> block_data(begin, end);
+                block_data = tilize_nfaces(block_data, R, C_block);
+                tilized_mask.insert(tilized_mask.end(), block_data.begin(), block_data.end());
+            }
+            mask.data = std::move(tilized_mask);
+        }
+        c.data = tilize_nfaces(c.data, M, K);
+        d.data = tilize_nfaces(d.data, K, N);
+
+        // Run device kernel
+        bsr_matrix<bfloat16> output;
+        host_func(mask, c, d, output, M, N, K, R, C_block, 1, device);
+
+        printf("COMPLETE: output %zux%zu with %zu blocks\n\n", output.H, output.W, output.nblocks);
+    }
+
+    CloseDevice(device);
+    return 0;
 }

@@ -109,6 +109,67 @@ namespace bsr_sddmm_test_suite {
         return {mask, c_mat, d_mat, "nonsquare_shortk" + block_suffix<R, C>()};
     }
 
+    // Fixed sparsity pattern test: reproduces a deadlock found in ProfileSweepK registry 0
+    // M=8192, N=8192, K=512, R=C=256, 256 blocks (25% density)
+    inline SDDMMTestReturnType test_deadlock_sweepK_0() {
+        constexpr uint32_t R = 256, C = 256;
+        constexpr uint32_t M = 8192, N = 8192, K = 512;
+        constexpr size_t nblocks = 256;
+
+        std::vector<int> indptr = {
+            0, 7, 13, 20, 26, 32, 36, 46, 53, 63, 71, 77, 91, 96, 104, 111, 117,
+            127, 142, 147, 155, 164, 174, 182, 191, 201, 208, 214, 225, 233, 240, 246, 256
+        };
+        std::vector<int> indices = {
+            5, 9, 11, 15, 20, 26, 31,
+            0, 4, 6, 13, 16, 17,
+            8, 9, 11, 15, 23, 24, 31,
+            2, 4, 12, 23, 24, 25,
+            0, 1, 3, 4, 23, 31,
+            15, 17, 22, 23,
+            0, 1, 6, 8, 13, 17, 19, 26, 27, 31,
+            9, 14, 21, 26, 28, 30, 31,
+            4, 8, 20, 22, 23, 24, 25, 28, 29, 31,
+            2, 9, 10, 12, 15, 21, 22, 30,
+            1, 2, 4, 13, 21, 26,
+            1, 3, 4, 7, 9, 11, 12, 18, 19, 23, 24, 26, 29, 31,
+            11, 15, 19, 21, 22,
+            1, 2, 4, 7, 11, 12, 16, 24,
+            4, 6, 9, 12, 13, 22, 24,
+            3, 13, 21, 22, 27, 28,
+            2, 9, 12, 15, 16, 20, 27, 28, 29, 30,
+            1, 2, 3, 7, 11, 12, 13, 18, 21, 25, 26, 27, 28, 30, 31,
+            8, 10, 12, 17, 28,
+            5, 6, 7, 15, 16, 17, 26, 28,
+            1, 8, 10, 15, 16, 22, 27, 28, 29,
+            4, 6, 9, 11, 16, 21, 23, 24, 25, 29,
+            0, 1, 6, 7, 20, 23, 26, 29,
+            1, 3, 7, 9, 14, 17, 19, 28, 29,
+            1, 4, 11, 13, 14, 16, 18, 24, 27, 29,
+            9, 12, 23, 25, 26, 28, 29,
+            14, 15, 16, 20, 25, 30,
+            1, 3, 4, 9, 13, 14, 15, 16, 28, 29, 31,
+            6, 8, 15, 16, 17, 18, 24, 31,
+            3, 12, 18, 19, 21, 22, 26,
+            5, 9, 10, 23, 25, 27,
+            4, 5, 6, 13, 15, 16, 20, 24, 28, 29,
+        };
+
+        // Generate random block data
+        size_t block_elems = nblocks * R * C;
+        std::vector<bfloat16> block_data(block_elems);
+        std::mt19937 rng(42);
+        std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
+        for (size_t i = 0; i < block_elems; i++) {
+            block_data[i] = bfloat16(dist(rng));
+        }
+
+        bsr_matrix<bfloat16> mask(std::move(block_data), std::move(indptr), std::move(indices), M, N, R, C, nblocks);
+        dense_matrix<bfloat16> c_mat(M, K, RAND);
+        dense_matrix<bfloat16> d_mat(K, N, RAND);
+        return {mask, c_mat, d_mat, "deadlock_sweepK_0_M8192_N8192_K512_R256_C256_d25"};
+    }
+
     using TestFunctionPtr = SDDMMTestReturnType (*)();
 
     // Default registry: R=C=32
@@ -132,6 +193,8 @@ namespace bsr_sddmm_test_suite {
         test_full_mask<256, 256>,              // 13
         test_diagonal_mask_short_k<256, 256>,  // 14
         test_nonsquare_short_k<256, 256>,      // 15
+        // Deadlock repro cases
+        test_deadlock_sweepK_0,                // 16
     };
 
 } // namespace bsr_sddmm_test_suite

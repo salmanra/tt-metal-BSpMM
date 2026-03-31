@@ -247,45 +247,27 @@ void kernel_main() {
         } // end has_work
 
         // ── Row-wide barrier (star topology) ─────────────────────────
-        // Ensures no core races ahead to slot s+1 (which may have a different
-        // share set topology) while another core is still forwarding at slot s.
-        //
-        // Only cores with work at this slot participate. Non-participating
-        // cores (no block at this slot) skip entirely — they aren't in any
-        // share set, so no one signals their semaphores.
-        uint32_t barrier_participants = 0;
-        uint32_t barrier_leader_idx = 0;
-        bool leader_found = false;
-        for (uint32_t c = 0; c < num_cores_in_row; c++) {
-            if (all_block_rows[c * max_output_blocks + s] != SENTINEL) {
-                barrier_participants++;
-                if (!leader_found) {
-                    barrier_leader_idx = c;
-                    leader_found = true;
-                }
-            }
-        }
-        bool is_barrier_leader = (my_core_idx_x == barrier_leader_idx);
+        // ALL cores in the row participate at every slot, even those
+        // without work.  This prevents idle cores from racing ahead to
+        // slot s+1 and signalling sender_sem while the injector is still
+        // processing slot s — which would corrupt the CDA handshake.
+        if (num_cores_in_row > 1) {
+            constexpr uint32_t barrier_leader_idx = 0;
+            bool is_barrier_leader = (my_core_idx_x == barrier_leader_idx);
 
-        if (barrier_participants > 1 && has_work) {
             uint64_t leader_barrier_noc = get_noc_addr(
                 noc_x_table[barrier_leader_idx], noc_y_for_row, barrier_semaphore_addr);
 
             if (is_barrier_leader) {
-                // Wait for all other participants to check in
-                noc_semaphore_wait(barrier_sem_ptr, barrier_participants - 1);
+                noc_semaphore_wait(barrier_sem_ptr, num_cores_in_row - 1);
                 noc_semaphore_set(barrier_sem_ptr, 0);
-                // Broadcast release to all other participants
-                for (uint32_t c = 0; c < num_cores_in_row; c++) {
-                    if (c == my_core_idx_x) continue;
-                    if (all_block_rows[c * max_output_blocks + s] == SENTINEL) continue;
+                for (uint32_t c = 1; c < num_cores_in_row; c++) {
                     uint64_t their_release = get_noc_addr(
                         noc_x_table[c], noc_y_for_row, release_semaphore_addr);
                     noc_semaphore_inc(their_release, 1);
                 }
                 noc_async_atomic_barrier();
             } else {
-                // Check in with leader, then wait for release
                 noc_semaphore_inc(leader_barrier_noc, 1);
                 noc_async_atomic_barrier();
                 noc_semaphore_wait(release_sem_ptr, 1);

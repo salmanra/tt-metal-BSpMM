@@ -252,32 +252,21 @@ void kernel_main() {
         } // end has_work
 
         // ── Column-wide barrier (star topology, AFTER writeback) ─────
-        // Barrier after writeback ensures the output write completes before
-        // any core proceeds to the next slot.
-        uint32_t barrier_participants = 0;
-        uint32_t barrier_leader_idx = 0;
-        bool leader_found = false;
-        for (uint32_t r = 0; r < num_cores_in_column; r++) {
-            if (all_block_cols[r * max_output_blocks + s] != SENTINEL) {
-                barrier_participants++;
-                if (!leader_found) {
-                    barrier_leader_idx = r;
-                    leader_found = true;
-                }
-            }
-        }
-        bool is_barrier_leader = (my_core_idx_y == barrier_leader_idx);
+        // ALL cores in the column participate at every slot, even those
+        // without work.  This prevents idle cores from racing ahead to
+        // slot s+1 and signalling sender_sem while the injector is still
+        // processing slot s — which would corrupt the CDA handshake.
+        if (num_cores_in_column > 1) {
+            constexpr uint32_t barrier_leader_idx = 0;
+            bool is_barrier_leader = (my_core_idx_y == barrier_leader_idx);
 
-        if (barrier_participants > 1 && has_work) {
             uint64_t leader_barrier_noc = get_noc_addr(
                 noc_x_for_column, noc_y_table[barrier_leader_idx], barrier_semaphore_addr);
 
             if (is_barrier_leader) {
-                noc_semaphore_wait(barrier_sem_ptr, barrier_participants - 1);
+                noc_semaphore_wait(barrier_sem_ptr, num_cores_in_column - 1);
                 noc_semaphore_set(barrier_sem_ptr, 0);
-                for (uint32_t r = 0; r < num_cores_in_column; r++) {
-                    if (r == my_core_idx_y) continue;
-                    if (all_block_cols[r * max_output_blocks + s] == SENTINEL) continue;
+                for (uint32_t r = 1; r < num_cores_in_column; r++) {
                     uint64_t their_release = get_noc_addr(
                         noc_x_for_column, noc_y_table[r], release_semaphore_addr);
                     noc_semaphore_inc(their_release, 1);

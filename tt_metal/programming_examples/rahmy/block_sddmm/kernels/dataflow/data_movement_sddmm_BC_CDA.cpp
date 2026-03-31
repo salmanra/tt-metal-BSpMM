@@ -14,6 +14,14 @@
 #include "dataflow_api.h"
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
 
+// Ablation skip flags (set to 1 via CreateKernel defines to skip that phase)
+#ifndef SKIP_SPARSE_DRAM_READ
+#define SKIP_SPARSE_DRAM_READ 0
+#endif
+#ifndef SKIP_C_DRAM_READ
+#define SKIP_C_DRAM_READ 0
+#endif
+
 constexpr uint32_t SENTINEL = UINT32_MAX;
 
 // CDA action codes
@@ -122,6 +130,7 @@ void kernel_main() {
 
             // ── Read sparse mask block B[i,j] (always from DRAM, no sharing)
             cb_reserve_back(cb_sparse, sparse_block_num_tiles);
+#if SKIP_SPARSE_DRAM_READ == 0
             uint32_t l1_write_addr = get_write_ptr(cb_sparse);
             uint32_t sparse_start_tile = blk_data_idx * sparse_block_num_tiles;
             for (uint32_t t = 0; t < sparse_block_num_tiles; t++) {
@@ -129,8 +138,10 @@ void kernel_main() {
                 l1_write_addr += sparse_tile_size;
             }
             noc_async_read_barrier();
+#endif
             cb_push_back(cb_sparse, sparse_block_num_tiles);
 
+#if SKIP_C_DRAM_READ == 0
             // ── Share set discovery (R2L along core row) ─────────────
             // Find which other cores in this row need the same block_row_i at this slot.
             // CDA's point-to-point chain topology allows multiple independent share sets
@@ -226,6 +237,13 @@ void kernel_main() {
                     noc_async_atomic_barrier();
                 }
             } // end k loop
+#else
+            // Skip C reads: just push dummy blocks to maintain CB protocol
+            for (uint32_t k = 0; k < num_blocks_k; k++) {
+                cb_reserve_back(cb_dense_c, dense_c_block_num_tiles);
+                cb_push_back(cb_dense_c, dense_c_block_num_tiles);
+            }
+#endif
         } // end has_work
 
         // ── Row-wide barrier (star topology) ─────────────────────────

@@ -38,11 +38,11 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
     std::string test_file_name = test_name + disabled_zones;
 
     char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/sddmm_profiles/opt/traces/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    size_t n = sprintf(buf, "/home/user/tt-metal/sddmm_profiles/opt_noc/traces/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
     std::string trace_file_location = trace_directory + test_file_name + ".tracy";
 
-    n = sprintf(buf, "/home/user/tt-metal/sddmm_profiles/opt/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    n = sprintf(buf, "/home/user/tt-metal/sddmm_profiles/opt_noc/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string csv_directory(buf);
     std::string csv_file_location = csv_directory + test_file_name + ".csv";
 

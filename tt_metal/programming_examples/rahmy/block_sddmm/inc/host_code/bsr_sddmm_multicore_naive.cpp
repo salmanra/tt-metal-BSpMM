@@ -369,22 +369,56 @@ void bsr_sddmm_multicore_naive(
         sampling_mask, c, d, output, M, N, K, R, C_block, B, device, {});
 }
 
+// ── Ablation skip wrappers ────────────────────────────────────────────
+
+#define SDDMM_ABLATION_WRAPPER(func_name, skip_flag) \
+template<bool verbose, bool is_profiling> \
+void func_name( \
+    bsr_matrix<bfloat16>& sampling_mask, \
+    dense_matrix<bfloat16>& c, \
+    dense_matrix<bfloat16>& d, \
+    bsr_matrix<bfloat16>& output, \
+    uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C_block, uint32_t B, \
+    IDevice* device) { \
+    bsr_sddmm_multicore_naive_impl<verbose, is_profiling>( \
+        sampling_mask, c, d, output, M, N, K, R, C_block, B, device, {{skip_flag, "1"}}); \
+}
+
+SDDMM_ABLATION_WRAPPER(bsr_sddmm_multicore_naive_no_b_read, "SKIP_SPARSE_DRAM_READ")
+SDDMM_ABLATION_WRAPPER(bsr_sddmm_multicore_naive_no_c_read, "SKIP_C_DRAM_READ")
+SDDMM_ABLATION_WRAPPER(bsr_sddmm_multicore_naive_no_d_read, "SKIP_D_DRAM_READ")
+SDDMM_ABLATION_WRAPPER(bsr_sddmm_multicore_naive_no_compute, "SKIP_COMPUTE")
+SDDMM_ABLATION_WRAPPER(bsr_sddmm_multicore_naive_no_write, "SKIP_DRAM_WRITE")
+
+#undef SDDMM_ABLATION_WRAPPER
+
 // Explicit template instantiations
-template void bsr_sddmm_multicore_naive<false, false>(
-    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&,
-    bsr_matrix<bfloat16>&,
+#define INSTANTIATE_SDDMM(func) \
+template void func<false, false>( \
+    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&, \
+    bsr_matrix<bfloat16>&, \
+    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*); \
+template void func<true, false>( \
+    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&, \
+    bsr_matrix<bfloat16>&, \
+    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*); \
+template void func<false, true>( \
+    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&, \
+    bsr_matrix<bfloat16>&, \
+    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*); \
+template void func<true, true>( \
+    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&, \
+    bsr_matrix<bfloat16>&, \
     uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*);
-template void bsr_sddmm_multicore_naive<true, false>(
-    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&,
-    bsr_matrix<bfloat16>&,
-    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*);
-template void bsr_sddmm_multicore_naive<false, true>(
-    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&,
-    bsr_matrix<bfloat16>&,
-    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*);
-template void bsr_sddmm_multicore_naive<true, true>(
-    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&,
-    bsr_matrix<bfloat16>&,
-    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*);
+
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_naive)
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_naive_no_b_read)
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_naive_no_c_read)
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_naive_no_d_read)
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_naive_no_compute)
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_naive_no_write)
+
+#undef INSTANTIATE_SDDMM
 
 } // namespace bsr_sddmm_host_code

@@ -7,6 +7,14 @@
 #include "dataflow_api.h"
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
 
+// Ablation skip flags (set to 1 via CreateKernel defines to skip that phase)
+#ifndef SKIP_D_DRAM_READ
+#define SKIP_D_DRAM_READ 0
+#endif
+#ifndef SKIP_DRAM_WRITE
+#define SKIP_DRAM_WRITE 0
+#endif
+
 void kernel_main() {
     // ── Compile-time args ────────────────────────────────────────────
     constexpr bool dense_d_is_dram         = get_compile_time_arg_val(0);
@@ -62,28 +70,22 @@ void kernel_main() {
         // ── Stream D blocks for reduction ────────────────────────────
         for (uint32_t k = 0; k < num_blocks_k; k++) {
             cb_reserve_back(cb_dense_d, dense_d_block_num_tiles);
+#if SKIP_D_DRAM_READ == 0
             uint32_t l1_addr_d = get_write_ptr(cb_dense_d);
-
-            // D block for reduction step k:
-            // Rows: [k * block_k .. (k+1) * block_k)
-            // Cols: [block_col_j * Ct .. (block_col_j+1) * Ct)
-            // Start tile = k * block_k * Nt + block_col_j * Ct
             uint32_t d_start_tile = k * dense_d_block_h * dense_d_stride_h + block_col_j * dense_d_block_w;
             spmm::read_block_by_tile(
                 d_start_tile, dense_d_addr_gen, l1_addr_d,
                 dense_d_tile_size, dense_d_block_h, dense_d_block_w,
                 dense_d_stride_h, dense_d_stride_w);
             noc_async_read_barrier();
+#endif
             cb_push_back(cb_dense_d, dense_d_block_num_tiles);
         }
 
         // ── Write output block to DRAM ───────────────────────────────
         cb_wait_front(cb_out, out_block_num_tiles);
+#if SKIP_DRAM_WRITE == 0
         uint32_t l1_read_addr = get_read_ptr(cb_out);
-
-        // Output block at blk_data_idx in BSR data array
-        // Blocks are contiguous: start tile = blk_data_idx * Rt * Ct
-        // Within a block: stride_h = Ct, stride_w = 1
         uint32_t out_start_tile = blk_data_idx * out_block_num_tiles;
         uint32_t out_sbh_start = out_start_tile;
         for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
@@ -98,6 +100,7 @@ void kernel_main() {
             out_sbh_start += out_subblock_h * Ct;
         }
         noc_async_write_barrier();
+#endif
         cb_pop_front(cb_out, out_block_num_tiles);
     }
 }

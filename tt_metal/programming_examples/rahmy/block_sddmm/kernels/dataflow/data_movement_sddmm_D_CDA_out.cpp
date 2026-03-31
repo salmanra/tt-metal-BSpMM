@@ -15,6 +15,14 @@
 #include "dataflow_api.h"
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
 
+// Ablation skip flags (set to 1 via CreateKernel defines to skip that phase)
+#ifndef SKIP_D_DRAM_READ
+#define SKIP_D_DRAM_READ 0
+#endif
+#ifndef SKIP_DRAM_WRITE
+#define SKIP_DRAM_WRITE 0
+#endif
+
 constexpr uint32_t SENTINEL = UINT32_MAX;
 
 // CDA action codes
@@ -125,6 +133,7 @@ void kernel_main() {
         if (has_work) {
             uint32_t blk_data_idx = this_data_idx[s];
 
+#if SKIP_D_DRAM_READ == 0
             // ── Share set discovery (T2B along core column) ──────────
             // Find cores in this column with the same block_col_j at this slot.
             // Multiple independent chains can coexist in the same column.
@@ -212,11 +221,18 @@ void kernel_main() {
                     noc_async_atomic_barrier();
                 }
             } // end k loop
+#else
+            // Skip D reads: just push dummy blocks to maintain CB protocol
+            for (uint32_t k = 0; k < num_blocks_k; k++) {
+                cb_reserve_back(cb_dense_d, dense_d_block_num_tiles);
+                cb_push_back(cb_dense_d, dense_d_block_num_tiles);
+            }
+#endif
 
             // ── Write output block to DRAM ───────────────────────────
             cb_wait_front(cb_out, out_block_num_tiles);
+#if SKIP_DRAM_WRITE == 0
             uint32_t l1_read_addr = get_read_ptr(cb_out);
-
             uint32_t out_start_tile = blk_data_idx * out_block_num_tiles;
             uint32_t out_sbh_start = out_start_tile;
             for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
@@ -231,6 +247,7 @@ void kernel_main() {
                 out_sbh_start += out_subblock_h * Ct;
             }
             noc_async_write_barrier();
+#endif
             cb_pop_front(cb_out, out_block_num_tiles);
         } // end has_work
 

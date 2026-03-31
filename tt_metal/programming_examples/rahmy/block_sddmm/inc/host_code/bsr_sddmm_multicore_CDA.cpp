@@ -341,13 +341,14 @@ void bsr_sddmm_multicore_CDA_impl(
     auto zone_defines = sddmm_zone_config::get_zone_defines();
     zone_defines.insert(extra_defines.begin(), extra_defines.end());
 
+    // Yes, transpose the NoC!
     auto bc_reader_id = tt_metal::CreateKernel(
         program,
         "tt_metal/programming_examples/rahmy/block_sddmm/kernels/dataflow/data_movement_sddmm_BC_CDA.cpp",
         all_cores,
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_0,
-            .noc = NOC::RISCV_0_default,
+            .noc = NOC::RISCV_1_default,
             .compile_args = bc_reader_ct_args,
             .defines = zone_defines});
 
@@ -357,7 +358,7 @@ void bsr_sddmm_multicore_CDA_impl(
         all_cores,
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_1,
-            .noc = NOC::RISCV_1_default,
+            .noc = NOC::RISCV_0_default,
             .compile_args = d_writer_ct_args,
             .defines = zone_defines});
 
@@ -504,22 +505,56 @@ void bsr_sddmm_multicore_CDA(
         sampling_mask, c, d, output, M, N, K, R, C_block, B, device, {});
 }
 
+// ── Ablation skip wrappers ────────────────────────────────────────────
+
+#define SDDMM_ABLATION_WRAPPER(func_name, skip_flag) \
+template<bool verbose, bool is_profiling> \
+void func_name( \
+    bsr_matrix<bfloat16>& sampling_mask, \
+    dense_matrix<bfloat16>& c, \
+    dense_matrix<bfloat16>& d, \
+    bsr_matrix<bfloat16>& output, \
+    uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C_block, uint32_t B, \
+    IDevice* device) { \
+    bsr_sddmm_multicore_CDA_impl<verbose, is_profiling>( \
+        sampling_mask, c, d, output, M, N, K, R, C_block, B, device, {{skip_flag, "1"}}); \
+}
+
+SDDMM_ABLATION_WRAPPER(bsr_sddmm_multicore_CDA_no_b_read, "SKIP_SPARSE_DRAM_READ")
+SDDMM_ABLATION_WRAPPER(bsr_sddmm_multicore_CDA_no_c_read, "SKIP_C_DRAM_READ")
+SDDMM_ABLATION_WRAPPER(bsr_sddmm_multicore_CDA_no_d_read, "SKIP_D_DRAM_READ")
+SDDMM_ABLATION_WRAPPER(bsr_sddmm_multicore_CDA_no_compute, "SKIP_COMPUTE")
+SDDMM_ABLATION_WRAPPER(bsr_sddmm_multicore_CDA_no_write, "SKIP_DRAM_WRITE")
+
+#undef SDDMM_ABLATION_WRAPPER
+
 // Explicit template instantiations
-template void bsr_sddmm_multicore_CDA<false, false>(
-    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&,
-    bsr_matrix<bfloat16>&,
+#define INSTANTIATE_SDDMM(func) \
+template void func<false, false>( \
+    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&, \
+    bsr_matrix<bfloat16>&, \
+    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*); \
+template void func<true, false>( \
+    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&, \
+    bsr_matrix<bfloat16>&, \
+    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*); \
+template void func<false, true>( \
+    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&, \
+    bsr_matrix<bfloat16>&, \
+    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*); \
+template void func<true, true>( \
+    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&, \
+    bsr_matrix<bfloat16>&, \
     uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*);
-template void bsr_sddmm_multicore_CDA<true, false>(
-    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&,
-    bsr_matrix<bfloat16>&,
-    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*);
-template void bsr_sddmm_multicore_CDA<false, true>(
-    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&,
-    bsr_matrix<bfloat16>&,
-    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*);
-template void bsr_sddmm_multicore_CDA<true, true>(
-    bsr_matrix<bfloat16>&, dense_matrix<bfloat16>&, dense_matrix<bfloat16>&,
-    bsr_matrix<bfloat16>&,
-    uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, IDevice*);
+
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_CDA)
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_CDA_no_b_read)
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_CDA_no_c_read)
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_CDA_no_d_read)
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_CDA_no_compute)
+INSTANTIATE_SDDMM(bsr_sddmm_multicore_CDA_no_write)
+
+#undef INSTANTIATE_SDDMM
 
 } // namespace bsr_sddmm_host_code

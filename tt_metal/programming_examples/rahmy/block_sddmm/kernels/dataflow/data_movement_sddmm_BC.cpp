@@ -7,6 +7,14 @@
 #include "dataflow_api.h"
 #include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
 
+// Ablation skip flags (set to 1 via CreateKernel defines to skip that phase)
+#ifndef SKIP_SPARSE_DRAM_READ
+#define SKIP_SPARSE_DRAM_READ 0
+#endif
+#ifndef SKIP_C_DRAM_READ
+#define SKIP_C_DRAM_READ 0
+#endif
+
 void kernel_main() {
     // ── Compile-time args ────────────────────────────────────────────
     constexpr bool sparse_is_dram          = get_compile_time_arg_val(0);
@@ -52,35 +60,30 @@ void kernel_main() {
         uint32_t blk_data_idx = get_arg_val<uint32_t>(arg_idx++);
 
         // ── Read sparse mask block B[i,j] into c_0 ──────────────────
-        // B data is stored as contiguous blocks: block blk_data_idx
-        // starts at tile blk_data_idx * sparse_block_num_tiles.
-        // Within a block: Rt rows of Ct tiles, stride_h=Ct, stride_w=1.
         cb_reserve_back(cb_sparse, sparse_block_num_tiles);
+#if SKIP_SPARSE_DRAM_READ == 0
         uint32_t l1_write_addr = get_write_ptr(cb_sparse);
         uint32_t sparse_start_tile = blk_data_idx * sparse_block_num_tiles;
-        // Sparse block is contiguous: Rt*Ct tiles laid out sequentially
         for (uint32_t t = 0; t < sparse_block_num_tiles; t++) {
             noc_async_read_tile(sparse_start_tile + t, sparse_addr_gen, l1_write_addr);
             l1_write_addr += sparse_tile_size;
         }
         noc_async_read_barrier();
+#endif
         cb_push_back(cb_sparse, sparse_block_num_tiles);
 
         // ── Stream C blocks for reduction ────────────────────────────
         for (uint32_t k = 0; k < num_blocks_k; k++) {
             cb_reserve_back(cb_dense_c, dense_c_block_num_tiles);
+#if SKIP_C_DRAM_READ == 0
             uint32_t l1_addr_c = get_write_ptr(cb_dense_c);
-
-            // C block for reduction step k:
-            // Rows: [block_row_i * Rt .. (block_row_i+1) * Rt)
-            // Cols: [k * block_k .. (k+1) * block_k)
-            // Start tile = block_row_i * Rt * Kt + k * block_k
             uint32_t c_start_tile = block_row_i * dense_c_block_h * dense_c_stride_h + k * dense_c_block_w;
             spmm::read_block_by_tile(
                 c_start_tile, dense_c_addr_gen, l1_addr_c,
                 dense_c_tile_size, dense_c_block_h, dense_c_block_w,
                 dense_c_stride_h, dense_c_stride_w);
             noc_async_read_barrier();
+#endif
             cb_push_back(cb_dense_c, dense_c_block_num_tiles);
         }
     }

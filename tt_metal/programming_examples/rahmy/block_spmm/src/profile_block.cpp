@@ -130,6 +130,14 @@ int main(int argc, char** argv) {
             Registry = ProfileSweepSparsityPatternRegistryD50;
             registry_name = "ProfileSweepSparsityPatternD50";
             break;
+        case 12:
+            Registry = ProfileSweepUltraLowDensity32Registry;
+            registry_name = "ProfileSweepUltraLowDensity32";
+            break;
+        case 13:
+            Registry = ProfileSweepUltraLowDensity64Registry;
+            registry_name = "ProfileSweepUltraLowDensity64";
+            break;
     }
 
     int num_profiles = sizeof(Registry) / sizeof(Registry[0]);

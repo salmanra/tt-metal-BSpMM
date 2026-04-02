@@ -147,9 +147,10 @@ Files modified:
 
 ### `profiling_suite.hpp`
 
-- Added `profile_case_parametric_random<M, N, K, R, C, DensityPercent>` template
+- Added `profile_case_parametric_random<M, N, K, R, C, DensityPPM>` template
   that creates a random BSR matrix and dense matrix with the given dimensions.
-  Test name encoded as `parametric_M{M}_N{N}_K{K}_R{R}_C{C}_d{density%}`.
+  DensityPPM is in parts-per-million (e.g. 250000 = 25%, 10 = 0.001%).
+  Test name encoded as `parametric_M{M}_N{N}_K{K}_R{R}_C{C}_dppm{ppm}`.
 - Added 4 new static registry arrays: `ProfileSweepNRegistry`,
   `ProfileSweepDensityRegistry`, `ProfileSweepKRegistry`,
   `ProfileSweepBlockSizeRegistry`.

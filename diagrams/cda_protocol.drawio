@@ -1,0 +1,574 @@
+<mxfile host="draw.io" modified="2026-03-31" agent="Claude" version="21.0.0" type="device">
+  <diagram id="cda-protocol" name="CDA Protocol">
+    <mxGraphModel dx="1200" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1200" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- ============================================================ -->
+        <!-- LEFT PANEL: Share Set Discovery                               -->
+        <!-- ============================================================ -->
+
+        <!-- Panel title -->
+        <mxCell id="lp_title" value="Share Set Discovery" style="text;html=1;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="80" y="10" width="220" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- DRAM box -->
+        <mxCell id="dram_box" value="DRAM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="130" y="50" width="120" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- Core y=3 (bottom of column, but drawn at top since injector reads from DRAM) -->
+        <!-- We stack them: y=3 closest to DRAM, then y=2, y=1, y=0 going down -->
+        <!-- Actually the prompt says "4 cores stacked vertically" with y=0 at top -->
+        <!-- y=0 at top, y=1 next, y=2 next, y=3 at bottom -->
+
+        <!-- Core y=0 -->
+        <mxCell id="core_y0" value="(y=0)&#xa;col_idx = 5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="130" y="120" width="120" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Core y=1 -->
+        <mxCell id="core_y1" value="(y=1)&#xa;col_idx = 3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="130" y="210" width="120" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Core y=2 -->
+        <mxCell id="core_y2" value="(y=2)&#xa;col_idx = 5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="130" y="300" width="120" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- Core y=3 -->
+        <mxCell id="core_y3" value="(y=3)&#xa;col_idx = 5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="130" y="390" width="120" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- DRAM arrow to y=3 (injector) -->
+        <mxCell id="dram_arrow" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#b85450;strokeWidth=3;endFill=1;" edge="1" source="dram_box" target="core_y3" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="60" y="70"/>
+              <mxPoint x="60" y="420"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="dram_arrow_label" value="DRAM read" style="edgeLabel;html=1;fontSize=10;fontColor=#b85450;" vertex="1" connectable="0" parent="dram_arrow">
+          <mxGeometry x="-0.2" relative="1" as="geometry">
+            <mxPoint x="-10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Injector annotation on y=3 -->
+        <mxCell id="injector_label" value="Injector&#xa;(max y)" style="text;html=1;fontSize=10;fontStyle=1;fontColor=#d6b656;align=left;verticalAlign=middle;fillColor=#fff2cc;strokeColor=#d6b656;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="260" y="395" width="70" height="35" as="geometry"/>
+        </mxCell>
+
+        <!-- SOLO annotation on y=1 -->
+        <mxCell id="solo_label" value="SOLO" style="text;html=1;fontSize=10;fontStyle=1;fontColor=#666666;align=left;verticalAlign=middle;fillColor=#f5f5f5;strokeColor=#666666;rounded=1;" vertex="1" parent="1">
+          <mxGeometry x="260" y="225" width="42" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Share set dashed green box around y=0, y=2, y=3 (skipping y=1) -->
+        <!-- We draw two dashed boxes: one around y=0, one around y=2+y=3 -->
+        <!-- Or a single irregular shape - let's use a dashed box that encompasses all three with a gap indication -->
+        <!-- Simpler: draw a dashed green rectangle that covers y=0, then another that covers y=2 and y=3, connected -->
+
+        <!-- Dashed green box around y=0 -->
+        <mxCell id="share_set_box_top" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#82b366;strokeWidth=2;dashed=1;dashPattern=8 4;" vertex="1" parent="1">
+          <mxGeometry x="120" y="112" width="140" height="76" as="geometry"/>
+        </mxCell>
+
+        <!-- Dashed green box around y=2 and y=3 -->
+        <mxCell id="share_set_box_bottom" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#82b366;strokeWidth=2;dashed=1;dashPattern=8 4;" vertex="1" parent="1">
+          <mxGeometry x="120" y="292" width="140" height="166" as="geometry"/>
+        </mxCell>
+
+        <!-- Dashed green connector between the two share set boxes -->
+        <mxCell id="share_set_connector" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82b366;strokeWidth=2;dashed=1;dashPattern=8 4;endArrow=none;startArrow=none;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="118" y="188" as="sourcePoint"/>
+            <mxPoint x="118" y="292" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="share_set_connector2" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#82b366;strokeWidth=2;dashed=1;dashPattern=8 4;endArrow=none;startArrow=none;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="262" y="188" as="sourcePoint"/>
+            <mxPoint x="262" y="292" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Share set label -->
+        <mxCell id="share_set_label" value="Share set&#xa;(col_idx=5)" style="text;html=1;fontSize=10;fontStyle=1;fontColor=#82b366;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="270" y="130" width="80" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- Chain arrows: y=3 -> y=2 -> y=0 -->
+        <!-- y=3 to y=2 (upward) -->
+        <mxCell id="chain_3_2" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#6c8ebf;strokeWidth=2;endFill=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="170" y="390" as="sourcePoint"/>
+            <mxPoint x="170" y="360" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- y=2 to y=0 (upward, skipping y=1) -->
+        <mxCell id="chain_2_0" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#6c8ebf;strokeWidth=2;endFill=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="170" y="300" as="sourcePoint"/>
+            <mxPoint x="170" y="180" as="targetPoint"/>
+            <Array as="points">
+              <mxPoint x="100" y="300"/>
+              <mxPoint x="100" y="180"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Chain direction label -->
+        <mxCell id="chain_dir_label" value="chain&#xa;direction" style="text;html=1;fontSize=9;fontStyle=2;fontColor=#6c8ebf;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="70" y="230" width="50" height="30" as="geometry"/>
+        </mxCell>
+        <!-- Arrow indicator for chain direction -->
+        <mxCell id="chain_dir_arrow" style="strokeColor=#6c8ebf;strokeWidth=2;endFill=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="95" y="260" as="sourcePoint"/>
+            <mxPoint x="95" y="230" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+
+        <!-- ============================================================ -->
+        <!-- RIGHT PANEL: CDA Sequence Diagram                             -->
+        <!-- ============================================================ -->
+
+        <!-- Panel title -->
+        <mxCell id="rp_title" value="CDA Handshake with Double-Buffer Slot Encoding" style="text;html=1;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="420" y="10" width="420" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- Column positions: y=3 at x=430, y=2 at x=650, y=0 at x=870 -->
+
+        <!-- Injector (y=3) header -->
+        <mxCell id="seq_y3" value="Injector (y=3)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="405" y="50" width="150" height="45" as="geometry"/>
+        </mxCell>
+        <!-- Lifeline y=3 -->
+        <mxCell id="life_y3" style="strokeColor=#999999;strokeWidth=1;dashed=1;dashPattern=4 4;endArrow=none;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="480" y="95" as="sourcePoint"/>
+            <mxPoint x="480" y="750" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Middle (y=2) header -->
+        <mxCell id="seq_y2" value="Middle (y=2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="625" y="50" width="150" height="45" as="geometry"/>
+        </mxCell>
+        <!-- Lifeline y=2 -->
+        <mxCell id="life_y2" style="strokeColor=#999999;strokeWidth=1;dashed=1;dashPattern=4 4;endArrow=none;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="700" y="95" as="sourcePoint"/>
+            <mxPoint x="700" y="750" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Tail (y=0) header -->
+        <mxCell id="seq_y0" value="Tail (y=0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="845" y="50" width="150" height="45" as="geometry"/>
+        </mxCell>
+        <!-- Lifeline y=0 -->
+        <mxCell id="life_y0" style="strokeColor=#999999;strokeWidth=1;dashed=1;dashPattern=4 4;endArrow=none;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="920" y="95" as="sourcePoint"/>
+            <mxPoint x="920" y="750" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ======= INJECTOR (y=3) STEPS ======= -->
+        <!-- Step spacing: ~60px per step, starting at y=110 -->
+
+        <!-- y3 step 1: cb_reserve_back -->
+        <mxCell id="y3_s1" value="cb_reserve_back(c_1, N)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="415" y="110" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y3 step 2: DRAM read -->
+        <mxCell id="y3_s2" value="DRAM read → L1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="415" y="146" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y3 step 3: read_barrier -->
+        <mxCell id="y3_s3" value="read_barrier()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="415" y="182" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y3 step 4: cb_push_back -->
+        <mxCell id="y3_s4" value="cb_push_back(c_1, N)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="415" y="218" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y3 step 5: poll(sender_sem > 0) -->
+        <mxCell id="y3_s5" value="poll(sender_sem &gt; 0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="415" y="266" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y3 step 6: slot = sem_val - 1 -->
+        <mxCell id="y3_s6" value="slot = sem_val - 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="415" y="302" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y3 step 7: set(sender_sem, 0) -->
+        <mxCell id="y3_s7" value="set(sender_sem, 0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="415" y="338" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y3 step 8: write to y=2 -->
+        <mxCell id="y3_s8" value="write → y=2 @ slot" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="415" y="374" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y3 step 9: write_barrier -->
+        <mxCell id="y3_s9" value="write_barrier()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="415" y="410" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y3 step 10: inc(y=2.recv_sem) -->
+        <mxCell id="y3_s10" value="inc(y=2.recv_sem)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="415" y="446" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- ======= MIDDLE (y=2) STEPS ======= -->
+
+        <!-- y2 step 1: cb_reserve_back -->
+        <mxCell id="y2_s1" value="cb_reserve_back(c_1, N)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="635" y="110" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y2 step 2: set(recv_sem, 0) -->
+        <mxCell id="y2_s2" value="set(recv_sem, 0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="635" y="146" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y2 step 3: slot_bit -->
+        <mxCell id="y2_s3" value="slot_bit = (ptr!=base)?1:0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="635" y="182" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y2 step 4: inc(y=3.sem, 1+slot_bit) -->
+        <mxCell id="y2_s4" value="inc(y=3.sem, 1+slot_bit)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="635" y="218" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y2 step 5: wait(recv_sem) -->
+        <mxCell id="y2_s5" value="wait(recv_sem)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="635" y="374" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y2 step 6: cb_push_back -->
+        <mxCell id="y2_s6" value="cb_push_back(c_1, N)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="635" y="446" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y2 step 7: poll(sender_sem > 0) -->
+        <mxCell id="y2_s7" value="poll(sender_sem &gt; 0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="635" y="494" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y2 step 8: slot = sem_val - 1 -->
+        <mxCell id="y2_s8" value="slot = sem_val - 1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="635" y="530" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y2 step 9: write to y=0 -->
+        <mxCell id="y2_s9" value="write → y=0 @ slot" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="635" y="566" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y2 step 10: inc(y=0.recv_sem) -->
+        <mxCell id="y2_s10" value="inc(y=0.recv_sem)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="635" y="614" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- ======= TAIL (y=0) STEPS ======= -->
+
+        <!-- y0 step 1: cb_reserve_back -->
+        <mxCell id="y0_s1" value="cb_reserve_back(c_1, N)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="855" y="110" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y0 step 2: set(recv_sem, 0) -->
+        <mxCell id="y0_s2" value="set(recv_sem, 0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="855" y="146" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y0 step 3: slot_bit -->
+        <mxCell id="y0_s3" value="slot_bit = (ptr!=base)?1:0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="855" y="182" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y0 step 4: inc(y=2.sem, 1+slot_bit) -->
+        <mxCell id="y0_s4" value="inc(y=2.sem, 1+slot_bit)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="855" y="218" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y0 step 5: wait(recv_sem) -->
+        <mxCell id="y0_s5" value="wait(recv_sem)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="855" y="566" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y0 step 6: cb_push_back -->
+        <mxCell id="y0_s6" value="cb_push_back(c_1, N)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="855" y="614" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- y0 step 7: done -->
+        <mxCell id="y0_s7" value="(done — tail)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="855" y="656" width="130" height="26" as="geometry"/>
+        </mxCell>
+
+        <!-- ======= ARROWS BETWEEN LIFELINES ======= -->
+
+        <!-- GREEN UP: y=2 step 4 → y=3 step 5  (readiness signal with slot) -->
+        <mxCell id="arrow_y2_to_y3_ready" style="strokeColor=#82b366;strokeWidth=2;endFill=1;dashed=1;dashPattern=8 4;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="635" y="231" as="sourcePoint"/>
+            <mxPoint x="545" y="279" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow_y2_to_y3_ready_lbl" value="1+slot" style="edgeLabel;html=1;fontSize=9;fontStyle=1;fontColor=#82b366;" vertex="1" connectable="0" parent="arrow_y2_to_y3_ready">
+          <mxGeometry x="0.2" relative="1" as="geometry">
+            <mxPoint x="5" y="-10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- RED DOWN: y=3 step 8 → y=2 step 5  (data write) -->
+        <mxCell id="arrow_y3_to_y2_data" style="strokeColor=#b85450;strokeWidth=3;endFill=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="545" y="387" as="sourcePoint"/>
+            <mxPoint x="635" y="387" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow_y3_to_y2_data_lbl" value="data" style="edgeLabel;html=1;fontSize=9;fontStyle=1;fontColor=#b85450;" vertex="1" connectable="0" parent="arrow_y3_to_y2_data">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="-10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- GREEN DOWN: y=3 step 10 → y=2 step 5/6  (completion signal) -->
+        <mxCell id="arrow_y3_to_y2_done" style="strokeColor=#82b366;strokeWidth=2;endFill=1;dashed=1;dashPattern=8 4;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="545" y="459" as="sourcePoint"/>
+            <mxPoint x="635" y="459" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow_y3_to_y2_done_lbl" value="recv_sem++" style="edgeLabel;html=1;fontSize=8;fontColor=#82b366;" vertex="1" connectable="0" parent="arrow_y3_to_y2_done">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="-10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- GREEN UP: y=0 step 4 → y=2 step 7  (readiness signal with slot) -->
+        <mxCell id="arrow_y0_to_y2_ready" style="strokeColor=#82b366;strokeWidth=2;endFill=1;dashed=1;dashPattern=8 4;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="855" y="231" as="sourcePoint"/>
+            <mxPoint x="765" y="507" as="targetPoint"/>
+            <Array as="points">
+              <mxPoint x="810" y="231"/>
+              <mxPoint x="810" y="507"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow_y0_to_y2_ready_lbl" value="1+slot" style="edgeLabel;html=1;fontSize=9;fontStyle=1;fontColor=#82b366;" vertex="1" connectable="0" parent="arrow_y0_to_y2_ready">
+          <mxGeometry x="0.3" relative="1" as="geometry">
+            <mxPoint x="10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- RED DOWN: y=2 step 9 → y=0 step 5  (data write) -->
+        <mxCell id="arrow_y2_to_y0_data" style="strokeColor=#b85450;strokeWidth=3;endFill=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="765" y="579" as="sourcePoint"/>
+            <mxPoint x="855" y="579" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow_y2_to_y0_data_lbl" value="data" style="edgeLabel;html=1;fontSize=9;fontStyle=1;fontColor=#b85450;" vertex="1" connectable="0" parent="arrow_y2_to_y0_data">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="-10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- GREEN DOWN: y=2 step 10 → y=0 step 5/6  (completion signal) -->
+        <mxCell id="arrow_y2_to_y0_done" style="strokeColor=#82b366;strokeWidth=2;endFill=1;dashed=1;dashPattern=8 4;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="765" y="627" as="sourcePoint"/>
+            <mxPoint x="855" y="627" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow_y2_to_y0_done_lbl" value="recv_sem++" style="edgeLabel;html=1;fontSize=8;fontColor=#82b366;" vertex="1" connectable="0" parent="arrow_y2_to_y0_done">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="-10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ======= CALLOUT: Slot Encoding ======= -->
+        <mxCell id="callout_slot" value="Slot Encoding:&#xa;sem value 1 → slot 0 (base)&#xa;sem value 2 → slot 1 (base+size)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;align=left;spacingLeft=6;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="415" y="500" width="200" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- ======= DOUBLE BUFFER DIAGRAM ======= -->
+        <mxCell id="db_label" value="CB c_1 double buffer" style="text;html=1;fontSize=9;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="435" y="555" width="130" height="18" as="geometry"/>
+        </mxCell>
+
+        <!-- Slot 0 box -->
+        <mxCell id="db_slot0" value="Slot 0&#xa;(base)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="440" y="575" width="70" height="36" as="geometry"/>
+        </mxCell>
+
+        <!-- Slot 1 box -->
+        <mxCell id="db_slot1" value="Slot 1&#xa;(base+size)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="510" y="575" width="70" height="36" as="geometry"/>
+        </mxCell>
+
+
+        <!-- ============================================================ -->
+        <!-- BOTTOM SECTION: Star Topology Barrier                         -->
+        <!-- ============================================================ -->
+
+        <!-- Separator line -->
+        <mxCell id="separator" style="strokeColor=#cccccc;strokeWidth=1;dashed=1;endArrow=none;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="20" y="780" as="sourcePoint"/>
+            <mxPoint x="1100" y="780" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Title -->
+        <mxCell id="barrier_title" value="Star Topology Barrier (after vstep)" style="text;html=1;fontSize=12;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="350" y="790" width="300" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- Barrier core y=0 (Leader) -->
+        <mxCell id="bar_y0" value="y=0&#xa;Leader" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="830" width="120" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- Barrier core y=2 -->
+        <mxCell id="bar_y2" value="y=2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="210" y="830" width="120" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- Barrier core y=3 -->
+        <mxCell id="bar_y3" value="y=3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="670" y="830" width="120" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- Leader annotation -->
+        <mxCell id="bar_leader_note" value="wait(barrier_sem == 2)&#xa;then broadcast release" style="text;html=1;fontSize=9;fontStyle=2;align=center;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="420" y="890" width="160" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- Green dashed: y=2 → y=0 (inc barrier_sem) -->
+        <mxCell id="bar_y2_to_y0" style="strokeColor=#82b366;strokeWidth=2;endFill=1;dashed=1;dashPattern=8 4;curved=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="330" y="845" as="sourcePoint"/>
+            <mxPoint x="440" y="845" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="bar_y2_to_y0_lbl" value="inc(barrier_sem)" style="edgeLabel;html=1;fontSize=8;fontColor=#82b366;" vertex="1" connectable="0" parent="bar_y2_to_y0">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="-10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Green dashed: y=3 → y=0 (inc barrier_sem) -->
+        <mxCell id="bar_y3_to_y0" style="strokeColor=#82b366;strokeWidth=2;endFill=1;dashed=1;dashPattern=8 4;curved=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="670" y="845" as="sourcePoint"/>
+            <mxPoint x="560" y="845" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="bar_y3_to_y0_lbl" value="inc(barrier_sem)" style="edgeLabel;html=1;fontSize=8;fontColor=#82b366;" vertex="1" connectable="0" parent="bar_y3_to_y0">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="-10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Red dashed: y=0 → y=2 (inc release_sem) -->
+        <mxCell id="bar_y0_to_y2" style="strokeColor=#b85450;strokeWidth=2;endFill=1;dashed=1;dashPattern=8 4;curved=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="440" y="870" as="sourcePoint"/>
+            <mxPoint x="330" y="870" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="bar_y0_to_y2_lbl" value="inc(release_sem)" style="edgeLabel;html=1;fontSize=8;fontColor=#b85450;" vertex="1" connectable="0" parent="bar_y0_to_y2">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Red dashed: y=0 → y=3 (inc release_sem) -->
+        <mxCell id="bar_y0_to_y3" style="strokeColor=#b85450;strokeWidth=2;endFill=1;dashed=1;dashPattern=8 4;curved=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="560" y="870" as="sourcePoint"/>
+            <mxPoint x="670" y="870" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="bar_y0_to_y3_lbl" value="inc(release_sem)" style="edgeLabel;html=1;fontSize=8;fontColor=#b85450;" vertex="1" connectable="0" parent="bar_y0_to_y3">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+
+        <!-- ============================================================ -->
+        <!-- LEGEND                                                        -->
+        <!-- ============================================================ -->
+
+        <mxCell id="legend_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#cccccc;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="850" y="790" width="230" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="legend_title" value="Legend" style="text;html=1;fontSize=11;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="860" y="793" width="60" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Legend: Red solid = Data transfer -->
+        <mxCell id="leg_red_line" style="strokeColor=#b85450;strokeWidth=3;endFill=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="870" y="825" as="sourcePoint"/>
+            <mxPoint x="920" y="825" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_red_text" value="Data transfer" style="text;html=1;fontSize=9;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="930" y="815" width="140" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Legend: Green dashed = Semaphore signal -->
+        <mxCell id="leg_green_line" style="strokeColor=#82b366;strokeWidth=2;endFill=1;dashed=1;dashPattern=8 4;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="870" y="850" as="sourcePoint"/>
+            <mxPoint x="920" y="850" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_green_text" value="Semaphore signal" style="text;html=1;fontSize=9;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="930" y="840" width="140" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Legend: Blue box = Local operation -->
+        <mxCell id="leg_blue_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="870" y="866" width="50" height="16" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_blue_text" value="Local operation" style="text;html=1;fontSize=9;align=left;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="930" y="862" width="140" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Legend: 1+slot = Slot-bit encoded readiness -->
+        <mxCell id="leg_slot_text2" value="&quot;1+slot&quot; = Slot-bit encoded readiness" style="text;html=1;fontSize=9;align=left;verticalAlign=middle;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="870" y="884" width="200" height="20" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

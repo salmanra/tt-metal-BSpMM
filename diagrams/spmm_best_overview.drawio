@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" agent="Claude" version="24.0.0" type="device">
+  <diagram id="spmm-best" name="SpMM Best: SnF + CDA">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Title -->
+        <mxCell id="title" value="SpMM Best: SnF (sparse) + CDA (dense)" style="text;html=1;align=center;verticalAlign=middle;fontSize=18;fontStyle=1;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="230" y="15" width="540" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="eq" value="C = A × B&amp;nbsp;&amp;nbsp;&amp;nbsp;(A: sparse BSR,&amp;nbsp; B: dense)" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;strokeColor=none;fillColor=none;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="310" y="48" width="380" height="22" as="geometry"/>
+        </mxCell>
+
+        <!-- Sparse Matrix A -->
+        <mxCell id="matA" value="&lt;b style=&quot;font-size:14px&quot;&gt;A&lt;/b&gt;&lt;br&gt;(sparse, BSR)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="40" y="180" width="120" height="160" as="geometry"/>
+        </mxCell>
+
+        <!-- Dense Matrix B -->
+        <mxCell id="matB" value="&lt;b style=&quot;font-size:14px&quot;&gt;B&lt;/b&gt;&lt;br&gt;(dense)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="840" y="180" width="120" height="160" as="geometry"/>
+        </mxCell>
+
+        <!-- DRAM -->
+        <mxCell id="dram" value="&lt;b&gt;DRAM&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="280" y="110" width="440" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- Tensix Grid -->
+        <mxCell id="grid" value="&lt;b style=&quot;font-size:13px&quot;&gt;8 × 8 Tensix Core Grid&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;verticalAlign=top;spacingTop=8;" vertex="1" parent="1">
+          <mxGeometry x="310" y="210" width="380" height="200" as="geometry"/>
+        </mxCell>
+
+        <!-- SnF horizontal arrow inside grid -->
+        <mxCell id="snf_arrow" value="" style="endArrow=block;html=1;strokeColor=#b85450;strokeWidth=3;endFill=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="345" y="290" as="sourcePoint"/>
+            <mxPoint x="650" y="290" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="snf_label" value="&lt;font color=&quot;#b85450&quot;&gt;&lt;b&gt;SnF&lt;/b&gt;: A blocks, L → R per row&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="390" y="260" width="220" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- CDA vertical arrow inside grid -->
+        <mxCell id="cda_arrow" value="" style="endArrow=block;html=1;strokeColor=#6c8ebf;strokeWidth=3;endFill=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="380" as="sourcePoint"/>
+            <mxPoint x="500" y="310" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="cda_label" value="&lt;font color=&quot;#6c8ebf&quot;&gt;&lt;b&gt;CDA&lt;/b&gt;: B blocks&lt;br&gt;B → T per column&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;(share sets discovered&lt;br&gt;at runtime from BSR&lt;br&gt;col_indices)&lt;/font&gt;&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;strokeColor=none;fillColor=none;" vertex="1" parent="1">
+          <mxGeometry x="520" y="320" width="160" height="75" as="geometry"/>
+        </mxCell>
+
+        <!-- A stored in DRAM -->
+        <mxCell id="a_to_dram" value="" style="endArrow=block;html=1;strokeColor=#b85450;strokeWidth=1;endFill=1;dashed=1;exitX=1;exitY=0.25;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="matA" target="dram">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- B stored in DRAM -->
+        <mxCell id="b_to_dram" value="" style="endArrow=block;html=1;strokeColor=#6c8ebf;strokeWidth=1;endFill=1;dashed=1;exitX=0;exitY=0.25;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="matB" target="dram">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- DRAM -> Grid: A reads (8 injectors via SnF) -->
+        <mxCell id="arrow_a" value="" style="endArrow=block;html=1;strokeColor=#b85450;strokeWidth=2;endFill=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="dram" target="grid">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="label_a" value="&lt;font color=&quot;#b85450&quot;&gt;A reads (&lt;b&gt;8×&lt;/b&gt;)&lt;br&gt;RISCV_0, NoC 0&lt;br&gt;(SnF injectors)&lt;/font&gt;" style="edgeLabel;html=1;fontSize=10;align=right;" vertex="1" connectable="0" parent="arrow_a">
+          <mxGeometry x="0.1" relative="1" as="geometry">
+            <mxPoint x="-68" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- DRAM -> Grid: B reads (reduced by CDA sharing) -->
+        <mxCell id="arrow_b" value="" style="endArrow=block;html=1;strokeColor=#6c8ebf;strokeWidth=2;endFill=1;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.75;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="dram" target="grid">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="label_b" value="&lt;font color=&quot;#6c8ebf&quot;&gt;B reads (&lt;b&gt;reduced&lt;/b&gt;)&lt;br&gt;RISCV_1, NoC 1&lt;br&gt;(CDA injectors only)&lt;/font&gt;" style="edgeLabel;html=1;fontSize=10;align=left;" vertex="1" connectable="0" parent="arrow_b">
+          <mxGeometry x="0.1" relative="1" as="geometry">
+            <mxPoint x="70" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Grid -> output -->
+        <mxCell id="arrow_out" value="" style="endArrow=block;html=1;strokeColor=#82b366;strokeWidth=2;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="grid">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="470" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="label_out" value="&lt;font color=&quot;#82b366&quot;&gt;C output → DRAM&lt;/font&gt;" style="edgeLabel;html=1;fontSize=10;" vertex="1" connectable="0" parent="arrow_out">
+          <mxGeometry x="0.5" relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Summary -->
+        <mxCell id="summary" value="&lt;b&gt;Data Movement: SnF for A + CDA for B&lt;/b&gt;&lt;br&gt;• RISCV_0 (NoC 0): SnF chain L→R per row — 1 injector/row reads A from DRAM, forwards to 7 receivers&lt;br&gt;• RISCV_1 (NoC 1): CDA chain B→T per column — cores sharing the same B block form a &quot;share set&quot;;&lt;br&gt;&amp;nbsp; injector (max y) reads from DRAM, chains data upward. DRAM reads ∝ 1/(sharing ratio)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=left;spacingLeft=10;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="130" y="500" width="540" height="80" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

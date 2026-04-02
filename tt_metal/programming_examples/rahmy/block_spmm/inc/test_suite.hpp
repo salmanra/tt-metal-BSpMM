@@ -1923,7 +1923,7 @@ namespace bsr_test_suite {
         return std::make_tuple(bsr_bfloat16, dense_bfloat16, "test_1_block_id");
     }
 
-    template <uint32_t R = 32, uint32_t C = 32, uint32_t DensityPercent = 25>
+    template <uint32_t R = 32, uint32_t C = 32, uint32_t DensityPPM = 250000>
     std::tuple<bsr_matrix<bfloat16>, dense_matrix<bfloat16>, std::string>  profile_case_sparse_fill_random_large() {
         // matmul params setup
         uint32_t M = 8192;
@@ -1933,9 +1933,8 @@ namespace bsr_test_suite {
         uint32_t block_matrix_height = M / R;
         uint32_t block_matrix_width = K / C;
 
-        constexpr float density = DensityPercent / 100.0f;
-        uint32_t divisor = uint32_t(std::round(1.0 / density));
-        uint32_t nblocks = (block_matrix_height * block_matrix_width) / divisor; 
+        constexpr float density = DensityPPM / 1000000.0f;
+        uint32_t nblocks = std::max(1u, uint32_t(std::round(block_matrix_height * block_matrix_width * density))); 
 
         // nz blocks placed randomly
         bsr_matrix<float> bsr(M, K, R, C, nblocks, RAND);

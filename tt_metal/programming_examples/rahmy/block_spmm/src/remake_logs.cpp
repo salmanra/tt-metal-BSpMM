@@ -102,6 +102,8 @@ int main(int argc, char** argv) {
         {ProfileSweepSparsityPatternRegistryD10, "ProfileSweepSparsityPatternD10",               -1},
         {ProfileSweepSparsityPatternRegistryD5,  "ProfileSweepSparsityPatternD5",                -1},
         {ProfileSweepSparsityPatternRegistryD50, "ProfileSweepSparsityPatternD50",               -1},
+        {ProfileSweepUltraLowDensity32Registry,  "ProfileSweepUltraLowDensity32",                -1},
+        {ProfileSweepUltraLowDensity64Registry,  "ProfileSweepUltraLowDensity64",                -1},
     };
     constexpr int NUM_REGISTRIES = sizeof(entries) / sizeof(entries[0]);
 

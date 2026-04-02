@@ -1,0 +1,337 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-03-31T00:00:00.000Z" agent="Claude" version="21.0.0" type="device">
+  <diagram id="tensix-tile" name="Tensix Tile Microarchitecture">
+    <mxGraphModel dx="800" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="800" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- Title -->
+        <mxCell id="title" value="&lt;b&gt;Tensix Tile Microarchitecture&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="220" y="15" width="360" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- Outer Tensix tile rectangle -->
+        <mxCell id="tile" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;dashed=1;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="40" y="55" width="720" height="820" as="geometry"/>
+        </mxCell>
+        <mxCell id="tile_label" value="&lt;b&gt;Tensix Tile&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="55" y="60" width="90" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ NoC Routers ============ -->
+
+        <!-- NoC 0 — left edge -->
+        <mxCell id="noc0" value="&lt;b&gt;NoC 0&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="55" y="200" width="70" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- NoC 1 — right edge -->
+        <mxCell id="noc1" value="&lt;b&gt;NoC 1&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="675" y="200" width="70" height="120" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ Data Movement Cores (left side) ============ -->
+
+        <!-- BRISC -->
+        <mxCell id="brisc" value="&lt;b&gt;BRISC (RISCV_0)&lt;/b&gt;&lt;br&gt;Data Movement" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="160" y="160" width="150" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- NCRISC -->
+        <mxCell id="ncrisc" value="&lt;b&gt;NCRISC (RISCV_1)&lt;/b&gt;&lt;br&gt;Data Movement" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="160" y="260" width="150" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ Compute Cores (center pipeline) ============ -->
+
+        <!-- TRISC 0 — UNPACK -->
+        <mxCell id="trisc0" value="&lt;b&gt;TRISC 0&lt;/b&gt;&lt;br&gt;UNPACK" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="440" y="120" width="160" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- TRISC 1 — MATH (with sub-labels) -->
+        <mxCell id="trisc1" value="&lt;b&gt;TRISC 1&lt;/b&gt;&lt;br&gt;MATH" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=top;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="440" y="230" width="160" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- Matrix Engine sub-label inside TRISC 1 -->
+        <mxCell id="matrix_engine" value="Matrix Engine" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=9;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="450" y="272" width="65" height="28" as="geometry"/>
+        </mxCell>
+
+        <!-- Vector Engine sub-label inside TRISC 1 -->
+        <mxCell id="vector_engine" value="Vector Engine" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=9;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="525" y="272" width="65" height="28" as="geometry"/>
+        </mxCell>
+
+        <!-- TRISC 2 — PACK -->
+        <mxCell id="trisc2" value="&lt;b&gt;TRISC 2&lt;/b&gt;&lt;br&gt;PACK" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="440" y="385" width="160" height="55" as="geometry"/>
+        </mxCell>
+
+        <!-- Pipeline arrows between compute cores -->
+        <!-- TRISC 0 → TRISC 1 -->
+        <mxCell id="pipe01" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d6b656;strokeWidth=2;endArrow=block;endFill=1;" edge="1" source="trisc0" target="trisc1" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="pipe01_label" value="&lt;i&gt;pipeline&lt;/i&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontColor=#999999;" vertex="1" connectable="0" parent="pipe01">
+          <mxGeometry x="-0.1" relative="1" as="geometry">
+            <mxPoint as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- TRISC 1 → TRISC 2 -->
+        <mxCell id="pipe12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d6b656;strokeWidth=2;endArrow=block;endFill=1;" edge="1" source="trisc1" target="trisc2" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="pipe12_label" value="&lt;i&gt;pipeline&lt;/i&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontColor=#999999;" vertex="1" connectable="0" parent="pipe12">
+          <mxGeometry x="-0.1" relative="1" as="geometry">
+            <mxPoint as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============ SRAM Block (bottom) ============ -->
+
+        <!-- SRAM outer rectangle -->
+        <mxCell id="sram" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;strokeWidth=2;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="80" y="530" width="640" height="170" as="geometry"/>
+        </mxCell>
+        <mxCell id="sram_label" value="&lt;b&gt;L1 SRAM (1.5 MB)&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=top;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=11;fontColor=#7A4988;" vertex="1" parent="1">
+          <mxGeometry x="310" y="535" width="130" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- Circular buffer slots inside SRAM -->
+        <mxCell id="cb0" value="&lt;b&gt;c_0&lt;/b&gt;&lt;br&gt;(in0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8D5F5;strokeColor=#9673a6;fontSize=9;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="105" y="570" width="90" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="cb1" value="&lt;b&gt;c_1&lt;/b&gt;&lt;br&gt;(in1)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8D5F5;strokeColor=#9673a6;fontSize=9;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="215" y="570" width="90" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="cb2" value="&lt;b&gt;c_2&lt;/b&gt;&lt;br&gt;(D)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8D5F5;strokeColor=#9673a6;fontSize=9;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="325" y="570" width="90" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="cb16" value="&lt;b&gt;c_16&lt;/b&gt;&lt;br&gt;(out)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8D5F5;strokeColor=#9673a6;fontSize=9;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="435" y="570" width="90" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="cb24" value="&lt;b&gt;c_24&lt;/b&gt;&lt;br&gt;(intermed)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8D5F5;strokeColor=#9673a6;fontSize=9;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="545" y="570" width="100" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- CB label row -->
+        <mxCell id="cb_section_label" value="Circular Buffers" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=9;fontColor=#9673a6;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="335" y="625" width="90" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Free space indicator -->
+        <mxCell id="free_space" value="&lt;i&gt;Kernel binary + stack + free space&lt;/i&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0e6f6;strokeColor=#9673a6;fontSize=9;verticalAlign=middle;dashed=1;strokeWidth=1;fontColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="170" y="650" width="420" height="35" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ DATA FLOW ARROWS ============ -->
+
+        <!-- NoC 0 → BRISC (data in) -->
+        <mxCell id="noc0_to_brisc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;strokeWidth=1.5;endArrow=block;endFill=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;exitX=1;exitY=0.25;exitDx=0;exitDy=0;" edge="1" source="noc0" target="brisc" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="noc0_to_brisc_label" value="read" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontColor=#82b366;" vertex="1" connectable="0" parent="noc0_to_brisc">
+          <mxGeometry x="-0.1" relative="1" as="geometry">
+            <mxPoint as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- NoC 1 → NCRISC (data in) -->
+        <mxCell id="noc1_to_ncrisc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;strokeWidth=1.5;endArrow=block;endFill=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;exitX=0;exitY=0.75;exitDx=0;exitDy=0;" edge="1" source="noc1" target="ncrisc" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="noc1_to_ncrisc_label" value="read" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontColor=#6c8ebf;" vertex="1" connectable="0" parent="noc1_to_ncrisc">
+          <mxGeometry x="-0.1" relative="1" as="geometry">
+            <mxPoint as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- BRISC → SRAM (DMA write to CBs) -->
+        <mxCell id="brisc_to_sram" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;strokeWidth=1.5;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;" edge="1" source="brisc" target="sram" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="brisc_to_sram_label" value="DMA write&lt;br&gt;to CBs" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontColor=#82b366;" vertex="1" connectable="0" parent="brisc_to_sram">
+          <mxGeometry x="-0.2" relative="1" as="geometry">
+            <mxPoint x="-35" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- NCRISC → SRAM (DMA write to CBs) -->
+        <mxCell id="ncrisc_to_sram" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;strokeWidth=1.5;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.35;entryY=0;entryDx=0;entryDy=0;" edge="1" source="ncrisc" target="sram" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="ncrisc_to_sram_label" value="DMA write&lt;br&gt;to CBs" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontColor=#6c8ebf;" vertex="1" connectable="0" parent="ncrisc_to_sram">
+          <mxGeometry x="-0.2" relative="1" as="geometry">
+            <mxPoint x="30" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- SRAM → TRISC 0 (UNPACK reads from CBs) -->
+        <mxCell id="sram_to_trisc0" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d6b656;strokeWidth=1.5;endArrow=block;endFill=1;exitX=0.75;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" source="sram" target="trisc0" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="560" y="490"/>
+              <mxPoint x="520" y="490"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sram_to_trisc0_label" value="UNPACK&lt;br&gt;reads CBs" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontColor=#d6b656;" vertex="1" connectable="0" parent="sram_to_trisc0">
+          <mxGeometry x="0.3" relative="1" as="geometry">
+            <mxPoint x="30" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- TRISC 2 → SRAM (PACK writes to CBs) -->
+        <mxCell id="trisc2_to_sram" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d6b656;strokeWidth=1.5;endArrow=block;endFill=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.6;entryY=0;entryDx=0;entryDy=0;" edge="1" source="trisc2" target="sram" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="470"/>
+              <mxPoint x="464" y="470"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="trisc2_to_sram_label" value="PACK&lt;br&gt;writes CBs" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontColor=#d6b656;" vertex="1" connectable="0" parent="trisc2_to_sram">
+          <mxGeometry x="0.3" relative="1" as="geometry">
+            <mxPoint x="-40" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- SRAM → BRISC → NoC 0 (output DMA read, write out) -->
+        <mxCell id="sram_to_brisc_out" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;strokeWidth=1.5;endArrow=block;endFill=1;dashed=1;dashPattern=8 4;exitX=0.05;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" edge="1" source="sram" target="noc0" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="112" y="490"/>
+              <mxPoint x="55" y="490"/>
+              <mxPoint x="55" y="290"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sram_to_brisc_out_label" value="DMA read&lt;br&gt;(output to&lt;br&gt;DRAM/cores)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontColor=#82b366;" vertex="1" connectable="0" parent="sram_to_brisc_out">
+          <mxGeometry x="0.4" relative="1" as="geometry">
+            <mxPoint x="-15" y="-10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- SRAM → NCRISC → NoC 1 (output DMA read, write out) -->
+        <mxCell id="sram_to_ncrisc_out" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;strokeWidth=1.5;endArrow=block;endFill=1;dashed=1;dashPattern=8 4;exitX=0.95;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.75;entryDx=0;entryDy=0;" edge="1" source="sram" target="noc1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="688" y="490"/>
+              <mxPoint x="745" y="490"/>
+              <mxPoint x="745" y="290"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sram_to_ncrisc_out_label" value="DMA read&lt;br&gt;(output to&lt;br&gt;DRAM/cores)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=8;fontColor=#6c8ebf;" vertex="1" connectable="0" parent="sram_to_ncrisc_out">
+          <mxGeometry x="0.4" relative="1" as="geometry">
+            <mxPoint x="15" y="-10" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ============ Section Labels ============ -->
+
+        <!-- Data Movement label -->
+        <mxCell id="dm_label" value="&lt;b&gt;Data Movement&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=9;fontColor=#666666;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="175" y="140" width="100" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Compute Pipeline label -->
+        <mxCell id="cp_label" value="&lt;b&gt;Compute Pipeline&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=9;fontColor=#666666;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="465" y="98" width="110" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Legend at bottom -->
+        <mxCell id="legend_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fafafa;strokeColor=#cccccc;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="730" width="640" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="legend_title" value="&lt;b&gt;Legend:&lt;/b&gt;" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=9;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="90" y="735" width="55" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg_green" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="150" y="738" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_green_t" value="BRISC / in path" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="168" y="735" width="85" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg_blue" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="265" y="738" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_blue_t" value="NCRISC / in path" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="283" y="735" width="90" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg_orange" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="385" y="738" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_orange_t" value="Compute (TRISC)" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="403" y="735" width="90" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg_purple" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="505" y="738" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_purple_t" value="L1 SRAM / CBs" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="523" y="735" width="80" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg_red" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="615" y="738" width="14" height="14" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_red_t" value="NoC Router" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="633" y="735" width="65" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Dashed arrow legend -->
+        <mxCell id="leg_solid_line" value="" style="endArrow=block;endFill=1;html=1;strokeColor=#333333;strokeWidth=1.5;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="130" y="770" as="sourcePoint"/>
+            <mxPoint x="170" y="770" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_solid_t" value="Data in path" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="175" y="762" width="65" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg_dashed_line" value="" style="endArrow=block;endFill=1;html=1;strokeColor=#333333;strokeWidth=1.5;dashed=1;dashPattern=8 4;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="280" y="770" as="sourcePoint"/>
+            <mxPoint x="320" y="770" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_dashed_t" value="Data out path" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="325" y="762" width="75" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- Pipeline arrow legend -->
+        <mxCell id="leg_pipe_line" value="" style="endArrow=block;endFill=1;html=1;strokeColor=#d6b656;strokeWidth=2;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="430" y="770" as="sourcePoint"/>
+            <mxPoint x="470" y="770" as="targetPoint"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg_pipe_t" value="Compute pipeline" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=8;" vertex="1" parent="1">
+          <mxGeometry x="475" y="762" width="90" height="20" as="geometry"/>
+        </mxCell>
+
+        <!-- ============ Annotation: Default NoC Assignment ============ -->
+        <mxCell id="noc0_default" value="&lt;i&gt;default for&lt;br&gt;BRISC&lt;/i&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=8;fontColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="50" y="325" width="65" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="noc1_default" value="&lt;i&gt;default for&lt;br&gt;NCRISC&lt;/i&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontSize=8;fontColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="680" y="325" width="65" height="30" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -128,6 +128,8 @@ void kernel_main(){
 #if SKIP_IN0_DRAM_READ == 0
                 {
                     DeviceZoneScopedN("SpMM Zone: Reading nonzero block from in0 from DRAM");
+                    DPRINT_DATA1(DPRINT << "Naive in0 DRAM read\n ");
+
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
                     spmm::read_block_by_tile(
                         in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,

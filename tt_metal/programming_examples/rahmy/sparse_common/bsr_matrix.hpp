@@ -18,7 +18,8 @@
 #define FILL_COL 2
 #define FILL_DIAG 3 // will require the size to be perfect
 #define FILL_TRIL 4 // block lower triangular (requires square block grid)
-#define FILL_MULTI_DIAG 5 // fills diagonals expanding outward from the main diagonal
+#define FILL_TRIU 5 // block upper triangular (requires square block grid)
+#define FILL_MULTI_DIAG 6 // fills diagonals expanding outward from the main diagonal
 #define TILE_SIZE 32
 #define RAND_DENOM 2 << 10 // trying to control the range...
 #define SIGNED_RAND_MAX RAND_MAX / 2
@@ -372,6 +373,36 @@ public:
                 }
             }
 
+        } else if (fill_type == FILL_TRIU) {
+            assert(blocked_matrix_height == blocked_matrix_width);
+            nblocks = blocked_matrix_height * (blocked_matrix_height + 1) / 2;
+            indices.reserve(nblocks);
+            data.reserve(nblocks * R * C);
+            for (size_t i = 0; i < blocked_matrix_height; i++) {
+                for (size_t j = i; j < blocked_matrix_width; j++) {
+                    indptr[i + 1]++;
+                    indices.push_back(j);
+                    for (size_t k = 0; k < R * C; k++) {
+                        float temp = ((k / C) == (k % C)) ? 1.0 : 0.0;
+                        T val = static_cast<T>(temp);
+                        switch (content) {
+                            case RAND:
+                                data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
+                                break;
+                            case UNIFORM:
+                                data.push_back(static_cast<T>(1.0f));
+                                break;
+                            case ID:
+                                data.push_back(val);
+                                break;
+                            case ARANGE:
+                                data.push_back(static_cast<T>(static_cast<float>(k)));
+                                break;
+                        }
+                    }
+                }
+            }
+
         } else if (fill_type == FILL_MULTI_DIAG) {
             auto positions = multi_diag_positions(blocked_matrix_height, blocked_matrix_width, nblocks);
             nblocks = positions.size();  // may be fewer if matrix is small
@@ -458,6 +489,20 @@ public:
             data.reserve(nblocks * R * C);
             for (size_t i = 0; i < blocked_matrix_height; i++) {
                 for (size_t j = 0; j <= i; j++) {
+                    indptr[i + 1]++;
+                    indices.push_back(j);
+                    for (size_t k = 0; k < R * C; k++) {
+                        data.push_back(static_cast<T>(SIGNED_RAND_MAX - rand()) / static_cast<T>(RAND_DENOM));
+                    }
+                }
+            }
+        } else if (fill_type == FILL_TRIU) {
+            assert(blocked_matrix_height == blocked_matrix_width);
+            nblocks = blocked_matrix_height * (blocked_matrix_height + 1) / 2;
+            indices.reserve(nblocks);
+            data.reserve(nblocks * R * C);
+            for (size_t i = 0; i < blocked_matrix_height; i++) {
+                for (size_t j = i; j < blocked_matrix_width; j++) {
                     indptr[i + 1]++;
                     indices.push_back(j);
                     for (size_t k = 0; k < R * C; k++) {

@@ -125,6 +125,7 @@ void kernel_main(){
 #if SKIP_IN1_DRAM_READ == 0
                 {
                     DeviceZoneScopedN("SpMM Zone: Reading dense block of in1 from DRAM");
+                    DPRINT_DATA1("Naive in1 DRAM read " << bsr_col_index);
                     uint32_t l1_write_addr_in1 = get_write_ptr(spmm::cb_id_in1);
 
                     // Read in1 block (row selected by BSR col_indices)
@@ -172,6 +173,6 @@ void kernel_main(){
         }
         out_tensor_x_coord_offset = 0;
     }
-    DPRINT_DATA1(DPRINT << "in1 kernel complete" << ENDL());
+    DPRINT_DATA0(DPRINT << "in1 kernel complete" << ENDL());
 
 }

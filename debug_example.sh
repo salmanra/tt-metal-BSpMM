@@ -29,6 +29,11 @@ if [ "$2" = "watcher" ]; then
 fi
 
 example_name="$1"
+shift 2 2>/dev/null || shift $#
 executable_name="./build/programming_examples/rahmy/$example_name"
 
-./$executable_name 16 1 5
+if [ $# -eq 0 ]; then
+    $executable_name 0 0
+else
+    $executable_name "$@"
+fi 

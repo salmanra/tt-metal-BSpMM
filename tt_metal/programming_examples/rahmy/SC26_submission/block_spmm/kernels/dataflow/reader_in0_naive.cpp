@@ -128,6 +128,7 @@ void kernel_main(){
 #if SKIP_IN0_DRAM_READ == 0
                 {
                     DeviceZoneScopedN("SpMM Zone: Reading nonzero block from in0 from DRAM");
+                    DPRINT_DATA1(DPRINT << "Naive in0 DRAM read " << reduction_iter);
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
                     spmm::read_block_by_tile(
                         in0_tensor_start_tile_id + num_blocks_in * in0_block_num_tiles,
@@ -167,7 +168,7 @@ void kernel_main(){
                     }
                 }
                 noc_async_write_barrier();
-                DPRINT_DATA0(DPRINT << "done writing" << ENDL());
+                DPRINT_DATA1(DPRINT << "done writing" << ENDL());
 #endif
                 cb_pop_front(spmm::cb_id_out, out_block_num_tiles);
                 out_tensor_x_coord_offset += out_num_subblocks_w * out_tensor_next_subblock_stride_w;
@@ -177,6 +178,6 @@ void kernel_main(){
     }
     cb_pop_front(spmm::cb_id_col_indices, col_indices_num_tiles);
     cb_pop_front(spmm::cb_id_indptr, indptr_num_tiles);
-    DPRINT_DATA0(DPRINT << "in0 kernel complete" << ENDL());
+    DPRINT_DATA1(DPRINT << "in0 kernel complete" << ENDL());
 
 }

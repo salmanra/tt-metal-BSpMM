@@ -31,6 +31,7 @@ endif()
 
 list(APPEND RAHMY_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/SC26_submission/block_spmm/src/export_block_spmm_to_csv.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SC26_submission/block_spmm/src/run_block_spmm.cpp
 )
 
 # include_directories(${CMAKE_CURRENT_SOURCE_DIR}/SpMV_common)

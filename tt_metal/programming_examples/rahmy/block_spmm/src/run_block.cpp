@@ -54,7 +54,7 @@ void run_test(
     */
 
     // device setup
-    console_printf("Setting up the device!\n");
+    // console_printf("Setting up the device!\n");
 
     constexpr int device_id = 0;
     IDevice* device = CreateDevice(device_id);
@@ -73,7 +73,7 @@ void run_test(
     uint32_t Rt = R / TILE_HEIGHT;
     uint32_t Ct = C / TILE_WIDTH;
 
-    console_printf("Initalizing output data!\n");
+    // console_printf("Initalizing output data!\n");
 
     // initialize output_data
     dense_matrix<float> tmp(M, N, 0.0f);
@@ -84,16 +84,16 @@ void run_test(
 
 
     // tilize input data
-    console_printf("Tilizing!\n");
+    // console_printf("Tilizing!\n");
 
     a.data = tilize_nfaces(a.data, R, C);
     b.data = tilize_nfaces(b.data, K, N);
 
     // run bsr_spmm_multicore_reuse
-    console_printf("Entering host code\n");
+    // console_printf("Entering host code\n");
     
     host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
-    console_printf("exiting host code\n");
+    // console_printf("exiting host code\n");
 
     // untile output data
     output.data = untilize_nfaces(output.data, M, N);

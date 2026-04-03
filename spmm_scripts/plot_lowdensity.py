@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import csv
 import re
 from pathlib import Path
 
@@ -24,6 +25,7 @@ import numpy as np
 # ── Paths ────────────────────────────────────────────────────────────────────
 
 DATA_DIR = Path("/home/user/tt-metal/profiles_sc26/csvs")
+GPU_CSV = Path("/home/user/tt-metal/tt_metal/programming_examples/rahmy/gpu-normalized/ultra_sparse_gpu_ELL.csv")
 
 N150_PEAK_TFLOPS = 74.0
 
@@ -117,6 +119,27 @@ def load_registry_data(data_dir: Path, registry: str) -> list[dict]:
     return rows
 
 
+def load_gpu_data(csv_path: Path, block_size: int) -> list[dict]:
+    """Load GPU TFLOPs from the ultra-sparse ELL CSV, filtered by block size."""
+    rows = []
+    try:
+        with open(csv_path, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if int(row["Block"]) != block_size:
+                    continue
+                m = re.search(r"_dppm(\d+)", row["Case"])
+                if not m:
+                    continue
+                rows.append({
+                    "ppm": int(m.group(1)),
+                    "tflops": float(row["Avg_TFLOPs"]),
+                })
+    except FileNotFoundError:
+        print(f"WARNING: GPU CSV not found at {csv_path}")
+    return rows
+
+
 # ── Plotting ─────────────────────────────────────────────────────────────────
 
 def make_lowdensity_chart(data_dir: Path, out_dir: Path,
@@ -183,6 +206,79 @@ def make_lowdensity_chart(data_dir: Path, out_dir: Path,
     print(f"Saved {out}")
 
 
+def make_lowdensity_chart_with_gpu(data_dir: Path, out_dir: Path,
+                                    registry: str, block_size: int,
+                                    gpu_data: list[dict]) -> None:
+    """
+    Same as make_lowdensity_chart but with an extra bar for RTX 4090 cuSPARSE.
+    """
+    rows = load_registry_data(data_dir, registry)
+    if not rows:
+        print(f"WARNING: No data for {registry}. Skipping GPU comparison plot.")
+        return
+
+    algos = [a for a in _ALGO_ORDER if any(r["algo"] == a for r in rows)]
+    ppm_vals = sorted(set(r["ppm"] for r in rows))
+
+    # Series: TT algos + GPU
+    series = [(algo, _ALGO_LABEL.get(algo, algo), _ALGO_COLOR.get(algo, "#888")) for algo in algos]
+    series.append(("gpu", "RTX 4090 (cuSPARSE), 51 SMs", "#FF9800"))
+
+    n_series = len(series)
+    n_densities = len(ppm_vals)
+    x = np.arange(n_densities)
+    total_bar_width = 0.80
+    bar_w = total_bar_width / max(n_series, 1)
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    gpu_by_ppm = {r["ppm"]: r["tflops"] for r in gpu_data}
+
+    for j, (key, label, color) in enumerate(series):
+        ys = []
+        for ppm in ppm_vals:
+            if key == "gpu":
+                ys.append(gpu_by_ppm.get(ppm, 0))
+            else:
+                match = [r for r in rows if r["algo"] == key and r["ppm"] == ppm]
+                ys.append(match[0]["tflops"] if match else 0)
+        offset = (j - (n_series - 1) / 2) * bar_w
+        bars = ax.bar(
+            x + offset, ys, bar_w,
+            label=label, color=color,
+            edgecolor="white", linewidth=0.5, zorder=3,
+        )
+        for bar in bars:
+            h = bar.get_height()
+            if h > 0:
+                ax.text(bar.get_x() + bar.get_width() / 2, h + 0.2,
+                        f"{h:.1f}", ha="center", va="bottom", fontsize=8)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"{ppm_to_label(p)}\n({p} PPM)" for p in ppm_vals],
+                       fontsize=10)
+    ax.set_ylabel("Throughput (TFLOPs/s)")
+    y_max = max(
+        max((r["tflops"] for r in rows), default=0),
+        max((r["tflops"] for r in gpu_data), default=0),
+    )
+    ax.set_ylim(bottom=0, top=max(y_max * 1.25, 1))
+    ax.set_title(
+        f"Tenstorrent N150 vs. RTX 4090 — Ultra-Low Density Throughput\n"
+        f"8192x8192x8192, R=C={block_size}  (device-runtime measurement)",
+        fontsize=13, fontweight="bold",
+    )
+    ax.legend(fontsize=10, loc="upper left")
+    ax.grid(axis="y", alpha=0.25)
+    ax.set_axisbelow(True)
+
+    fig.tight_layout()
+    out = out_dir / f"lowdensity_throughput_R{block_size}_vs_gpu.png"
+    fig.savefig(out, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved {out}")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -195,6 +291,8 @@ def main() -> None:
     parser.add_argument("--out-dir", type=Path,
                         default=Path("spmm_plots/lowdensity"),
                         help="Output directory for PNG figures")
+    parser.add_argument("--gpu-csv", type=Path, default=GPU_CSV,
+                        help="Path to GPU ELL benchmark CSV")
     args = parser.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
@@ -203,6 +301,16 @@ def main() -> None:
                           "UltraLowDensity32", 32)
     make_lowdensity_chart(args.data_dir, args.out_dir,
                           "UltraLowDensity64", 64)
+
+    # GPU comparison versions
+    gpu32 = load_gpu_data(args.gpu_csv, 32)
+    gpu64 = load_gpu_data(args.gpu_csv, 64)
+    if gpu32:
+        make_lowdensity_chart_with_gpu(args.data_dir, args.out_dir,
+                                       "UltraLowDensity32", 32, gpu32)
+    if gpu64:
+        make_lowdensity_chart_with_gpu(args.data_dir, args.out_dir,
+                                       "UltraLowDensity64", 64, gpu64)
 
     # ── Summary table ──
     print(f"\n{'Registry':<25} {'Algo':<45} {'PPM':>8} {'Density':>10} {'TFLOPs/s':>10} {'% Peak':>8}")

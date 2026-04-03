@@ -64,7 +64,7 @@ void MAIN {
     ///////////////////////////////////////////////////////////////////////
     mm_init(tt::CBIndex::c_0, tt::CBIndex::c_1, tt::CBIndex::c_16);
 
-    DPRINT_MATH(DPRINT << "CK got all args" << ENDL());
+    // DPRINT_MATH(DPRINT << "CK got all args" << ENDL());
 
 #if SKIP_COMPUTE == 1
     constexpr uint32_t out_block_num_tiles =
@@ -183,6 +183,6 @@ void MAIN {
         }
     }
 #endif // SKIP_COMPUTE
-    DPRINT_MATH(DPRINT << "CK complete" << ENDL());
+    // DPRINT_MATH(DPRINT << "CK complete" << ENDL());
 };
 }

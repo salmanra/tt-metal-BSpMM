@@ -185,6 +185,7 @@ void kernel_main(){
 #if PROFILE_READ_IN0 == 1
                     DeviceZoneScopedN("SpMM Zone: Reading nonzero block from in0 from DRAM");
 #endif
+                    DPRINT_DATA1(DPRINT << "SnF in0 DRAM Read: " << reduction_iter);
                     // Read in0 block from DRAM
                     uint32_t num_blocks_in = reduction_iter - block_row_start;
                     spmm::read_block_by_tile(

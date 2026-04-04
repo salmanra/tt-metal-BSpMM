@@ -5,9 +5,8 @@
 
 namespace bsr_host_code{
 
-template<bool verbose, bool is_profiling, bool use_optimal_noc = true,
-         bool in0_left_to_right = true, bool in1_bottom_to_top = true>
-void bsr_spmm_multicore_snfin0_cdain1_impl(
+template<bool verbose, bool is_profiling, bool use_optimal_noc = true>
+void bsr_spmm_multicore_snf_in0_dda_in1_impl(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
     dense_matrix<bfloat16>& output,
@@ -138,23 +137,16 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
         {(std::size_t)start_core_x, (std::size_t)start_core_y},
         {(std::size_t)start_core_x + num_cores_c - 1, (std::size_t)start_core_y + num_cores_r - 1});
 
-    // in0 SNF: injector column reads from DRAM, receivers get data forwarded
-    // L2R: injector = leftmost column, R2L: injector = rightmost column
-    uint32_t injector_col = in0_left_to_right ? start_core_x : start_core_x + num_cores_c - 1;
+    // in0 SNF: injector column reads from DRAM, receivers get data forwarded (R2L)
+    uint32_t injector_col = start_core_x + num_cores_c - 1;
     CoreRange in0_injector_cores(
         {(std::size_t)injector_col, (std::size_t)start_core_y},
         {(std::size_t)injector_col, (std::size_t)start_core_y + num_cores_r - 1});
 
     uint32_t column_offset = num_cores_c > 1 ? num_cores_c : num_cores_c + 1;
-    // Receiver cores: all columns except the injector column
-    uint32_t recv_start_x, recv_end_x;
-    if constexpr (in0_left_to_right) {
-        recv_start_x = start_core_x + 1;
-        recv_end_x   = start_core_x + column_offset - 1;
-    } else {
-        recv_start_x = start_core_x;
-        recv_end_x   = start_core_x + column_offset - 2;
-    }
+    // Receiver cores: all columns except the injector column (R2L)
+    uint32_t recv_start_x = start_core_x;
+    uint32_t recv_end_x   = start_core_x + column_offset - 2;
     CoreRange in0_receiver_cores(
         {(std::size_t)recv_start_x, (std::size_t)start_core_y},
         {(std::size_t)recv_end_x, (std::size_t)start_core_y + num_cores_r - 1});
@@ -215,8 +207,8 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
     uint32_t src1_block_size = in1_block_w * in0_block_w * single_tile_size;
 
     auto dst_dram_buffer = MakeBuffer(device, dram_buffer_dst_total_size, single_tile_size);
-    auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, src0_block_size); // TODO: will this let the D2Inj performance easaier to reason about?
-    auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, src1_block_size);
+    auto src0_dram_buffer = MakeBuffer(device, dram_buffer_A_size, single_tile_size); // TODO: will this let the D2Inj performance easaier to reason about?
+    auto src1_dram_buffer = MakeBuffer(device, dram_buffer_B_size, single_tile_size);
     auto column_indices_dram_buffer = MakeBuffer(device, dram_buffer_col_indices_size, indexing_data_single_tile_size);
     auto indptr_dram_buffer = MakeBuffer(device, dram_buffer_indptr_size, indexing_data_single_tile_size);
 
@@ -498,10 +490,8 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
             .compile_args = compute_kernel_compile_time_args,
             .defines = zone_defines});
 
-    // CDA in1 reader (replaces SNF in1 reader)
-    std::string in1_kernel_path = in1_bottom_to_top
-        ? "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_in1_chain_of_direct_addressing.cpp"
-        : "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_in1_chain_of_direct_addressingV2.cpp";
+    // CDA in1 reader (T2B)
+    std::string in1_kernel_path = "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_in1_chain_of_direct_addressingV2.cpp";
     auto in1_reader_id = tt_metal::CreateKernel(
         program,
         in1_kernel_path,
@@ -694,19 +684,11 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
             // in0 SNF reader: num_cores_y, dest/sender noc coords, is_sink_core
             in0_snf_reader_runtime_args.push_back(num_iters_y_this_core);
 
-            bool is_injector_core, is_sink_core;
-            CoreCoord in0_prev_core, in0_next_core;
-            if constexpr (in0_left_to_right) {
-                is_injector_core = core_idx_x == 0;
-                is_sink_core     = core_idx_x == (num_cores_c - 1);
-                in0_prev_core = CoreCoord(is_injector_core ? 0 : core_idx_x - 1, core_idx_y);
-                in0_next_core = CoreCoord(is_sink_core ? core_idx_x : core_idx_x + 1, core_idx_y);
-            } else {
-                is_injector_core = core_idx_x == (num_cores_c - 1);
-                is_sink_core     = core_idx_x == 0;
-                in0_prev_core = CoreCoord(is_injector_core ? core_idx_x : core_idx_x + 1, core_idx_y);
-                in0_next_core = CoreCoord(is_sink_core ? core_idx_x : core_idx_x - 1, core_idx_y);
-            }
+            // R2L: injector is rightmost, sink is leftmost
+            bool is_injector_core = core_idx_x == (num_cores_c - 1);
+            bool is_sink_core     = core_idx_x == 0;
+            CoreCoord in0_prev_core(is_injector_core ? core_idx_x : core_idx_x + 1, core_idx_y);
+            CoreCoord in0_next_core(is_sink_core ? core_idx_x : core_idx_x - 1, core_idx_y);
 
             auto in0_prev_core_physical = device->worker_core_from_logical_core(in0_prev_core);
             auto in0_next_core_physical = device->worker_core_from_logical_core(in0_next_core);
@@ -828,204 +810,77 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
 }
 
 // Public thin wrapper (matches original API and HostCodeFunctionPtr)
-template<bool verbose, bool is_profiling, bool use_optimal_noc,
-         bool in0_left_to_right, bool in1_bottom_to_top>
-void bsr_spmm_multicore_snfin0_cdain1(
+template<bool verbose, bool is_profiling, bool use_optimal_noc>
+void bsr_spmm_multicore_snf_in0_dda_in1(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_snfin0_cdain1_impl<verbose, is_profiling, use_optimal_noc, in0_left_to_right, in1_bottom_to_top>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {});
+    bsr_spmm_multicore_snf_in0_dda_in1_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {});
 }
 
 // Ablation skip wrappers
-template<bool verbose, bool is_profiling, bool use_optimal_noc,
-         bool in0_left_to_right, bool in1_bottom_to_top>
-void bsr_spmm_multicore_snfin0_cdain1_no_a_read(
+template<bool verbose, bool is_profiling, bool use_optimal_noc>
+void bsr_spmm_multicore_snf_in0_dda_in1_no_a_read(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_snfin0_cdain1_impl<verbose, is_profiling, use_optimal_noc, in0_left_to_right, in1_bottom_to_top>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_IN0_DRAM_READ", "1"}});
+    bsr_spmm_multicore_snf_in0_dda_in1_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_IN0_DRAM_READ", "1"}});
 }
-template<bool verbose, bool is_profiling, bool use_optimal_noc,
-         bool in0_left_to_right, bool in1_bottom_to_top>
-void bsr_spmm_multicore_snfin0_cdain1_no_b_read(
+template<bool verbose, bool is_profiling, bool use_optimal_noc>
+void bsr_spmm_multicore_snf_in0_dda_in1_no_b_read(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_snfin0_cdain1_impl<verbose, is_profiling, use_optimal_noc, in0_left_to_right, in1_bottom_to_top>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_IN1_DRAM_READ", "1"}});
+    bsr_spmm_multicore_snf_in0_dda_in1_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_IN1_DRAM_READ", "1"}});
 }
-template<bool verbose, bool is_profiling, bool use_optimal_noc,
-         bool in0_left_to_right, bool in1_bottom_to_top>
-void bsr_spmm_multicore_snfin0_cdain1_no_compute(
+template<bool verbose, bool is_profiling, bool use_optimal_noc>
+void bsr_spmm_multicore_snf_in0_dda_in1_no_compute(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_snfin0_cdain1_impl<verbose, is_profiling, use_optimal_noc, in0_left_to_right, in1_bottom_to_top>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_COMPUTE", "1"}});
+    bsr_spmm_multicore_snf_in0_dda_in1_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_COMPUTE", "1"}});
 }
-template<bool verbose, bool is_profiling, bool use_optimal_noc,
-         bool in0_left_to_right, bool in1_bottom_to_top>
-void bsr_spmm_multicore_snfin0_cdain1_no_write(
+template<bool verbose, bool is_profiling, bool use_optimal_noc>
+void bsr_spmm_multicore_snf_in0_dda_in1_no_write(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_snfin0_cdain1_impl<verbose, is_profiling, use_optimal_noc, in0_left_to_right, in1_bottom_to_top>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_DRAM_WRITE", "1"}});
+    bsr_spmm_multicore_snf_in0_dda_in1_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_DRAM_WRITE", "1"}});
 }
 
 // Explicit template instantiations
-template void bsr_spmm_multicore_snfin0_cdain1<false, false>(
+// Direction hardcoded to R2L + T2B
+
+// Base: non-verbose non-profiling, verbose non-profiling, non-verbose profiling
+template void bsr_spmm_multicore_snf_in0_dda_in1<false, false>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1<true, false>(
+template void bsr_spmm_multicore_snf_in0_dda_in1<true, false>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1<false, true>(
+template void bsr_spmm_multicore_snf_in0_dda_in1<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+
 // Ablation skip wrappers (profiling only)
-template void bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true>(
+template void bsr_spmm_multicore_snf_in0_dda_in1_no_a_read<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true>(
+template void bsr_spmm_multicore_snf_in0_dda_in1_no_b_read<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true>(
+template void bsr_spmm_multicore_snf_in0_dda_in1_no_compute<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1_no_write<false, true>(
+template void bsr_spmm_multicore_snf_in0_dda_in1_no_write<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-// flip_noc instantiations (profiling, non-optimal NoC) — default direction (L2R, B2T)
-template void bsr_spmm_multicore_snfin0_cdain1<false, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1_no_a_read<false, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1_no_b_read<false, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1_no_write<false, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-
-// ── Direction sweep instantiations (profiling, optimal NoC) ──
-//                                     verbose profiling opt_noc L2R   B2T
-// L2R + T2B
-template void bsr_spmm_multicore_snfin0_cdain1<false, true, true, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-// R2L + B2T
-template void bsr_spmm_multicore_snfin0_cdain1<false, true, true, false, true>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-// R2L + T2B
-template void bsr_spmm_multicore_snfin0_cdain1<false, true, true, false, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-
-// ── Direction sweep instantiations (profiling, flip NoC) ──
-// L2R + T2B
-template void bsr_spmm_multicore_snfin0_cdain1<false, true, false, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-// R2L + B2T
-template void bsr_spmm_multicore_snfin0_cdain1<false, true, false, false, true>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-// R2L + T2B
-template void bsr_spmm_multicore_snfin0_cdain1<false, true, false, false, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-
-// ── Direction sweep instantiations (verbose, non-profiling, optimal NoC) ──
-//                                     verbose profiling opt_noc L2R   B2T
-// L2R + T2B
-template void bsr_spmm_multicore_snfin0_cdain1<true, false, true, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-// R2L + B2T
-template void bsr_spmm_multicore_snfin0_cdain1<true, false, true, false, true>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-// R2L + T2B
-template void bsr_spmm_multicore_snfin0_cdain1<true, false, true, false, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-// verbose flip_noc direction sweep
-template void bsr_spmm_multicore_snfin0_cdain1<true, false, false, true, true>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1<true, false, false, true, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1<true, false, false, false, true>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_snfin0_cdain1<true, false, false, false, false>(
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-
-// ── Direction sweep ablation instantiations (profiling) ──
-// For each ablation type × 6 new direction combos (2 already exist with defaults)
-#define INSTANTIATE_DIRECTION_ABLATION(func) \
-template void func<false, true, true, true, false>( \
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
-template void func<false, true, true, false, true>( \
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
-template void func<false, true, true, false, false>( \
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
-template void func<false, true, false, true, false>( \
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
-template void func<false, true, false, false, true>( \
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
-template void func<false, true, false, false, false>( \
-    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
-    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
-    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-
-INSTANTIATE_DIRECTION_ABLATION(bsr_spmm_multicore_snfin0_cdain1_no_a_read)
-INSTANTIATE_DIRECTION_ABLATION(bsr_spmm_multicore_snfin0_cdain1_no_b_read)
-INSTANTIATE_DIRECTION_ABLATION(bsr_spmm_multicore_snfin0_cdain1_no_compute)
-INSTANTIATE_DIRECTION_ABLATION(bsr_spmm_multicore_snfin0_cdain1_no_write)
-
-#undef INSTANTIATE_DIRECTION_ABLATION
 
 }

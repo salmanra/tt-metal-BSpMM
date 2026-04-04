@@ -89,23 +89,10 @@ struct RegistryEntry {
 int main(int argc, char** argv) {
     int registry_number = argc > 1 ? std::stoi(argv[1]) : -1;
 
-    RegistryEntry entries[] = {
-        {ProfileCaseRegistry,                  "ProfileSuiteSparseVersioning",                 -1},
-        {ProfileDenseAblationRegistry,         "DenseAblationKProfileSuite",                   -1},
-        {ProfileLargeSparseRegistry,           "ProfileSuiteLargeSparseVersioning",             -1},
-        {ProfileLargeSparseLargeBlocksRegistry,"ProfileSuiteLargeSparseLargeBlocksVersioning",  -1},
-        {ProfileSweepNRegistry,                "ProfileSweepN",                                -1},
-        {ProfileSweepDensityRegistry,          "ProfileSweepDensity",                           -1},
-        {ProfileSweepKRegistry,                "ProfileSweepK",                                -1},
-        {ProfileSweepBlockSizeRegistry,        "ProfileSweepBlockSize",                         -1},
-        {ProfileSweepSparsityPatternRegistry,  "ProfileSweepSparsityPattern",                    -1},
-        {ProfileSweepSparsityPatternRegistryD10, "ProfileSweepSparsityPatternD10",               -1},
-        {ProfileSweepSparsityPatternRegistryD5,  "ProfileSweepSparsityPatternD5",                -1},
-        {ProfileSweepSparsityPatternRegistryD50, "ProfileSweepSparsityPatternD50",               -1},
-        {ProfileSweepUltraLowDensity32Registry,  "ProfileSweepUltraLowDensity32",                -1},
-        {ProfileSweepUltraLowDensity64Registry,  "ProfileSweepUltraLowDensity64",                -1},
-    };
-    constexpr int NUM_REGISTRIES = sizeof(entries) / sizeof(entries[0]);
+    RegistryEntry entries[NUM_REGISTRIES];
+    for (int i = 0; i < NUM_REGISTRIES; i++) {
+        entries[i] = {Registries[i], RegistryNames[i], -1};
+    }
 
     // Detect number of test cases per registry by scanning existing csv dirs
     for (int r = 0; r < NUM_REGISTRIES; r++) {

@@ -152,6 +152,8 @@ void kernel_main(){
 #if PROFILE_READ_IN1 == 1
                 DeviceZoneScopedN("SpMM Zone: Reading dense block of in1 from DRAM");
 #endif
+                DPRINT_DATA0(DPRINT << "in1 DRAM read " << bsr_col_index << ENDL());
+
                 spmm::read_block_by_tile(
                     in1_tensor_start_tile_id + bsr_col_index * in1_block_stride,
                     s1, l1_write_addr_in1,
@@ -174,6 +176,7 @@ void kernel_main(){
 #if PROFILE_WRITE_OUT == 1
                 DeviceZoneScopedN("SpMM Zone: Writing Block back to DRAM");
 #endif
+
                 for (uint32_t sbh = 0; sbh < out_num_subblocks_h; sbh++) {
                     uint32_t out_tensor_sbw_start_tile_id = out_tensor_sbh_start_tile_id;
                     for (uint32_t sbw = 0; sbw < out_num_subblocks_w; sbw++) {

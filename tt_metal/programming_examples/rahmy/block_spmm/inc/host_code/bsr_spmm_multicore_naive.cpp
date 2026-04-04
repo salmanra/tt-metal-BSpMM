@@ -4,7 +4,7 @@
 namespace bsr_host_code {
 
 template<bool verbose, bool is_profiling, bool use_optimal_noc = true>
-void bsr_spmm_multicore_load_balanced_new_DM_impl(
+void bsr_spmm_multicore_naive_impl(
     bsr_matrix<bfloat16>& a,
     dense_matrix<bfloat16>& b,
     dense_matrix<bfloat16>& output,
@@ -303,7 +303,7 @@ void bsr_spmm_multicore_load_balanced_new_DM_impl(
     auto noc_riscv_1 = transpose_NoCs ? NOC::RISCV_0_default : NOC::RISCV_1_default;
     auto reader_in0_id = tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/rahmy/SC26_submission/block_spmm/kernels/dataflow/reader_in0_naive.cpp",
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_in0_naive.cpp",
         all_cores,
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_0,
@@ -313,7 +313,7 @@ void bsr_spmm_multicore_load_balanced_new_DM_impl(
 
     auto reader_in1_id = tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/rahmy/SC26_submission/block_spmm/kernels/dataflow/reader_in1_naive.cpp",
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/dataflow/reader_in1_naive.cpp",
         all_cores,
         tt_metal::DataMovementConfig{
             .processor = DataMovementProcessor::RISCV_1,
@@ -324,7 +324,7 @@ void bsr_spmm_multicore_load_balanced_new_DM_impl(
     // Create compute kernel
     auto mm_kernel_id = tt_metal::CreateKernel(
         program,
-        "tt_metal/programming_examples/rahmy/SC26_submission/block_spmm/kernels/compute/bmm_iter.cpp",
+        "tt_metal/programming_examples/rahmy/block_spmm/kernels/compute/bmm_iter.cpp",
         all_cores,
         tt_metal::ComputeConfig{.math_fidelity = math_fidelity,
                                 .compile_args = compute_kernel_compile_time_args,
@@ -507,70 +507,91 @@ void bsr_spmm_multicore_load_balanced_new_DM_impl(
 
 // Public thin wrapper (matches original API and HostCodeFunctionPtr)
 template<bool verbose, bool is_profiling, bool use_optimal_noc>
-void bsr_spmm_multicore_load_balanced_new_DM(
+void bsr_spmm_multicore_naive(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_load_balanced_new_DM_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {});
+    bsr_spmm_multicore_naive_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {});
 }
 
 // Ablation skip wrappers
 template<bool verbose, bool is_profiling, bool use_optimal_noc>
-void bsr_spmm_multicore_load_balanced_new_DM_no_a_read(
+void bsr_spmm_multicore_naive_no_a_read(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_load_balanced_new_DM_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_IN0_DRAM_READ", "1"}});
+    bsr_spmm_multicore_naive_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_IN0_DRAM_READ", "1"}});
 }
 template<bool verbose, bool is_profiling, bool use_optimal_noc>
-void bsr_spmm_multicore_load_balanced_new_DM_no_b_read(
+void bsr_spmm_multicore_naive_no_b_read(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_load_balanced_new_DM_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_IN1_DRAM_READ", "1"}});
+    bsr_spmm_multicore_naive_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_IN1_DRAM_READ", "1"}});
 }
 template<bool verbose, bool is_profiling, bool use_optimal_noc>
-void bsr_spmm_multicore_load_balanced_new_DM_no_compute(
+void bsr_spmm_multicore_naive_no_compute(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_load_balanced_new_DM_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_COMPUTE", "1"}});
+    bsr_spmm_multicore_naive_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_COMPUTE", "1"}});
 }
 template<bool verbose, bool is_profiling, bool use_optimal_noc>
-void bsr_spmm_multicore_load_balanced_new_DM_no_write(
+void bsr_spmm_multicore_naive_no_write(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
-    bsr_spmm_multicore_load_balanced_new_DM_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_DRAM_WRITE", "1"}});
+    bsr_spmm_multicore_naive_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_DRAM_WRITE", "1"}});
 }
 
 // Explicit template instantiations
-template void bsr_spmm_multicore_load_balanced_new_DM<false, false>(
+template void bsr_spmm_multicore_naive<false, false>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_load_balanced_new_DM<true, false>(
+template void bsr_spmm_multicore_naive<true, false>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_load_balanced_new_DM<false, true>(
+template void bsr_spmm_multicore_naive<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
 // Ablation skip wrappers (profiling only)
-template void bsr_spmm_multicore_load_balanced_new_DM_no_a_read<false, true>(
+template void bsr_spmm_multicore_naive_no_a_read<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_load_balanced_new_DM_no_b_read<false, true>(
+template void bsr_spmm_multicore_naive_no_b_read<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_load_balanced_new_DM_no_compute<false, true>(
+template void bsr_spmm_multicore_naive_no_compute<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
-template void bsr_spmm_multicore_load_balanced_new_DM_no_write<false, true>(
+template void bsr_spmm_multicore_naive_no_write<false, true>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+// flip_noc instantiations (profiling, non-optimal NoC)
+template void bsr_spmm_multicore_naive<false, true, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_naive_no_a_read<false, true, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_naive_no_b_read<false, true, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_naive_no_compute<false, true, false>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_naive_no_write<false, true, false>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);

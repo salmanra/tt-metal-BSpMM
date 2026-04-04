@@ -40,7 +40,7 @@ void kernel_main(){
     ///////////////////////////////////////////////////////////////////////
     /// COMPILETIME ARGS //////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
-    constexpr bool in0_is_dram = get_compile_time_arg_val(0) == 1;
+constexpr bool in0_is_dram = get_compile_time_arg_val(0) == 1;
     constexpr bool in1_is_dram = get_compile_time_arg_val(1) == 1;
     constexpr bool col_indices_is_dram = get_compile_time_arg_val(2) == 1;
     constexpr bool indptr_is_dram = get_compile_time_arg_val(3) == 1;

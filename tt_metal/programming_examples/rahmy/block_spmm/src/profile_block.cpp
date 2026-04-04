@@ -62,85 +62,16 @@ int main(int argc, char** argv) {
 
     int registry_number = argc > 3 ? std::stoi(argv[3]) : 2;
 
-    // argv[4]: host code registry selector
-    //   0 (default): HostCodeRegistryProfiling
-    //   1:           HostCodeRegistryDirectionSweepProfiling
-    int hc_registry_number = argc > 4 ? std::stoi(argv[4]) : 0;
-    HostCodeRegistryType* hc_registry;
-    int num_host_programs;
-    switch (hc_registry_number) {
-        case 1:
-            hc_registry = HostCodeRegistryDirectionSweepProfiling;
-            num_host_programs = sizeof(HostCodeRegistryDirectionSweepProfiling) / sizeof(HostCodeRegistryDirectionSweepProfiling[0]);
-            break;
-        default:
-            hc_registry = HostCodeRegistryProfiling;
-            num_host_programs = sizeof(HostCodeRegistryProfiling) / sizeof(HostCodeRegistryProfiling[0]);
-            break;
-    }
+    HostCodeRegistryType* hc_registry = HostCodeRegistryProfiling;
+    int num_host_programs = sizeof(HostCodeRegistryProfiling) / sizeof(HostCodeRegistryProfiling[0]);
 
-    ProfileCaseFunctionPtr *Registry = nullptr;
-    std::string registry_name = "";
-    switch (registry_number) {
-        case 0:
-            Registry = ProfileCaseRegistry;
-            registry_name = "ProfileSuiteSparseVersioning";
-            break;
-        case 1:
-            Registry = ProfileDenseAblationRegistry;
-            registry_name = "DenseAblationKProfileSuite";
-            break;
-        case 2:
-            Registry = ProfileLargeSparseRegistry;
-            registry_name = "ProfileSuiteLargeSparseVersioning";
-            break;
-        case 3:
-            Registry = ProfileLargeSparseLargeBlocksRegistry;
-            registry_name = "ProfileSuiteLargeSparseLargeBlocksVersioning";
-            break;
-        case 4:
-            Registry = ProfileSweepNRegistry;
-            registry_name = "ProfileSweepN";
-            break;
-        case 5:
-            Registry = ProfileSweepDensityRegistry;
-            registry_name = "ProfileSweepDensity";
-            break;
-        case 6:
-            Registry = ProfileSweepKRegistry;
-            registry_name = "ProfileSweepK";
-            break;
-        case 7:
-            Registry = ProfileSweepBlockSizeRegistry;
-            registry_name = "ProfileSweepBlockSize";
-            break;
-        case 8:
-            Registry = ProfileSweepSparsityPatternRegistry;
-            registry_name = "ProfileSweepSparsityPattern";
-            break;
-        case 9:
-            Registry = ProfileSweepSparsityPatternRegistryD10;
-            registry_name = "ProfileSweepSparsityPatternD10";
-            break;
-        case 10:
-            Registry = ProfileSweepSparsityPatternRegistryD5;
-            registry_name = "ProfileSweepSparsityPatternD5";
-            break;
-        case 11:
-            Registry = ProfileSweepSparsityPatternRegistryD50;
-            registry_name = "ProfileSweepSparsityPatternD50";
-            break;
-        case 12:
-            Registry = ProfileSweepUltraLowDensity32Registry;
-            registry_name = "ProfileSweepUltraLowDensity32";
-            break;
-        case 13:
-            Registry = ProfileSweepUltraLowDensity64Registry;
-            registry_name = "ProfileSweepUltraLowDensity64";
-            break;
+    if (registry_number < 0 || registry_number >= NUM_REGISTRIES) {
+        printf("Invalid registry number: %d (valid: 0-%d)\n", registry_number, NUM_REGISTRIES - 1);
+        return 0;
     }
-
-    int num_profiles = sizeof(Registry) / sizeof(Registry[0]);
+    ProfileCaseFunctionPtr *Registry = Registries[registry_number];
+    std::string registry_name = RegistryNames[registry_number];
+    int num_profiles = RegistrySizes[registry_number];
     if (run_all_profiles && !run_all_host_codes){
         for (int i = 0; i < num_profiles; i++){
             capture_profile(host_code_num, i, Registry, registry_name, hc_registry, 10);

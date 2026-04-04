@@ -365,51 +365,19 @@ int main(int argc, char** argv) {
         host_code_index = std::stoi(argv[2]);
     }
 
-    // Registry selection (mirrors profile_block.cpp)
+    // Registry selection: -1 (default) uses TestRegistry, 0+ uses sc26 profiling registries
     int registry_number = argc > 3 ? std::stoi(argv[3]) : -1;
     TestFunctionPtr *registry = nullptr;
     size_t num_tests = 0;
-    switch (registry_number) {
-        case 0:
-            registry = ProfileCaseRegistry;
-            num_tests = sizeof(ProfileCaseRegistry) / sizeof(ProfileCaseRegistry[0]);
-            break;
-        case 1:
-            registry = ProfileDenseAblationRegistry;
-            num_tests = sizeof(ProfileDenseAblationRegistry) / sizeof(ProfileDenseAblationRegistry[0]);
-            break;
-        case 2:
-            registry = ProfileLargeSparseRegistry;
-            num_tests = sizeof(ProfileLargeSparseRegistry) / sizeof(ProfileLargeSparseRegistry[0]);
-            break;
-        case 3:
-            registry = ProfileLargeSparseLargeBlocksRegistry;
-            num_tests = sizeof(ProfileLargeSparseLargeBlocksRegistry) / sizeof(ProfileLargeSparseLargeBlocksRegistry[0]);
-            break;
-        default:
-            registry = TestRegistry;
-            num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
-            break;
+    if (registry_number >= 0 && registry_number < NUM_REGISTRIES) {
+        registry = Registries[registry_number];
+        num_tests = RegistrySizes[registry_number];
+    } else {
+        registry = TestRegistry;
+        num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
     }
 
-    // Host-code registry selection via argv[4]
-    //   -1 (default): HostCodeRegistryVerbose
-    //    0:            HostCodeRegistryDirectionSweepVerbose
-    int host_registry_number = argc > 4 ? std::stoi(argv[4]) : -1;
-    HostCodeFunctionPtr host_func;
-    std::string host_func_name;
-    switch (host_registry_number) {
-        case 0: {
-            auto [f, n] = HostCodeRegistryDirectionSweepVerbose[host_code_index];
-            host_func = f; host_func_name = n;
-            break;
-        }
-        default: {
-            auto [f, n] = HostCodeRegistryVerbose[host_code_index];
-            host_func = f; host_func_name = n;
-            break;
-        }
-    }
+    auto [host_func, host_func_name] = HostCodeRegistryVerbose[host_code_index];
 
     if (test_all) {
         //

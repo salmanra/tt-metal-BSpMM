@@ -4,7 +4,6 @@
 #include "../inc/include_me.hpp"
 #include "../inc/profiling_suite.hpp"
 #include "../inc/host_code.hpp"
-#include "../inc/host_code/spmm_zone_config.hpp"
 
 #include <system_error>
 #include <tracy/Tracy.hpp>
@@ -96,19 +95,11 @@ void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Re
     std::string host_function_name = hc_registry[host_code_num].second;
     auto [a, b, test_name] = Registry[test_num]();
 
-    auto zone_defines = spmm_zone_config::get_zone_defines();
-
-    std::string disabled_zones = zone_defines.empty() ? "" : "_Disable_";
-    for (auto it = zone_defines.begin(); it != zone_defines.end(); it++){
-        std::string zone_name = it->first;
-        disabled_zones += "_" + zone_name;
-    }
-
     // set up command strings to direct and capture the trace (and its csv file)
     char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_device_runtime/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_april4/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
-    std::string trace_file_location = trace_directory + test_name + disabled_zones + ".tracy";
+    std::string trace_file_location = trace_directory + test_name + ".tracy";
 
     n = sprintf(buf, "mkdir -p %s", trace_directory.c_str());
     std::string mkdir_command(buf, n);

@@ -9,7 +9,7 @@ CK is neutral to order, but it's probably worth naming loop vars
 
 // Compile-time profiling zone toggle (override to 0 via CreateKernel defines)
 #ifndef PROFILE_COMPUTE
-#define PROFILE_COMPUTE 1
+#define PROFILE_COMPUTE 0
 #endif
 
 // Ablation skip flag (set to 1 via CreateKernel defines to skip compute)

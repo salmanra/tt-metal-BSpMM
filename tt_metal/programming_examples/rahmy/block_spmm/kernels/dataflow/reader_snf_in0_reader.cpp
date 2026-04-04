@@ -11,13 +11,13 @@
 
 // Compile-time profiling zone toggles (override to 0 via CreateKernel defines)
 #ifndef PROFILE_READ_IN0
-#define PROFILE_READ_IN0 1
+#define PROFILE_READ_IN0 0
 #endif
 #ifndef PROFILE_WAIT_IN0
-#define PROFILE_WAIT_IN0 1
+#define PROFILE_WAIT_IN0 0
 #endif
 #ifndef PROFILE_WRITE_OUT
-#define PROFILE_WRITE_OUT 1
+#define PROFILE_WRITE_OUT 0
 #endif
 
 // Ablation skip flags (set to 1 via CreateKernel defines to skip that phase)

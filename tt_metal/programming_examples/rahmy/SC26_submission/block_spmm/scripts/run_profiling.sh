@@ -27,6 +27,8 @@ REGISTRY_NAMES=(
     "SweepK"              # 7
     "SweepBlockSize"      # 8
     "SweepDensity"        # 9
+    "UltraLowDensity32"   # 10
+    "UltraLowDensity64"   # 11
 )
 
 REGISTRY_SIZES=(
@@ -40,6 +42,8 @@ REGISTRY_SIZES=(
     5   # 7: SweepK
     4   # 8: SweepBlockSize
     5   # 9: SweepDensity
+    6   # 10: UltraLowDensity32
+    6   # 11: UltraLowDensity64
 )
 
 # ── Host-code names (indices 0-14) ──────────────────────────────────────────
@@ -88,7 +92,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --phase microbench|throughput|scaling|all   Experiment phase (default: all)"
+            echo "  --phase microbench|throughput|scaling|ultralowdensity|all   Experiment phase (default: all)"
             echo "  --no-build        Skip the cmake build step"
             echo "  --dry-run         Print commands without executing"
             echo "  --list            List registries, sizes, and host codes, then exit"
@@ -104,8 +108,8 @@ done
 
 # Validate phase
 case "$PHASE" in
-    microbench|throughput|scaling|all) ;;
-    *) echo "Error: invalid phase '$PHASE'. Must be microbench|throughput|scaling|all" >&2; exit 1 ;;
+    microbench|throughput|scaling|ultralowdensity|all) ;;
+    *) echo "Error: invalid phase '$PHASE'. Must be microbench|throughput|scaling|ultralowdensity|all" >&2; exit 1 ;;
 esac
 
 # ── List mode ────────────────────────────────────────────────────────────────
@@ -121,10 +125,11 @@ if [[ $LIST_ONLY -eq 1 ]]; then
     done
     echo ""
     echo "=== Phase Breakdown ==="
-    echo "  microbench : registries 0-1,  host codes 0-14  => 2 * 4 * 15 = 120 runs"
-    echo "  throughput : registries 2-5,  host codes 0-2   => 4 * 4 * 3  =  48 runs"
-    echo "  scaling    : registries 6-9,  host code  2     => (5+5+4+5)  =  19 runs"
-    echo "  all        :                                      total      = 187 runs"
+    echo "  microbench       : registries 0-1,   host codes 0-14  => 2 * 4 * 15 = 120 runs"
+    echo "  throughput       : registries 2-5,   host codes 0-2   => 4 * 4 * 3  =  48 runs"
+    echo "  scaling          : registries 6-9,   host code  2     => (5+5+4+5)  =  19 runs"
+    echo "  ultralowdensity  : registries 10-11, host codes 0-2   => 2 * 6 * 3  =  36 runs"
+    echo "  all              :                                       total      = 223 runs"
     exit 0
 fi
 
@@ -230,19 +235,37 @@ run_scaling() {
     done
 }
 
+run_ultralowdensity() {
+    echo ""
+    echo "================================================================"
+    echo "  Phase: ultralowdensity (Ultra-Low Density Throughput)"
+    echo "  Registries 10-11, Host codes 0-2"
+    echo "================================================================"
+    for registry_num in 10 11; do
+        local num_cases=${REGISTRY_SIZES[$registry_num]}
+        for (( test_num=0; test_num<num_cases; test_num++ )); do
+            for host_code_num in 0 1 2; do
+                run_one "$test_num" "$host_code_num" "$registry_num"
+            done
+        done
+    done
+}
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 echo "SC26 Block SpMM Profiling"
 echo "Phase: $PHASE"
 echo ""
 
 case "$PHASE" in
-    microbench) run_microbench ;;
-    throughput) run_throughput ;;
-    scaling)    run_scaling ;;
+    microbench)       run_microbench ;;
+    throughput)       run_throughput ;;
+    scaling)          run_scaling ;;
+    ultralowdensity)  run_ultralowdensity ;;
     all)
         run_microbench
         run_throughput
         run_scaling
+        run_ultralowdensity
         ;;
 esac
 

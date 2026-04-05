@@ -109,6 +109,53 @@ DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_snf_in0_naive_in1)
 DECLARE_ABLATION_WRAPPERS(bsr_spmm_multicore_snf_in0_dda_in1)
 #undef DECLARE_ABLATION_WRAPPERS
 
+// ── Parameterized DDA (direction sweep) ──
+
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true,
+         bool in0_left_to_right = true, bool in1_bottom_to_top = true>
+void bsr_spmm_multicore_snf_in0_dda_in1_parameterized(
+    bsr_matrix<bfloat16>& a,
+    dense_matrix<bfloat16>& b,
+    dense_matrix<bfloat16>& output,
+    bool bcast_batch,
+    uint32_t nnz_blocks,
+    uint32_t M,
+    uint32_t N,
+    uint32_t K,
+    uint32_t R,
+    uint32_t C,
+    uint32_t B,
+    IDevice* device);
+
+#define DECLARE_ABLATION_WRAPPERS_5(func_name) \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true, \
+         bool in0_left_to_right = true, bool in1_bottom_to_top = true> \
+void func_name##_no_a_read( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true, \
+         bool in0_left_to_right = true, bool in1_bottom_to_top = true> \
+void func_name##_no_b_read( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true, \
+         bool in0_left_to_right = true, bool in1_bottom_to_top = true> \
+void func_name##_no_compute( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device); \
+template<bool verbose = false, bool is_profiling = false, bool use_optimal_noc = true, \
+         bool in0_left_to_right = true, bool in1_bottom_to_top = true> \
+void func_name##_no_write( \
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output, \
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K, \
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+
+DECLARE_ABLATION_WRAPPERS_5(bsr_spmm_multicore_snf_in0_dda_in1_parameterized)
+#undef DECLARE_ABLATION_WRAPPERS_5
+
 // ── Function pointer type ──
 
 using HostCodeFunctionPtr = void (*)(
@@ -141,23 +188,48 @@ static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryProfiling[] =
     // [0-2] Full algorithms
     {bsr_spmm_multicore_naive<false, true>, "bsr_spmm_multicore_naive"},
     {bsr_spmm_multicore_snf_in0_naive_in1<false, true>, "bsr_spmm_multicore_snf_in0_naive_in1"},
-    {bsr_spmm_multicore_snf_in0_dda_in1<false, true>, "bsr_spmm_multicore_snf_in0_dda_in1"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<false, true, true, false, false>, "bsr_spmm_multicore_snf_in0_dda_in1"},
     // [3-5] no_a_read ablations (SKIP_IN0_DRAM_READ=1)
     {bsr_spmm_multicore_naive_no_a_read<false, true>, "bsr_spmm_multicore_naive_no_a_read"},
     {bsr_spmm_multicore_snf_in0_naive_in1_no_a_read<false, true>, "bsr_spmm_multicore_snf_in0_naive_in1_no_a_read"},
-    {bsr_spmm_multicore_snf_in0_dda_in1_no_a_read<false, true>, "bsr_spmm_multicore_snf_in0_dda_in1_no_a_read"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized_no_a_read<false, true, true, false, false>, "bsr_spmm_multicore_snf_in0_dda_in1_no_a_read"},
     // [6-8] no_b_read ablations (SKIP_IN1_DRAM_READ=1)
     {bsr_spmm_multicore_naive_no_b_read<false, true>, "bsr_spmm_multicore_naive_no_b_read"},
     {bsr_spmm_multicore_snf_in0_naive_in1_no_b_read<false, true>, "bsr_spmm_multicore_snf_in0_naive_in1_no_b_read"},
-    {bsr_spmm_multicore_snf_in0_dda_in1_no_b_read<false, true>, "bsr_spmm_multicore_snf_in0_dda_in1_no_b_read"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized_no_b_read<false, true, true, false, false>, "bsr_spmm_multicore_snf_in0_dda_in1_no_b_read"},
     // [9-11] no_compute ablations (SKIP_COMPUTE=1)
     {bsr_spmm_multicore_naive_no_compute<false, true>, "bsr_spmm_multicore_naive_no_compute"},
     {bsr_spmm_multicore_snf_in0_naive_in1_no_compute<false, true>, "bsr_spmm_multicore_snf_in0_naive_in1_no_compute"},
-    {bsr_spmm_multicore_snf_in0_dda_in1_no_compute<false, true>, "bsr_spmm_multicore_snf_in0_dda_in1_no_compute"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized_no_compute<false, true, true, false, false>, "bsr_spmm_multicore_snf_in0_dda_in1_no_compute"},
     // [12-14] no_write ablations (SKIP_DRAM_WRITE=1)
     {bsr_spmm_multicore_naive_no_write<false, true>, "bsr_spmm_multicore_naive_no_write"},
     {bsr_spmm_multicore_snf_in0_naive_in1_no_write<false, true>, "bsr_spmm_multicore_snf_in0_naive_in1_no_write"},
-    {bsr_spmm_multicore_snf_in0_dda_in1_no_write<false, true>, "bsr_spmm_multicore_snf_in0_dda_in1_no_write"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized_no_write<false, true, true, false, false>, "bsr_spmm_multicore_snf_in0_dda_in1_no_write"},
+};
+
+// Direction sweep registry: all 4 in0×in1 direction combos × 2 NoC configs
+//                                                                                   verbose prof opt_noc L2R   B2T
+static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryDirectionSweepProfiling[] = {
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<false, true, true, true, true>,    "snf_in0_dda_in1_L2R_B2T"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<false, true, true, true, false>,   "snf_in0_dda_in1_L2R_T2B"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<false, true, true, false, true>,   "snf_in0_dda_in1_R2L_B2T"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<false, true, true, false, false>,  "snf_in0_dda_in1_R2L_T2B"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<false, true, false, true, true>,   "snf_in0_dda_in1_L2R_B2T_flip_noc"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<false, true, false, true, false>,  "snf_in0_dda_in1_L2R_T2B_flip_noc"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<false, true, false, false, true>,  "snf_in0_dda_in1_R2L_B2T_flip_noc"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<false, true, false, false, false>, "snf_in0_dda_in1_R2L_T2B_flip_noc"},
+};
+
+// Direction sweep registry (verbose, non-profiling)
+static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryDirectionSweepVerbose[] = {
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<true, false, true, true, true>,    "snf_in0_dda_in1_L2R_B2T"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<true, false, true, true, false>,   "snf_in0_dda_in1_L2R_T2B"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<true, false, true, false, true>,   "snf_in0_dda_in1_R2L_B2T"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<true, false, true, false, false>,  "snf_in0_dda_in1_R2L_T2B"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<true, false, false, true, true>,   "snf_in0_dda_in1_L2R_B2T_flip_noc"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<true, false, false, true, false>,  "snf_in0_dda_in1_L2R_T2B_flip_noc"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<true, false, false, false, true>,  "snf_in0_dda_in1_R2L_B2T_flip_noc"},
+    {bsr_spmm_multicore_snf_in0_dda_in1_parameterized<true, false, false, false, false>, "snf_in0_dda_in1_R2L_T2B_flip_noc"},
 };
 
 // Sorting permutation utility (used by load-balanced algorithms)

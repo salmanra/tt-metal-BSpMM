@@ -22,7 +22,7 @@ using namespace profiling_suite;
 
 using HostCodeRegistryType = std::pair<HostCodeFunctionPtr, std::string>;
 
-void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Registry, std::string registry_name, HostCodeRegistryType* hc_registry) {
+void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Registry, std::string registry_name, HostCodeRegistryType* hc_registry, const std::string& output_dir) {
     HostCodeFunctionPtr host_function = hc_registry[host_code_num].first;
     std::string host_function_name = hc_registry[host_code_num].second;
     auto [a, b, test_name] = Registry[test_num]();
@@ -38,11 +38,11 @@ void export_to_csv(int host_code_num, int test_num, ProfileCaseFunctionPtr *Regi
     std::string test_file_name = test_name + disabled_zones;
 
     char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_sc26_april5/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    size_t n = sprintf(buf, "/home/user/tt-metal/%s/bsr/%s/%s/", output_dir.c_str(), registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
     std::string trace_file_location = trace_directory + test_file_name + ".tracy";
 
-    n = sprintf(buf, "/home/user/tt-metal/profiles_sc26_april5/csvs/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    n = sprintf(buf, "/home/user/tt-metal/%s/csvs/%s/%s/", output_dir.c_str(), registry_name.c_str(), host_function_name.c_str());
     std::string csv_directory(buf);
     std::string csv_file_location = csv_directory + test_file_name + ".csv";
 
@@ -111,6 +111,7 @@ int main(int argc, char** argv) {
         host_code_num = argc > 2 ? std::stoi(argv[2]) : 0;
 
     int registry_number = argc > 3 ? std::stoi(argv[3]) : 0;
+    std::string output_dir = argc > 4 ? argv[4] : "profiles_sc26_april5";
 
     HostCodeRegistryType* hc_registry = HostCodeRegistryProfiling;
     int num_host_programs = sizeof(HostCodeRegistryProfiling) / sizeof(HostCodeRegistryProfiling[0]);
@@ -126,16 +127,16 @@ int main(int argc, char** argv) {
 
     if (export_all_profiles && !export_all_host_codes) {
         for (int i = 0; i < num_profiles; i++) {
-            export_to_csv(host_code_num, i, Registry, registry_name, hc_registry);
+            export_to_csv(host_code_num, i, Registry, registry_name, hc_registry, output_dir);
         }
     } else if (export_all_profiles && export_all_host_codes) {
         for (int i = 0; i < num_profiles; i++) {
             for (int j = 0; j < num_host_programs; j++) {
-                export_to_csv(j, i, Registry, registry_name, hc_registry);
+                export_to_csv(j, i, Registry, registry_name, hc_registry, output_dir);
             }
         }
     } else {
-        export_to_csv(host_code_num, test_num, Registry, registry_name, hc_registry);
+        export_to_csv(host_code_num, test_num, Registry, registry_name, hc_registry, output_dir);
     }
 
     return 0;

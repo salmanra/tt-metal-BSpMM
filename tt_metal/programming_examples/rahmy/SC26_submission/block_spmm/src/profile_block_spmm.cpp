@@ -42,6 +42,7 @@ void capture_profile(
     ProfileCaseFunctionPtr *Registry,
     std::string registry_name,
     HostCodeRegistryType* hc_registry,
+    const std::string& output_dir,
     int num_iters = 10);
 
 int main(int argc, char** argv) {
@@ -55,6 +56,7 @@ int main(int argc, char** argv) {
         host_code_num = argc > 2 ? std::stoi(argv[2]) : 0;
 
     int registry_number = argc > 3 ? std::stoi(argv[3]) : 0;
+    std::string output_dir = argc > 4 ? argv[4] : "profiles_sc26_april5";
 
     HostCodeRegistryType* hc_registry = HostCodeRegistryProfiling;
     int num_host_programs = sizeof(HostCodeRegistryProfiling) / sizeof(HostCodeRegistryProfiling[0]);
@@ -70,20 +72,20 @@ int main(int argc, char** argv) {
 
     if (run_all_profiles && !run_all_host_codes) {
         for (int i = 0; i < num_profiles; i++) {
-            capture_profile(host_code_num, i, Registry, registry_name, hc_registry, 10);
+            capture_profile(host_code_num, i, Registry, registry_name, hc_registry, output_dir, 10);
         }
     } else if (run_all_profiles && run_all_host_codes) {
         for (int i = 0; i < num_profiles; i++) {
             for (int j = 0; j < num_host_programs; j++) {
-                capture_profile(j, i, Registry, registry_name, hc_registry, 10);
+                capture_profile(j, i, Registry, registry_name, hc_registry, output_dir, 10);
             }
         }
     } else {
-        capture_profile(host_code_num, test_num, Registry, registry_name, hc_registry, 10);
+        capture_profile(host_code_num, test_num, Registry, registry_name, hc_registry, output_dir, 10);
     }
 }
 
-void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Registry, std::string registry_name, HostCodeRegistryType* hc_registry, int num_iters) {
+void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Registry, std::string registry_name, HostCodeRegistryType* hc_registry, const std::string& output_dir, int num_iters) {
     HostCodeFunctionPtr host_function = hc_registry[host_code_num].first;
     std::string host_function_name = hc_registry[host_code_num].second;
     auto [a, b, test_name] = Registry[test_num]();
@@ -97,7 +99,7 @@ void capture_profile(int host_code_num, int test_num, ProfileCaseFunctionPtr *Re
     }
 
     char buf[1000];
-    size_t n = sprintf(buf, "/home/user/tt-metal/profiles_sc26_april5/bsr/%s/%s/", registry_name.c_str(), host_function_name.c_str());
+    size_t n = sprintf(buf, "/home/user/tt-metal/%s/bsr/%s/%s/", output_dir.c_str(), registry_name.c_str(), host_function_name.c_str());
     std::string trace_directory(buf, n);
     std::string trace_file_location = trace_directory + test_name + disabled_zones + ".tracy";
 

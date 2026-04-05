@@ -67,6 +67,7 @@ HOST_CODE_NAMES=(
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
 PHASE="all"
+OUTPUT_DIR="profiles_sc26_april5"
 NO_BUILD=0
 DRY_RUN=0
 LIST_ONLY=0
@@ -78,6 +79,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --phase)
             PHASE="$2"; shift 2 ;;
+        --output-dir)
+            OUTPUT_DIR="$2"; shift 2 ;;
         --no-build)
             NO_BUILD=1; shift ;;
         --dry-run)
@@ -93,6 +96,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --phase microbench|throughput|scaling|ultralowdensity|all   Experiment phase (default: all)"
+            echo "  --output-dir DIR  Output folder name under repo root (default: profiles_sc26_april5)"
             echo "  --no-build        Skip the cmake build step"
             echo "  --dry-run         Print commands without executing"
             echo "  --list            List registries, sizes, and host codes, then exit"
@@ -168,22 +172,22 @@ run_one() {
 
     if [[ $EXPORT_ONLY -eq 0 ]]; then
         echo "[profile] ($TOTAL_RUNS) $label"
-        local cmd="TT_METAL_DEVICE_PROFILER=1 $PROFILE_BIN $test_num $host_code_num $registry_num"
+        local cmd="TT_METAL_DEVICE_PROFILER=1 $PROFILE_BIN $test_num $host_code_num $registry_num $OUTPUT_DIR"
         if [[ $DRY_RUN -eq 1 ]]; then
             echo "  DRY-RUN: $cmd"
         else
             just_build # some weirdness with profiling zones not cleaning up means we have to reset the board and build every time
-            TT_METAL_DEVICE_PROFILER=1 "$PROFILE_BIN" "$test_num" "$host_code_num" "$registry_num"
+            TT_METAL_DEVICE_PROFILER=1 "$PROFILE_BIN" "$test_num" "$host_code_num" "$registry_num" "$OUTPUT_DIR"
         fi
     fi
 
     if [[ $PROFILE_ONLY -eq 0 ]]; then
         echo "[export]  ($TOTAL_RUNS) $label"
-        local cmd="$EXPORT_BIN $test_num $host_code_num $registry_num"
+        local cmd="$EXPORT_BIN $test_num $host_code_num $registry_num $OUTPUT_DIR"
         if [[ $DRY_RUN -eq 1 ]]; then
             echo "  DRY-RUN: $cmd"
         else
-            "$EXPORT_BIN" "$test_num" "$host_code_num" "$registry_num"
+            "$EXPORT_BIN" "$test_num" "$host_code_num" "$registry_num" "$OUTPUT_DIR"
         fi
     fi
 }

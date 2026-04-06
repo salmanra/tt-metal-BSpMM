@@ -12,9 +12,9 @@ GPU_DIR = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/gpu-normalize
 OUT_DIR = os.path.join(os.path.dirname(__file__), "figures")
 DDA_HC = "bsr_spmm_multicore_snfin0_cdain1"
 
-PATTERNS = ["row", "col", "multi_diag", "random"]
-PATTERN_LABELS = ["Row", "Col", "Multi-diag", "Random"]
-PATTERN_COLORS = ["#d62728", "#2ca02c", "#9467bd", "#1f77b4"]
+PATTERNS = ["row", "random", "multi_diag", "col"]
+PATTERN_LABELS = ["Row", "Random", "Multi-diag", "Col"]
+PATTERN_COLORS = ["#d62728", "#1f77b4", "#9467bd", "#2ca02c"]
 
 # Block size → (GPU csv filename, list of (density_label, registry_name))
 AXES = [

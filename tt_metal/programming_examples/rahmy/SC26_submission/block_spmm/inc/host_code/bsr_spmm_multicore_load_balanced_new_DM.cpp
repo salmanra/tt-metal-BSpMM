@@ -337,9 +337,10 @@ void bsr_spmm_multicore_load_balanced_new_DM_impl(
     std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
 
     if (skip_load_balance) {
-        // No load balancing: assign rows sequentially round-robin
+        // No load balancing: assign contiguous rows to each core row
+        uint32_t rows_per_core = (nnz_rows + num_cores_r - 1) / num_cores_r;
         for (uint32_t row_idx = 0; row_idx < nnz_rows; row_idx++) {
-            output_y_indices[row_idx % num_cores_r].push_back(row_idx);
+            output_y_indices[row_idx / rows_per_core].push_back(row_idx);
         }
     } else {
         // Load-balancing: sort nnz rows by work (descending) and distribute to core rows

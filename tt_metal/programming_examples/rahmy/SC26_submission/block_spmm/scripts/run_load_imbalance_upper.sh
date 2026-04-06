@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ###############################################################################
-# Load-Imbalance Experiment
+# Load-Imbalance Experiment (Upper Triangular)
 #
-# Runs lower-triangular test cases (registry 29) on:
+# Runs upper-triangular test cases (registry 30) on:
 #   hc 0  Naive (with LB)     hc 16 Naive (no LB)
 #   hc 1  SnF (with LB)       hc 17 SnF (no LB)
 #   hc 2  CDA (with LB)       hc 15 CDA (no LB)
@@ -20,7 +20,7 @@ BUILD_DIR="${REPO_ROOT}/build_Release_tracy/programming_examples/rahmy"
 PROFILE_BIN="${BUILD_DIR}/profile_block_spmm"
 EXPORT_BIN="${BUILD_DIR}/export_block_spmm_to_csv"
 
-REGISTRY=29  # Triangular
+REGISTRY=30  # UpperTriangular
 TESTS=(0 1)  # 0=8192/256, 1=4096/256
 
 # (host_code_num, label)
@@ -34,7 +34,7 @@ RUNS=(
 )
 
 # ── Defaults ─────────────────────────────────────────────────────────────────
-OUTPUT_DIR="profiles_load_imbalance_V2"
+OUTPUT_DIR="profiles_load_imbalance_upper_V2"
 DRY_RUN=0
 EXPORT_ONLY=0
 PROFILE_ONLY=0
@@ -50,7 +50,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  --output-dir DIR  Output folder name under repo root (default: profiles_load_imbalance)"
+            echo "  --output-dir DIR  Output folder name under repo root (default: profiles_load_imbalance_upper_V2)"
             echo "  --dry-run         Print commands without executing"
             echo "  --export-only     Only run the CSV export step (skip profiling)"
             echo "  --profile-only    Only run the profiling step (skip CSV export)"
@@ -73,7 +73,7 @@ just_build() {
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────────
-echo "Load-Imbalance Experiment: Triangular (reg $REGISTRY) x 6 host codes x ${#TESTS[@]} tests"
+echo "Load-Imbalance Experiment: UpperTriangular (reg $REGISTRY) x 6 host codes x ${#TESTS[@]} tests"
 echo "Output dir: $OUTPUT_DIR"
 echo ""
 

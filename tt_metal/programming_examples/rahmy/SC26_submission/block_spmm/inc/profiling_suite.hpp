@@ -47,6 +47,21 @@ namespace profiling_suite {
         return {bsr_bf16, dense_bf16, std::string(buf, n)};
     }
 
+    // ── Upper Triangular (deterministic, not frozen) ──
+    template <uint32_t M = 8192, uint32_t N = 8192, uint32_t K = 8192,
+              uint32_t R = 256, uint32_t C = 256, uint32_t DensityPPM_unused = 0>
+    inline ProfileCaseReturnType frozen_parametric_triu() {
+        uint32_t bmh = M / R;
+        uint32_t nblocks = bmh * (bmh + 1) / 2;
+        bsr_matrix<float> bsr(M, K, R, C, nblocks, FILL_TRIU, RAND);
+        dense_matrix<float> dense(K, N, RAND);
+        bsr_matrix<bfloat16> bsr_bf16 = bsr.bfloat16_cast();
+        dense_matrix<bfloat16> dense_bf16 = dense.bfloat16_cast();
+        char buf[128];
+        size_t n = sprintf(buf, "parametric_triu_M%u_N%u_K%u_R%u_C%u", M, N, K, R, C);
+        return {bsr_bf16, dense_bf16, std::string(buf, n)};
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // Helper: construct frozen BSR from hardcoded indptr/indices
     // ═══════════════════════════════════════════════════════════════════════
@@ -3808,14 +3823,20 @@ namespace profiling_suite {
         frozen_parametric_tril<4096, 4096, 4096, 256, 256, 0>,
     };
 
+    // UpperTriangular (upper-triangular block pattern)
+    static ProfileCaseFunctionPtr UpperTriangularRegistry[] = {
+        frozen_parametric_triu<8192, 8192, 8192, 256, 256, 0>,
+        frozen_parametric_triu<4096, 4096, 4096, 256, 256, 0>,
+    };
+
     // ── Registry metadata ──
-    static const int NUM_REGISTRIES = 30;
-    static const int RegistrySizes[] = {4, 4, 4, 4, 4, 4, 5, 5, 4, 5, 6, 6, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2};
+    static const int NUM_REGISTRIES = 31;
+    static const int RegistrySizes[] = {4, 4, 4, 4, 4, 4, 5, 5, 4, 5, 6, 6, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2};
     static const char* RegistryNames[] = {
-        "MicrobenchD25", "MicrobenchD5", "PatternD5", "PatternD10", "PatternD25", "PatternD50", "SweepN", "SweepK", "SweepBlockSize", "SweepDensity", "UltraLowDensity32", "UltraLowDensity64", "SweepDensity128", "PatternD5_128", "PatternD10_128", "PatternD25_128", "PatternD50_128", "PatternUltra32_30", "PatternUltra32_100", "PatternUltra32_300", "PatternUltra32_1000", "PatternUltra32_3000", "PatternUltra32_10000", "PatternUltra64_60", "PatternUltra64_200", "PatternUltra64_600", "PatternUltra64_2000", "PatternUltra64_6000", "PatternUltra64_10000", "Triangular",
+        "MicrobenchD25", "MicrobenchD5", "PatternD5", "PatternD10", "PatternD25", "PatternD50", "SweepN", "SweepK", "SweepBlockSize", "SweepDensity", "UltraLowDensity32", "UltraLowDensity64", "SweepDensity128", "PatternD5_128", "PatternD10_128", "PatternD25_128", "PatternD50_128", "PatternUltra32_30", "PatternUltra32_100", "PatternUltra32_300", "PatternUltra32_1000", "PatternUltra32_3000", "PatternUltra32_10000", "PatternUltra64_60", "PatternUltra64_200", "PatternUltra64_600", "PatternUltra64_2000", "PatternUltra64_6000", "PatternUltra64_10000", "Triangular", "UpperTriangular",
     };
     static ProfileCaseFunctionPtr* Registries[] = {
-        MicrobenchD25Registry, MicrobenchD5Registry, PatternD5Registry, PatternD10Registry, PatternD25Registry, PatternD50Registry, SweepNRegistry, SweepKRegistry, SweepBlockSizeRegistry, SweepDensityRegistry, UltraLowDensity32Registry, UltraLowDensity64Registry, SweepDensity128Registry, PatternD5_128Registry, PatternD10_128Registry, PatternD25_128Registry, PatternD50_128Registry, PatternUltra32_30Registry, PatternUltra32_100Registry, PatternUltra32_300Registry, PatternUltra32_1000Registry, PatternUltra32_3000Registry, PatternUltra32_10000Registry, PatternUltra64_60Registry, PatternUltra64_200Registry, PatternUltra64_600Registry, PatternUltra64_2000Registry, PatternUltra64_6000Registry, PatternUltra64_10000Registry, TriangularRegistry,
+        MicrobenchD25Registry, MicrobenchD5Registry, PatternD5Registry, PatternD10Registry, PatternD25Registry, PatternD50Registry, SweepNRegistry, SweepKRegistry, SweepBlockSizeRegistry, SweepDensityRegistry, UltraLowDensity32Registry, UltraLowDensity64Registry, SweepDensity128Registry, PatternD5_128Registry, PatternD10_128Registry, PatternD25_128Registry, PatternD50_128Registry, PatternUltra32_30Registry, PatternUltra32_100Registry, PatternUltra32_300Registry, PatternUltra32_1000Registry, PatternUltra32_3000Registry, PatternUltra32_10000Registry, PatternUltra64_60Registry, PatternUltra64_200Registry, PatternUltra64_600Registry, PatternUltra64_2000Registry, PatternUltra64_6000Registry, PatternUltra64_10000Registry, TriangularRegistry, UpperTriangularRegistry,
     };
 
 } // namespace profiling_suite

@@ -130,6 +130,8 @@ void kernel_main(){
                     // Read in1 block (row selected by BSR col_indices)
                     uint32_t bsr_col_index = col_indices[reduction_iter];
                     uint32_t in1_block_stride = in1_block_h * in1_tensor_stride_h;
+                    DPRINT_DATA0(DPRINT << "in1 DRAM read: " << bsr_col_index << ENDL());
+
                     spmm::read_block_by_tile(
                         in1_tensor_start_tile_id + bsr_col_index * in1_block_stride,
                         s1, l1_write_addr_in1,

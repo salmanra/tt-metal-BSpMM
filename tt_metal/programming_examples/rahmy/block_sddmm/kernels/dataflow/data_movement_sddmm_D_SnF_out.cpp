@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 #include "dataflow_api.h"
-#include "tt_metal/programming_examples/rahmy/block_spmm/kernels/common/spmm_tile_ops.hpp"
+#include "tt_metal/programming_examples/rahmy/block_sddmm/kernels/common/sddmm_tile_ops.hpp"
 
 void kernel_main() {
     // ── Compile-time args ────────────────────────────────────────────

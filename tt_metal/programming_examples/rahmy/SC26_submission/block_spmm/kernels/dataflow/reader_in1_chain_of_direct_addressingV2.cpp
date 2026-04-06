@@ -141,7 +141,6 @@ void kernel_main(){
     /// END RUNTIME ARGS //////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////////////////
 
-    DPRINT_DATA0(DPRINT << "CDA in1: core_idx_y=" << my_core_idx_y << " num_cores_col=" << num_cores_in_column << ENDL());
 
     const auto ti = spmm::get_tile_info();
     const uint32_t output_tile_size = get_tile_size(spmm::cb_id_out);
@@ -331,16 +330,12 @@ void kernel_main(){
 #if PROFILE_WAIT_IN1 == 1
                         DeviceZoneScopedN("SpMM Zone: CDA Waiting on dense block of in1 from neighbor");
 #endif
-                        DPRINT_DATA0(DPRINT << "in1 receiving from x: " << noc_x_for_column << ", y: " << noc_y_table[my_sender_idx] << ENDL());
 
                         noc_semaphore_set(in1_receiver_sem_ptr, 0);
-                        DPRINT_DATA0(DPRINT << "Receiving set local semaphore"<< ENDL());
                         uint64_t sender_sem_noc = get_noc_addr(noc_x_for_column, noc_y_table[my_sender_idx], in1_sender_semaphore_addr);
                         uint32_t my_slot_bit = (l1_write_addr_in1_start != in1_cb_base) ? 1 : 0;
                         noc_semaphore_inc(sender_sem_noc, 1 + my_slot_bit);
-                        DPRINT_DATA0(DPRINT << "Receiving set NoC sender semaphore, slot=" << my_slot_bit << ENDL());
                         noc_semaphore_wait(in1_receiver_sem_ptr, 1);
-                        DPRINT_DATA0(DPRINT << "Receiving got past commit"<< ENDL());
 
                     }
 
@@ -351,25 +346,20 @@ void kernel_main(){
 #if PROFILE_FORWARD_IN1 == 1
                         DeviceZoneScopedN("SpMM Zone: CDA Forwarding dense block of in1 to neighbor");
 #endif
-                        DPRINT_DATA0(DPRINT << "in1 sharing to x:" << noc_x_for_column << ", y: " << noc_y_table[my_downstream_idx] << ENDL());
 
                         // Wait for downstream readiness — value encodes CB slot bit
                         while (*in1_sender_sem_ptr == 0) {}
                         uint32_t receiver_slot_bit = *in1_sender_sem_ptr - 1;
-                        DPRINT_DATA0(DPRINT << "Sharing got past waiting semaphore, recv_slot=" << receiver_slot_bit << ENDL());
                         noc_semaphore_set(in1_sender_sem_ptr, 0);
-                        DPRINT_DATA0(DPRINT << "Sharing got past setting semaphore"<< ENDL());
 
                         uint32_t receiver_dest_addr = in1_cb_base + receiver_slot_bit * in1_single_buf_size;
                         uint64_t dest_data_addr = get_noc_addr(noc_x_for_column, noc_y_table[my_downstream_idx], receiver_dest_addr);
                         noc_async_write(l1_write_addr_in1_start, dest_data_addr, current_block_bytes);
                         noc_async_write_barrier();
-                        DPRINT_DATA0(DPRINT << "Sharing got past write barrier"<< ENDL());
 
                         uint64_t dest_recv_sem = get_noc_addr(noc_x_for_column, noc_y_table[my_downstream_idx], in1_receiver_semaphore_addr);
                         noc_semaphore_inc(dest_recv_sem, 1);
                         noc_async_atomic_barrier();
-                        DPRINT_DATA0(DPRINT << "Sharing got past commit"<< ENDL());
 
                     }
                 } // end has_work_this_vstep
@@ -439,6 +429,5 @@ void kernel_main(){
         cb_pop_front(spmm::cb_id_col_indices, col_indices_num_tiles);
         cb_pop_front(spmm::cb_id_indptr, indptr_num_tiles);
     }
-    DPRINT_DATA0(DPRINT << "CDA in1 kernel complete" << ENDL());
 
 }

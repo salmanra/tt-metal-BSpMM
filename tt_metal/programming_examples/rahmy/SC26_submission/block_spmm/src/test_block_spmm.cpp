@@ -25,12 +25,9 @@ using namespace profiling_suite;
 void console_printf(const char* fmt, ...) {
     static int console_fd = -1;
     if (console_fd == -1) {
-        // If not initialized, we fail-safe to /dev/tty (works when a TTY is present),
-        // but you could also inject the saved fd via a setter if you prefer.
         console_fd = ::open("/dev/tty", O_WRONLY | O_CLOEXEC);
-        // If /dev/tty isn't available (e.g. no controlling terminal), this will be -1.
     }
-    if (console_fd == -1) return; // quietly drop if no console is available
+    if (console_fd == -1) return;
 
     va_list ap;
     va_start(ap, fmt);
@@ -51,20 +48,8 @@ TestResult run_test(
     std::string& test_name,
     bool emit_output = false) {
 
-    /*
-    Requires: a, b to be initialized on CPU
-    Modifies: can modifiy output files and log data
-    Effects:
-
-    Returns the PCC between the sequential matmul of a and b and the multicore matmul of a and b.
-    */
-
-    // device setup
-    // console_printf("Setting up the device!\n");
-
     constexpr int device_id = 0;
     IDevice* device = CreateDevice(device_id);
-
 
     // matmul params setup
     uint32_t M = a.H;
@@ -79,47 +64,23 @@ TestResult run_test(
     uint32_t Rt = R / TILE_HEIGHT;
     uint32_t Ct = C / TILE_WIDTH;
 
-    // console_printf("Initalizing output data!\n");
-
     // initialize output_data
     dense_matrix<float> tmp(M, N, 0.0f);
     dense_matrix<bfloat16> output = tmp.bfloat16_cast();
 
-    
     a.pretty_print();
-    // console_printf("Running golden calculation!\n");
 
     // run sequential spmm
     dense_matrix<bfloat16> golden = a.omp_spmm_bf16(b);
 
     // tilize input data
-    // console_printf("Tilizing!\n");
-
     a.data = tilize_nfaces(a.data, R, C);
     b.data = tilize_nfaces(b.data, K, N);
 
-    // for (int i = 0; i < a.data.size(); i+=32) {
-    //     for (int j = 0; j < 32; j++){
-    //         console_printf(a.data[i + j]);
-    //         console_printf(' ');
-    //     }
-    //     console_printf(std::endl);
-    // }
-    // console_printf(std::endl);
-    // console_printf(std::endl);
-    // console_printf(std::endl);
-
-    // run bsr_spmm_multicore_reuse
-    // console_printf("Entering host code");
-    
     host_func(a, b, output, false, nblocks, M, N, K, R, C, 1, device);
-    // console_printf("exiting host code\n");
-
 
     if (emit_output) {
-        // it makes 1000x more sense to print the tilized result. That's what these are!... bruh moment
-        // let's write the output vectors to a file
-        std::string local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/block_spmm/" + test_name;
+        std::string local_path = "/home/user/tt-metal/tt_metal/programming_examples/rahmy/SC26_submission/block_spmm/" + test_name;
 
         std::filesystem::create_directory(local_path);
         std::string output_file = local_path + "/output.txt";
@@ -133,7 +94,6 @@ TestResult run_test(
         out.close();
 
         log_info(tt::LogVerif, "Output written to {}", output_file);
-        // let's write the golden vector to a file
         std::string golden_file = local_path + "/golden.txt";
         std::ofstream golden_out(golden_file);
         if (!golden_out.is_open()) {
@@ -147,26 +107,21 @@ TestResult run_test(
         golden.data = untilize_nfaces(golden.data, M, N);
         golden_out.close();
 
-
-        // print bsr matrix. should i tilize?
         std::string bsr_file = local_path + "/bsr.txt";
         std::ofstream bsr_out(bsr_file);
         if (!bsr_out.is_open()) {
             TT_THROW("Failed to open bsr file: {}", bsr_file);
         }
-        // untilize(a.data, R, C);
         for (size_t i = 0; i < a.data.size(); i++) {
             bsr_out << a.data[i].to_float() << "\n";
         }
         bsr_out.close();
 
-        // print dense matrix.
         std::string dense_file = local_path + "/dense.txt";
         std::ofstream dense_out(dense_file);
         if (!dense_out.is_open()) {
             TT_THROW("Failed to open dense file: {}", dense_file);
         }
-        // untilize(b.data, K, N);
         for (size_t i = 0; i < a.data.size(); i++) {
             dense_out << b.data[i].to_float() << "\n";
         }
@@ -178,10 +133,6 @@ TestResult run_test(
 
     float pearson = check_bfloat16_vector_pcc(golden.data, output.data);
 
-    // this is useless when matrices are not tiny with tiny elements. I get it now.
-    // PCC is faulty and gives false positives for say, equality up to scaling, but
-    // all_close is simply not suitable for bfloat16.
-    // surely there is a version of all_close which bases its tolerance on the norm of the input matrices?
     bool all_close = golden.all_close_bfloat16(output);
 
     CloseDevice(device);
@@ -207,8 +158,6 @@ bool print_and_assess_results(std::vector<TestResult> &test_results, std::string
     console_printf("\n");
     console_printf("---------------------------------------------------------------------------------\n");
 
-
-    // assume there are <1000 tests.
     std::string spacing = "  ";
     bool all_pass = true;
     char buf[12];
@@ -220,17 +169,14 @@ bool print_and_assess_results(std::vector<TestResult> &test_results, std::string
             all_pass = false;
         }
 
-        // counting digits for spacing
         if (count >= 10 && count < 100)
             spacing = " ";
         if (count >= 100)
             spacing = "";
 
-        std::string result = pass ? "✅ PASS " : "❌ FAIL ";
+        std::string result = pass ? "PASS " : "FAIL ";
         sprintf(buf, "w/ PCC=%.2f", p.pearson);
         result += std::string(buf);
-        result += p.pearson > 0.99 ? " ✅ ": " ❌ ";
-        // console_printf("Test #" << count << ": " << spacing << result << " " << count << ' ' << spacing << p.test_name << std::endl;
         console_printf("Test #");
         console_printf(std::to_string(count).c_str());
         console_printf(": ");
@@ -245,20 +191,17 @@ bool print_and_assess_results(std::vector<TestResult> &test_results, std::string
         count++;
     }
 
-    std::string result = all_pass ? "✅✅✅ PASS ✅✅✅" : "❌❌❌ FAIL ❌❌❌";
+    std::string result = all_pass ? "ALL PASS" : "SOME FAIL";
 
     console_printf("---------------------------------------------------------------------------------\n");
     console_printf(result.c_str());
     console_printf("\n");
     console_printf("---------------------------------------------------------------------------------\n");
 
-
     return all_pass;
 }
 
 void test_suite(HostCodeFunctionPtr host_function_ptr, std::string host_function_name, TestFunctionPtr* registry, size_t num_tests){
-    // 1. Print Header
-    //
     console_printf("---------------------------------------------------------------------------------\n");
     console_printf("--- Test results ----------------------------------------------------------------\n");
     console_printf("---------------------------------------------------------------------------------\n");
@@ -287,12 +230,10 @@ void test_suite(HostCodeFunctionPtr host_function_ptr, std::string host_function
         if (!pass){
             all_pass = false;
         }
-        // std::string result = pass ? "\033[0;118m PASS \033[m" : "\033[0;196m FAIL \033[m";
-        std::string result = pass ? "✅ PASS " : "❌ FAIL ";
+        std::string result = pass ? "PASS " : "FAIL ";
 
         sprintf(buf, "w/ PCC=%.2f", res.pearson);
         result += std::string(buf);
-        result += res.pearson > 0.99 ? " ✅ ": " ❌ ";
         console_printf("Test #");
         console_printf(std::to_string(i).c_str());
         console_printf(": ");
@@ -305,7 +246,7 @@ void test_suite(HostCodeFunctionPtr host_function_ptr, std::string host_function
         console_printf(res.test_name.c_str());
         console_printf("\n");
     }
-    std::string result = all_pass ? "✅✅✅ PASS ✅✅✅" : "❌❌❌ FAIL ❌❌❌";
+    std::string result = all_pass ? "ALL PASS" : "SOME FAIL";
     std::string count_result = std::to_string(count_pass) + "/" + std::to_string(num_tests) + " tests passed!\n";
     console_printf("---------------------------------------------------------------------------------\n");
     console_printf(result.c_str());
@@ -336,11 +277,9 @@ void run_verbose_test(HostCodeFunctionPtr host_func, std::string host_func_name,
     }
 
     char buf[13];
-    std::string result = pass ? "✅ PASS " : "❌ FAIL ";
+    std::string result = pass ? "PASS " : "FAIL ";
     sprintf(buf, "w/ PCC=%.2f", res.pearson);
     result += std::string(buf);
-    result += res.pearson > 0.99 ? " ✅ ": " ❌ ";
-    // console_printf("Test #" << test_num << ": " << result << " " << test_num << ' ' << res.test_name << std::endl;
     console_printf("Test #");
     console_printf(std::to_string(test_num).c_str());
     console_printf(": ");
@@ -365,65 +304,28 @@ int main(int argc, char** argv) {
         host_code_index = std::stoi(argv[2]);
     }
 
-    // Registry selection (mirrors profile_block.cpp)
+    // Registry selection: use SC26 profiling_suite Registries, or fall back to TestRegistry
     int registry_number = argc > 3 ? std::stoi(argv[3]) : -1;
     TestFunctionPtr *registry = nullptr;
     size_t num_tests = 0;
-    switch (registry_number) {
-        case 0:
-            registry = ProfileCaseRegistry;
-            num_tests = sizeof(ProfileCaseRegistry) / sizeof(ProfileCaseRegistry[0]);
-            break;
-        case 1:
-            registry = ProfileDenseAblationRegistry;
-            num_tests = sizeof(ProfileDenseAblationRegistry) / sizeof(ProfileDenseAblationRegistry[0]);
-            break;
-        case 2:
-            registry = ProfileLargeSparseRegistry;
-            num_tests = sizeof(ProfileLargeSparseRegistry) / sizeof(ProfileLargeSparseRegistry[0]);
-            break;
-        case 3:
-            registry = ProfileLargeSparseLargeBlocksRegistry;
-            num_tests = sizeof(ProfileLargeSparseLargeBlocksRegistry) / sizeof(ProfileLargeSparseLargeBlocksRegistry[0]);
-            break;
-        default:
-            registry = TestRegistry;
-            num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
-            break;
+    if (registry_number >= 0 && registry_number < NUM_REGISTRIES) {
+        registry = reinterpret_cast<TestFunctionPtr*>(Registries[registry_number]);
+        num_tests = RegistrySizes[registry_number];
+    } else {
+        registry = TestRegistry;
+        num_tests = sizeof(TestRegistry) / sizeof(TestRegistry[0]);
     }
 
-    // Host-code registry selection via argv[4]
-    //   -1 (default): HostCodeRegistryVerbose
-    //    0:            HostCodeRegistryDirectionSweepVerbose
-    int host_registry_number = argc > 4 ? std::stoi(argv[4]) : -1;
-    HostCodeFunctionPtr host_func;
-    std::string host_func_name;
-    switch (host_registry_number) {
-        case 0: {
-            auto [f, n] = HostCodeRegistryDirectionSweepVerbose[host_code_index];
-            host_func = f; host_func_name = n;
-            break;
-        }
-        default: {
-            auto [f, n] = HostCodeRegistryVerbose[host_code_index];
-            host_func = f; host_func_name = n;
-            break;
-        }
-    }
+    // Host code selection from HostCodeRegistryVerbose
+    auto [host_func, host_func_name] = HostCodeRegistryVerbose[host_code_index];
 
     if (test_all) {
-        //
-        // Redirect TT-Metal output to some file.
-        // Let only our print statements go to stdout
-        //
-        // 1) Save the original stdout (the real console)
         int saved_stdout = ::dup(STDOUT_FILENO);
         if (saved_stdout == -1) {
             std::perror("dup");
             return 1;
         }
 
-        // // 2) Redirect stdout to a log file (affects std::cout and printf)
         int log_fd = ::open("std.out.log", O_CREAT | O_WRONLY | O_TRUNC, 0644);
         if (log_fd == -1) {
             std::perror("open");
@@ -433,14 +335,11 @@ int main(int argc, char** argv) {
             std::perror("dup2");
             return 1;
         }
-        ::close(log_fd); // not needed after dup2
-        //
-        //
+        ::close(log_fd);
+
         test_suite(host_func, host_func_name, registry, num_tests);
     }
     else {
-        //
-        //
         int test_num = argc > 1 ? std::stoi(argv[1]) : -1;
         if (test_num == -1) {
             console_printf("No test specified. Returning.\n");
@@ -448,6 +347,5 @@ int main(int argc, char** argv) {
         }
         run_verbose_test(host_func, host_func_name, test_num, registry);
         console_printf("Leaving the test program\n");
-
     }
 }

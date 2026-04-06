@@ -11,7 +11,6 @@
 #include <tuple>
 #include <string>
 #include "include_me.hpp"
-#include "block_spmm/inc/bsr_matrix.hpp"
 #include "tt-metalium/bfloat16.hpp"
 
 using namespace tt;

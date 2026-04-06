@@ -155,6 +155,15 @@ using HostCodeFunctionPtr = void (*)(
     uint32_t B,
     IDevice* device);
 
+// ── Verbose Host Code Registry (for testing, verbose=true, profiling=false) ──
+// Indices: 0=Naive, 1=SnF, 2=CDA
+
+static std::pair<HostCodeFunctionPtr, std::string> HostCodeRegistryVerbose[] = {
+    {bsr_spmm_multicore_load_balanced_new_DM<true, false>, "bsr_spmm_multicore_load_balanced_new_DM"},
+    {bsr_spmm_multicore_snf<true, false>, "bsr_spmm_multicore_snf"},
+    {bsr_spmm_multicore_snfin0_cdain1<true, false>, "bsr_spmm_multicore_snfin0_cdain1"},
+};
+
 // ── Host Code Registry (15 entries: 3 algos x 5 variants) ──
 // Indices: [0-2] full, [3-5] no_a_read, [6-8] no_b_read, [9-11] no_compute, [12-14] no_write
 // Within each group: 0=Naive, 1=SnF, 2=CDA

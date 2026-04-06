@@ -66,7 +66,6 @@ void MAIN {
     ///////////////////////////////////////////////////////////////////////
     mm_init(tt::CBIndex::c_0, tt::CBIndex::c_1, tt::CBIndex::c_16);
 
-    DPRINT_MATH(DPRINT << "CK got all args" << ENDL());
 
 #if SKIP_COMPUTE == 1
     // Drain input CBs and push dummy tiles to output so writer does not stall.
@@ -95,7 +94,6 @@ void MAIN {
         for (uint32_t iter_x = 0; iter_x < num_iters_x; iter_x++){
             bool enable_reload = false;
             bool spill = num_blocks > 1;
-            // DPRINT_MATH(DPRINT << "Num blocks in this row: " << num_blocks << ENDL());
 
             uint32_t out_num_tiles_to_wait = out_subblock_num_tiles;
             for (uint32_t input_block = 0; input_block < num_blocks; input_block++){
@@ -181,12 +179,10 @@ void MAIN {
                 cb_pop_front(tt::CBIndex::c_0, in0_block_num_tiles);
                 cb_pop_front(tt::CBIndex::c_1, in1_block_num_tiles);
 
-                // DPRINT_MATH(DPRINT << "done computing on one input block" << ENDL());
 
             }
         }
     }
 #endif // SKIP_COMPUTE
-    DPRINT_MATH(DPRINT << "CK complete" << ENDL());
 };
 }

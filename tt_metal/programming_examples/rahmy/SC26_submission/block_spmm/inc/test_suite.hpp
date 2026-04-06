@@ -172,7 +172,7 @@ namespace bsr_test_suite {
         // test_enormous, // 71
         // test_many_iters_y, // 72
         // test_many_iters_both, // 73
-        // test_triangular, // 71
+        test_triangular, // 71
     };
 
     static std::uniform_real_distribution<> dis(-1000.0, 1000.0);

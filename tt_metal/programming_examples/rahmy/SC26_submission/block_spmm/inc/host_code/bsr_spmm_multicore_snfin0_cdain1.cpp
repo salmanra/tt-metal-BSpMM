@@ -479,9 +479,14 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
         (std::uint32_t)num_iters_x,
     };
 
+    // Check for host-level flags before merging into kernel defines
+    bool skip_load_balance = extra_defines.count("SKIP_LOAD_BALANCE") > 0;
+
     // Create Kernels
     auto zone_defines = spmm_zone_config::get_zone_defines();
-    zone_defines.insert(extra_defines.begin(), extra_defines.end());
+    for (auto& [k, v] : extra_defines) {
+        if (k != "SKIP_LOAD_BALANCE") zone_defines[k] = v;
+    }
 
     bool transpose_NoCs = use_optimal_noc;
     auto noc_riscv_0 = transpose_NoCs ? NOC::RISCV_1_default : NOC::RISCV_0_default;
@@ -539,69 +544,78 @@ void bsr_spmm_multicore_snfin0_cdain1_impl(
                 .defines = zone_defines});
     }
 
-    // Find Perms -- sort only the nnz rows so perm values are folded indices
-    std::vector<int> nnz_row_diffs;
-    for (int i = 0; i < a.indptr.size() - 1; i++){
-        int diff = a.indptr[i+1] - a.indptr[i];
-        if (diff > 0) {
-            nnz_row_diffs.push_back(diff);
-        }
-    }
-    std::vector<int> perm(nnz_row_diffs.size());
-    sortingPermutation(nnz_row_diffs, perm);
-
-    if constexpr (verbose) {
-        log_info(tt::LogVerif, " -- nnz_row_diffs (size={}) --", nnz_row_diffs.size());
-        for (uint32_t i = 0; i < nnz_row_diffs.size(); i++) {
-            log_info(tt::LogVerif, "   nnz_row_diffs[{}] = {}", i, nnz_row_diffs[i]);
-        }
-        log_info(tt::LogVerif, " -- perm (size={}) --", perm.size());
-        for (uint32_t i = 0; i < perm.size(); i++) {
-            log_info(tt::LogVerif, "   perm[{}] = {} (nnz_row_diffs[perm[{}]] = {})", i, perm[i], i, nnz_row_diffs[perm[i]]);
-        }
-    }
-
     // 1. initialize a vector for each row of cores
     std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
-    // 2. While count is less than num output blocks, sweep the core grid
-    uint32_t num_rows_assigned = 0;
-    uint32_t iter_count = 1;
-    uint32_t subarray_iter = 0;
-    while (num_rows_assigned < nnz_rows) {
-        uint32_t num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
-        subarray_iter = 0;
-        for (uint32_t core_row = 0; core_row < num_rows_to_assign; core_row++){
-            if (num_rows_assigned++ >= nnz_rows)
-                break;
-            output_y_indices[core_row].push_back(perm[num_cores_r * (iter_count - 1) + subarray_iter]);
-            subarray_iter++;
+
+    if (skip_load_balance) {
+        // No load balancing: assign rows sequentially round-robin
+        for (uint32_t row_idx = 0; row_idx < nnz_rows; row_idx++) {
+            output_y_indices[row_idx % num_cores_r].push_back(row_idx);
         }
-        num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
-        subarray_iter = num_cores_r - num_rows_to_assign;
-        for (uint32_t core_row = num_cores_r; core_row > num_cores_r - num_rows_to_assign; core_row--){
-            if (num_rows_assigned++ >= nnz_rows)
-                break;
-            output_y_indices[core_row - 1].push_back(perm[nnz_rows - num_cores_r * iter_count + subarray_iter]);
-            subarray_iter++;
+    } else {
+        // Find Perms -- sort only the nnz rows so perm values are folded indices
+        std::vector<int> nnz_row_diffs;
+        for (int i = 0; i < a.indptr.size() - 1; i++){
+            int diff = a.indptr[i+1] - a.indptr[i];
+            if (diff > 0) {
+                nnz_row_diffs.push_back(diff);
+            }
         }
-        iter_count++;
+        std::vector<int> perm(nnz_row_diffs.size());
+        sortingPermutation(nnz_row_diffs, perm);
+
+        if constexpr (verbose) {
+            log_info(tt::LogVerif, " -- nnz_row_diffs (size={}) --", nnz_row_diffs.size());
+            for (uint32_t i = 0; i < nnz_row_diffs.size(); i++) {
+                log_info(tt::LogVerif, "   nnz_row_diffs[{}] = {}", i, nnz_row_diffs[i]);
+            }
+            log_info(tt::LogVerif, " -- perm (size={}) --", perm.size());
+            for (uint32_t i = 0; i < perm.size(); i++) {
+                log_info(tt::LogVerif, "   perm[{}] = {} (nnz_row_diffs[perm[{}]] = {})", i, perm[i], i, nnz_row_diffs[perm[i]]);
+            }
+        }
+
+        // 2. While count is less than num output blocks, sweep the core grid
+        uint32_t num_rows_assigned = 0;
+        uint32_t iter_count = 1;
+        uint32_t subarray_iter = 0;
+        while (num_rows_assigned < nnz_rows) {
+            uint32_t num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
+            subarray_iter = 0;
+            for (uint32_t core_row = 0; core_row < num_rows_to_assign; core_row++){
+                if (num_rows_assigned++ >= nnz_rows)
+                    break;
+                output_y_indices[core_row].push_back(perm[num_cores_r * (iter_count - 1) + subarray_iter]);
+                subarray_iter++;
+            }
+            num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
+            subarray_iter = num_cores_r - num_rows_to_assign;
+            for (uint32_t core_row = num_cores_r; core_row > num_cores_r - num_rows_to_assign; core_row--){
+                if (num_rows_assigned++ >= nnz_rows)
+                    break;
+                output_y_indices[core_row - 1].push_back(perm[nnz_rows - num_cores_r * iter_count + subarray_iter]);
+                subarray_iter++;
+            }
+            iter_count++;
+        }
     }
 
     if constexpr (verbose) {
-        log_info(tt::LogVerif, " -- output_y_indices (num_cores_r={}) --", num_cores_r);
-        for (uint32_t r = 0; r < num_cores_r; r++) {
-            for (uint32_t j = 0; j < output_y_indices[r].size(); j++) {
-                uint32_t perm_val = output_y_indices[r][j];
-                log_info(tt::LogVerif, "   output_y_indices[core_row={}][{}] = {} (used as index into folded_bsr_matrix_indices, max valid index={})",
-                    r, j, perm_val, folded_bsr_matrix_indices.size() - 2);
-                if (perm_val < folded_bsr_matrix_indices.size()) {
-                    log_info(tt::LogVerif, "     -> folded_bsr_matrix_indices[{}] = {} (output_idx_y, max valid for indptr={})",
-                        perm_val, folded_bsr_matrix_indices[perm_val], (uint32_t)(a.indptr.size() - 2));
-                } else {
-                    log_info(tt::LogVerif, "     -> OUT OF BOUNDS for folded_bsr_matrix_indices!");
-                }
+        std::cout << "\n=== Row-to-core-row assignment (" << (skip_load_balance ? "NO LB" : "LOAD BALANCED") << ") ===\n";
+        for (uint32_t cr = 0; cr < num_cores_r; cr++) {
+            uint32_t total_nnz = 0;
+            std::cout << "  core_row[" << cr << "]: rows={";
+            for (uint32_t j = 0; j < output_y_indices[cr].size(); j++) {
+                uint32_t folded_idx = output_y_indices[cr][j];
+                uint32_t orig_row = folded_bsr_matrix_indices[folded_idx];
+                uint32_t row_nnz = a.indptr[orig_row + 1] - a.indptr[orig_row];
+                if (j > 0) std::cout << ", ";
+                std::cout << orig_row << "(" << row_nnz << ")";
+                total_nnz += row_nnz;
             }
+            std::cout << "} total_nnz=" << total_nnz << "\n";
         }
+        std::cout << "===\n" << std::endl;
     }
 
     // Assign runtime args
@@ -871,6 +885,16 @@ void bsr_spmm_multicore_snfin0_cdain1_no_write(
     bsr_spmm_multicore_snfin0_cdain1_impl<verbose, is_profiling, use_optimal_noc, in0_left_to_right, in1_bottom_to_top>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_DRAM_WRITE", "1"}});
 }
 
+// No-load-balance wrapper
+template<bool verbose, bool is_profiling, bool use_optimal_noc,
+         bool in0_left_to_right, bool in1_bottom_to_top>
+void bsr_spmm_multicore_snfin0_cdain1_no_lb(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
+    bsr_spmm_multicore_snfin0_cdain1_impl<verbose, is_profiling, use_optimal_noc, in0_left_to_right, in1_bottom_to_top>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_LOAD_BALANCE", "1"}});
+}
+
 // Explicit template instantiations
 template void bsr_spmm_multicore_snfin0_cdain1<false, false>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
@@ -898,6 +922,10 @@ template void bsr_spmm_multicore_snfin0_cdain1_no_compute<false, true>(
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
 template void bsr_spmm_multicore_snfin0_cdain1_no_write<false, true>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_snfin0_cdain1_no_lb<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);

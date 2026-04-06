@@ -296,7 +296,10 @@ void bsr_spmm_multicore_load_balanced_new_DM_impl(
     
     // Create Kernels
     auto zone_defines = spmm_zone_config::get_zone_defines();
-    zone_defines.insert(extra_defines.begin(), extra_defines.end());
+    bool skip_load_balance = extra_defines.count("SKIP_LOAD_BALANCE") > 0;
+    for (auto& [k, v] : extra_defines) {
+        if (k != "SKIP_LOAD_BALANCE") zone_defines[k] = v;
+    }
 
     bool transpose_NoCs = use_optimal_noc;
     auto noc_riscv_0 = transpose_NoCs ? NOC::RISCV_1_default : NOC::RISCV_0_default;
@@ -331,53 +334,79 @@ void bsr_spmm_multicore_load_balanced_new_DM_impl(
                                 .defines = zone_defines});
 
     // Runtime arguments
-    // Load-balancing: sort nnz rows by work (descending) and distribute to core rows
-    // via a zigzag so heavy rows are spread evenly across the grid.
-    std::vector<int> nnz_row_diffs;
-    for (int i = 0; i < (int)a.indptr.size() - 1; i++){
-        int diff = a.indptr[i+1] - a.indptr[i];
-        if (diff > 0)
-            nnz_row_diffs.push_back(diff);
+    std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
+
+    if (skip_load_balance) {
+        // No load balancing: assign rows sequentially round-robin
+        for (uint32_t row_idx = 0; row_idx < nnz_rows; row_idx++) {
+            output_y_indices[row_idx % num_cores_r].push_back(row_idx);
+        }
+    } else {
+        // Load-balancing: sort nnz rows by work (descending) and distribute to core rows
+        // via a zigzag so heavy rows are spread evenly across the grid.
+        std::vector<int> nnz_row_diffs;
+        for (int i = 0; i < (int)a.indptr.size() - 1; i++){
+            int diff = a.indptr[i+1] - a.indptr[i];
+            if (diff > 0)
+                nnz_row_diffs.push_back(diff);
+        }
+        std::vector<int> perm(nnz_row_diffs.size());
+        sortingPermutation(nnz_row_diffs, perm);
+
+        if constexpr (verbose) {
+            std::cout << "folded bsr matrix indices: ";
+            for (int i = 0; i < (int)folded_bsr_matrix_indices.size(); i++)
+                std::cout << folded_bsr_matrix_indices[i] << ' ';
+            std::cout << "\nrow diffs: ";
+            for (int i = 0; i < (int)nnz_row_diffs.size(); i++)
+                std::cout << nnz_row_diffs[i] << ' ';
+            std::cout << "\nperm: ";
+            for (int i = 0; i < (int)perm.size(); i++)
+                std::cout << perm[i] << ' ';
+            std::cout << std::endl;
+        }
+
+        // Assign folded row indices to each core row via zigzag
+        uint32_t num_rows_assigned = 0;
+        uint32_t iter_count = 1;
+        uint32_t subarray_iter = 0;
+        while (num_rows_assigned < nnz_rows) {
+            uint32_t num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
+            subarray_iter = 0;
+            for (uint32_t core_row = 0; core_row < num_rows_to_assign; core_row++){
+                if (num_rows_assigned++ >= nnz_rows)
+                    break;
+                output_y_indices[core_row].push_back(perm[num_cores_r * (iter_count - 1) + subarray_iter]);
+                subarray_iter++;
+            }
+            num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
+            subarray_iter = num_cores_r - num_rows_to_assign;
+            for (uint32_t core_row = num_cores_r; core_row > num_cores_r - num_rows_to_assign; core_row--){
+                if (num_rows_assigned++ >= nnz_rows)
+                    break;
+                output_y_indices[core_row - 1].push_back(perm[nnz_rows - num_cores_r * iter_count + subarray_iter]);
+                subarray_iter++;
+            }
+            iter_count++;
+        }
     }
-    std::vector<int> perm(nnz_row_diffs.size());
-    sortingPermutation(nnz_row_diffs, perm);
 
     if constexpr (verbose) {
-        std::cout << "folded bsr matrix indices: ";
-        for (int i = 0; i < (int)folded_bsr_matrix_indices.size(); i++)
-            std::cout << folded_bsr_matrix_indices[i] << ' ';
-        std::cout << "\nrow diffs: ";
-        for (int i = 0; i < (int)nnz_row_diffs.size(); i++)
-            std::cout << nnz_row_diffs[i] << ' ';
-        std::cout << "\nperm: ";
-        for (int i = 0; i < (int)perm.size(); i++)
-            std::cout << perm[i] << ' ';
-        std::cout << std::endl;
-    }
-
-    // Assign folded row indices to each core row via zigzag
-    std::vector<std::vector<uint32_t>> output_y_indices(num_cores_r, std::vector<uint32_t>());
-    uint32_t num_rows_assigned = 0;
-    uint32_t iter_count = 1;
-    uint32_t subarray_iter = 0;
-    while (num_rows_assigned < nnz_rows) {
-        uint32_t num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
-        subarray_iter = 0;
-        for (uint32_t core_row = 0; core_row < num_rows_to_assign; core_row++){
-            if (num_rows_assigned++ >= nnz_rows)
-                break;
-            output_y_indices[core_row].push_back(perm[num_cores_r * (iter_count - 1) + subarray_iter]);
-            subarray_iter++;
+        std::cout << "\n=== Row-to-core-row assignment (" << (skip_load_balance ? "NO LB" : "LOAD BALANCED") << ") ===\n";
+        for (uint32_t cr = 0; cr < num_cores_r; cr++) {
+            uint32_t total_nnz = 0;
+            std::cout << "  core_row[" << cr << "]: rows={";
+            for (uint32_t j = 0; j < output_y_indices[cr].size(); j++) {
+                uint32_t folded_idx = output_y_indices[cr][j];
+                uint32_t orig_row = folded_bsr_matrix_indices[folded_idx];
+                uint32_t row_nnz = a.indptr[orig_row + 1] - a.indptr[orig_row];
+                if (j > 0) std::cout << ", ";
+                std::cout << orig_row << "(" << row_nnz << ")";
+                total_nnz += row_nnz;
+            }
+            std::cout << "} total_nnz=" << total_nnz << "\n";
         }
-        num_rows_to_assign = std::min(num_cores_r, nnz_rows - num_rows_assigned);
-        subarray_iter = num_cores_r - num_rows_to_assign;
-        for (uint32_t core_row = num_cores_r; core_row > num_cores_r - num_rows_to_assign; core_row--){
-            if (num_rows_assigned++ >= nnz_rows)
-                break;
-            output_y_indices[core_row - 1].push_back(perm[nnz_rows - num_cores_r * iter_count + subarray_iter]);
-            subarray_iter++;
-        }
-        iter_count++;
+        std::cout << "===\n" << std::endl;
     }
 
     for (uint32_t core_idx_y = 0; core_idx_y < num_cores_r; core_idx_y++) {
@@ -544,6 +573,15 @@ void bsr_spmm_multicore_load_balanced_new_DM_no_write(
     bsr_spmm_multicore_load_balanced_new_DM_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_DRAM_WRITE", "1"}});
 }
 
+// No-load-balance wrapper
+template<bool verbose, bool is_profiling, bool use_optimal_noc>
+void bsr_spmm_multicore_load_balanced_new_DM_no_lb(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device) {
+    bsr_spmm_multicore_load_balanced_new_DM_impl<verbose, is_profiling, use_optimal_noc>(a, b, output, bcast_batch, nnz_blocks, M, N, K, R, C, B, device, {{"SKIP_LOAD_BALANCE", "1"}});
+}
+
 // Explicit template instantiations
 template void bsr_spmm_multicore_load_balanced_new_DM<false, false>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
@@ -571,6 +609,10 @@ template void bsr_spmm_multicore_load_balanced_new_DM_no_compute<false, true>(
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);
 template void bsr_spmm_multicore_load_balanced_new_DM_no_write<false, true>(
+    bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
+    bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
+    uint32_t R, uint32_t C, uint32_t B, IDevice* device);
+template void bsr_spmm_multicore_load_balanced_new_DM_no_lb<false, true>(
     bsr_matrix<bfloat16>& a, dense_matrix<bfloat16>& b, dense_matrix<bfloat16>& output,
     bool bcast_batch, uint32_t nnz_blocks, uint32_t M, uint32_t N, uint32_t K,
     uint32_t R, uint32_t C, uint32_t B, IDevice* device);

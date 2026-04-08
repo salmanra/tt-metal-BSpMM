@@ -126,16 +126,6 @@ def main():
     plt.close(fig)
     print(f"Saved: {output_path}")
 
-    # Also save individual plots (use the same shared y-limit for consistency)
-    for tc, vals in zip(TEST_CASES, case_values):
-        fig_i, ax_i = plt.subplots(figsize=(7, 5))
-        plot_one(ax_i, vals, tc, shared_ylim)
-        fig_i.tight_layout()
-        out_i = figures_dir / f"load_imbalance_{tc['suffix']}.png"
-        fig_i.savefig(out_i, dpi=200, bbox_inches="tight")
-        plt.close(fig_i)
-        print(f"Saved: {out_i}")
-
 
 if __name__ == "__main__":
     main()

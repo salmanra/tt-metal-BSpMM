@@ -1,11 +1,13 @@
 % DRAM read counts table for the DDA vs SnF section of experiments_with_numbers.txt.
-% Rows are exactly the cases cited in the narrative (15 rows = 5 cases x 3 algos).
+% Rows are exactly the cases cited in the narrative (18 rows = 6 cases x 3 algos).
 % Numbers extracted from:
 %   scripts/figures_dram_reads/dram_reads_mixed_sweep_d50.csv
 %   scripts/figures_dram_reads/dram_reads_mixed_sweep_d06.csv
+%   scripts/figures_dram_reads/dram_reads_multi_diag_ultra_sparse.csv
 %   scripts/figures_dram_reads/dram_reads_load_imbalance_comparison.csv (test=0, 8192)
 % TFLOP/s values come from the sparse.log files visualized in:
-%   mixed_sweep_d50.png, mixed_sweep_d06.png, load_imbalance_comparison.png
+%   mixed_sweep_d50.png, mixed_sweep_d06.png, multi_diag_ultra_sparse.png,
+%   load_imbalance_comparison.png
 %
 % Requires: \usepackage{booktabs} \usepackage{multirow}
 % Style as you wish; this is the minimal cleanly-formatted starting point.
@@ -36,6 +38,11 @@ Case & Algorithm & in0 reads & in1 reads & TFLOP/s \\
   & Naive & 784 & 784 & 5.4 \\
   & SnF   & 98  & 784 & 5.4 \\
   & DDA   & 98  & 784 & 5.5 \\
+\midrule
+\multirow{3}{*}{Multi-diag, $R{=}C{=}64$, $d{=}0.6\%$}
+  & Naive & 784 & 784 & \textbf{8.2} \\
+  & SnF   & 98  & 784 & 7.8 \\
+  & DDA   & 98  & 784 & 6.2 \\
 \midrule
 \multirow{3}{*}{Lower-triangular, $R{=}C{=}256$}
   & Naive & 16{,}896 & 16{,}896 & 19.1 \\

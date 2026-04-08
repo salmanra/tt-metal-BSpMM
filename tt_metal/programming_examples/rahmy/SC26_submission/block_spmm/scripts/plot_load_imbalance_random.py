@@ -90,47 +90,6 @@ def main():
 
     algo_labels = [label for _, _, label in ALGORITHMS]
 
-    # ── Absolute host-ms plot ──
-    fig, ax = plt.subplots(figsize=(7, 5))
-
-    bars_lb = ax.bar(x - bar_width / 2, lb_vals, bar_width,
-                     color=COLORS_LB, edgecolor="white", linewidth=0.5)
-    bars_no = ax.bar(x + bar_width / 2, no_lb_vals, bar_width,
-                     color=COLORS_NO_LB, edgecolor="white", linewidth=0.5,
-                     hatch="//")
-
-    for bars in (bars_lb, bars_no):
-        for bar in bars:
-            val = bar.get_height()
-            if val > 0:
-                ax.text(bar.get_x() + bar.get_width() / 2, val + 0.2,
-                        f"{val:.1f}", ha="center", va="bottom",
-                        fontsize=10, fontweight="bold")
-
-    # Legend with generic gray swatches for LB / no-LB
-    from matplotlib.patches import Patch
-    legend_handles = [
-        Patch(facecolor="#808080", edgecolor="white", label="With LB"),
-        Patch(facecolor="#B0B0B0", edgecolor="gray", hatch="//", label="Without LB"),
-    ]
-    ax.legend(handles=legend_handles, fontsize=9)
-
-    ax.set_xticks(x)
-    ax.set_xticklabels(algo_labels, fontsize=11)
-    ax.set_ylabel("Runtime ms / iteration", fontsize=11)
-    ax.set_title("LB vs No-LB: Random 25% Density\n(M=N=K=8192, R=C=256)",
-                 fontsize=13, fontweight="bold")
-    ax.grid(axis="y", alpha=0.3)
-    ax.set_axisbelow(True)
-    all_vals = lb_vals + no_lb_vals
-    ax.set_ylim(0, max(all_vals) * 1.25 if max(all_vals) > 0 else 1)
-
-    fig.tight_layout()
-    output_path = figures_dir / "load_imbalance_random.png"
-    fig.savefig(output_path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved: {output_path}")
-
     # ── Speedup ratio plot (no-LB ms / LB ms, baseline = 1.0 = no-LB) ──
     # Ratio > 1 means LB is faster (takes fewer ms).
     ratios = []

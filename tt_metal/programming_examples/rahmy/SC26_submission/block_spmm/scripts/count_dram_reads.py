@@ -66,6 +66,21 @@ def _mixed_sweep_runs():
     return runs
 
 
+def _multi_diag_ultra_sparse_runs():
+    """3 host codes x 1 test (multi_diag, registry 27 / PatternUltra64_6000, test 2)."""
+    runs = []
+    for hc_v, hc_label in [(0, "Naive"), (1, "SnF"), (2, "CDA")]:
+        runs.append((27, 2, hc_v, hc_label))
+    return runs
+
+
+def _load_imbalance_random_runs():
+    """6 host codes x 1 test (random 25% density, registry 4 / PatternD25, test 3)."""
+    hcs = [(0, "Naive"), (4, "Naive_no_lb"), (1, "SnF"), (5, "SnF_no_lb"),
+           (2, "CDA"), (3, "CDA_no_lb")]
+    return [(4, 3, hc_v, label) for hc_v, label in hcs]
+
+
 GROUPS = {
     "load_imbalance": {
         "runs": _load_imbalance_runs(29),
@@ -74,6 +89,14 @@ GROUPS = {
     "load_imbalance_upper": {
         "runs": _load_imbalance_runs(30),
         "output": "dram_reads_load_imbalance_upper.csv",
+    },
+    "load_imbalance_random": {
+        "runs": _load_imbalance_random_runs(),
+        "output": "dram_reads_load_imbalance_random.csv",
+    },
+    "multi_diag_ultra_sparse": {
+        "runs": _multi_diag_ultra_sparse_runs(),
+        "output": "dram_reads_multi_diag_ultra_sparse.csv",
     },
     "sweep_pattern": {
         "runs": _sweep_pattern_runs(),

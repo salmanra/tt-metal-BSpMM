@@ -19,15 +19,11 @@ import numpy as np
 
 
 ALGORITHMS = [
-    ("bsr_spmm_multicore_load_balanced_new_DM", "Naive"),
-    ("bsr_spmm_multicore_load_balanced_new_DM_no_lb", "Naive\n(no LB)"),
-    ("bsr_spmm_multicore_snf", "SnF"),
-    ("bsr_spmm_multicore_snf_no_lb", "SnF\n(no LB)"),
-    ("bsr_spmm_multicore_snfin0_cdain1", "CDA"),
-    ("bsr_spmm_multicore_snfin0_cdain1_no_lb", "CDA\n(no LB)"),
+    ("bsr_spmm_multicore_snfin0_cdain1", "DDA"),
+    ("bsr_spmm_multicore_snfin0_cdain1_no_lb", "DDA\n(no LB)"),
 ]
 
-COLORS = ["#4472C4", "#8FAADC", "#ED7D31", "#F4B183", "#70AD47", "#A9D18E"]
+COLORS = ["#70AD47", "#A9D18E"]
 
 REGISTRY = "Triangular"
 
@@ -57,21 +53,23 @@ def extract_tflops(log_path):
     return float(match.group(1)) if match else None
 
 
-def plot_one(ax, data_dir, test_case):
-    """Plot a single test case on the given axes."""
+def collect_values(data_dir, test_case):
     test_name = test_case["name"]
-    labels = []
     values = []
-    colors = []
-    for (algo_dir, label), color in zip(ALGORITHMS, COLORS):
+    for algo_dir, _ in ALGORITHMS:
         log_path = data_dir / REGISTRY / algo_dir / f"{test_name}_sparse.log"
         tflops = extract_tflops(log_path)
         if tflops is None:
             print(f"  WARNING: Missing {log_path}", file=sys.stderr)
             tflops = 0.0
-        labels.append(label)
         values.append(tflops)
-        colors.append(color)
+    return values
+
+
+def plot_one(ax, values, test_case, ylim):
+    """Plot a single test case on the given axes."""
+    labels = [label for _, label in ALGORITHMS]
+    colors = list(COLORS)
 
     x = np.arange(len(labels))
     bars = ax.bar(x, values, color=colors, edgecolor="white", linewidth=0.5, width=0.6)
@@ -91,14 +89,14 @@ def plot_one(ax, data_dir, test_case):
     ax.set_title(test_case["title"], fontsize=12)
     ax.grid(axis="y", alpha=0.3)
     ax.set_axisbelow(True)
-    ax.set_ylim(0, max(values) * 1.25 if max(values) > 0 else 1)
+    ax.set_ylim(0, ylim)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Plot load-imbalance experiment")
     parser.add_argument(
         "--data-dir",
-        default="/home/user/tt-metal/profiles_load_imbalance/csvs",
+        default="/home/user/tt-metal/profiles_load_imbalance_V2/csvs",
         help="Root directory containing registry/host_code/ CSV files",
     )
     args = parser.parse_args()
@@ -108,13 +106,18 @@ def main():
     figures_dir = script_dir / "figures"
     figures_dir.mkdir(exist_ok=True)
 
+    # Pre-collect all values to compute a shared y-limit across both subplots
+    case_values = [collect_values(data_dir, tc) for tc in TEST_CASES]
+    global_max = max((max(v) for v in case_values), default=0)
+    shared_ylim = global_max * 1.25 if global_max > 0 else 1
+
     # Combined figure with side-by-side axes
     fig, axes = plt.subplots(1, len(TEST_CASES), figsize=(7 * len(TEST_CASES), 5))
     if len(TEST_CASES) == 1:
         axes = [axes]
 
-    for ax, tc in zip(axes, TEST_CASES):
-        plot_one(ax, data_dir, tc)
+    for ax, tc, vals in zip(axes, TEST_CASES, case_values):
+        plot_one(ax, vals, tc, shared_ylim)
 
     fig.suptitle("Load Imbalance: LB vs No-LB on Triangular Matrices", fontsize=14, fontweight="bold")
     fig.tight_layout()
@@ -123,10 +126,10 @@ def main():
     plt.close(fig)
     print(f"Saved: {output_path}")
 
-    # Also save individual plots
-    for tc in TEST_CASES:
+    # Also save individual plots (use the same shared y-limit for consistency)
+    for tc, vals in zip(TEST_CASES, case_values):
         fig_i, ax_i = plt.subplots(figsize=(7, 5))
-        plot_one(ax_i, data_dir, tc)
+        plot_one(ax_i, vals, tc, shared_ylim)
         fig_i.tight_layout()
         out_i = figures_dir / f"load_imbalance_{tc['suffix']}.png"
         fig_i.savefig(out_i, dpi=200, bbox_inches="tight")

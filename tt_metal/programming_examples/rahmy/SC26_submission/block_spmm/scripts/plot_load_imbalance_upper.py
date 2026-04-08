@@ -18,15 +18,11 @@ import numpy as np
 
 
 ALGORITHMS = [
-    ("bsr_spmm_multicore_load_balanced_new_DM", "Naive"),
-    ("bsr_spmm_multicore_load_balanced_new_DM_no_lb", "Naive\n(no LB)"),
-    ("bsr_spmm_multicore_snf", "SnF"),
-    ("bsr_spmm_multicore_snf_no_lb", "SnF\n(no LB)"),
-    ("bsr_spmm_multicore_snfin0_cdain1", "CDA"),
-    ("bsr_spmm_multicore_snfin0_cdain1_no_lb", "CDA\n(no LB)"),
+    ("bsr_spmm_multicore_snfin0_cdain1", "DDA"),
+    ("bsr_spmm_multicore_snfin0_cdain1_no_lb", "DDA\n(no LB)"),
 ]
 
-COLORS = ["#4472C4", "#8FAADC", "#ED7D31", "#F4B183", "#70AD47", "#A9D18E"]
+COLORS = ["#70AD47", "#A9D18E"]
 
 REGISTRY = "UpperTriangular"
 

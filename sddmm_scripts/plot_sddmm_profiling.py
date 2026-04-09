@@ -2,20 +2,20 @@
 """
 plot_sddmm_profiling.py
 
-Plot SDDMM profiling results — throughput bar charts for density, N, K,
-and block-size sweeps.
+Build a single CSV comparison table from SDDMM profiling sweeps —
+one row per parametric test case across the density / N / K sweeps,
+with throughput columns for both the naive and CDA algorithms plus
+their speedup ratio.
 
 Usage:
     python sddmm_scripts/plot_sddmm_profiling.py
-    python sddmm_scripts/plot_sddmm_profiling.py --data-dir /path/to/csvs --out-dir plots/
+    python sddmm_scripts/plot_sddmm_profiling.py --data-dir /path/to/csvs --out-dir tables/
 """
 
 import argparse
 import re
 from pathlib import Path
 
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 
@@ -23,25 +23,24 @@ import pandas as pd
 
 SDDMM_ALGOS = [
     "bsr_sddmm_multicore_naive",
+    "bsr_sddmm_multicore_CDA",
 ]
 
-SDDMM_ALGO_LABEL = {
-    "bsr_sddmm_multicore_naive": "Naive",
-}
+SDDMM_DATA_DIR = Path("sddmm_profiles/opt_noc/csvs")
 
-SDDMM_ALGO_COLOR = {
-    "bsr_sddmm_multicore_naive": "#1565C0",
-}
-
-SDDMM_DATA_DIR = Path("sddmm_profiles/naive/csvs")
-
-NUM_ITERS = 10
+# (display label, registry directory, varying parameter key)
+SDDMM_SWEEPS = [
+    ("Density", "SDDMMSweepDensity", "density"),
+    ("N",       "SDDMMSweepN",       "N"),
+    ("K",       "SDDMMSweepK",       "K"),
+]
 
 
 # ── Helpers (from spmm_scripts/plot_profiling_plan.py) ─────────────────────────
 
 def parse_log_metadata(filepath):
-    """Parse matrix metadata (H, W, R, C, nblocks) from a pretty_print log file."""
+    """Parse matrix metadata (H, W, R, C, nblocks) and reported Device TFLOP/s
+    from a pretty_print log file."""
     result = {}
     try:
         with open(filepath, "r") as f:
@@ -54,19 +53,11 @@ def parse_log_metadata(filepath):
                     result["R"], result["C"] = int(parts[0]), int(parts[1])
                 elif "Number of blocks" in line:
                     result["nblocks"] = int(line.split(":")[1].strip())
+                elif "Device TFLOP/s" in line:
+                    result["tflops"] = float(line.split(":")[1].strip())
     except FileNotFoundError:
         pass
     return result
-
-
-def get_metric(csv_path: Path, zone: str = "Device program Loop") -> float | None:
-    """Read total_ns for one profiler zone from a host-code CSV."""
-    try:
-        df = pd.read_csv(csv_path, usecols=["name", "total_ns"])
-        row = df[df["name"] == zone]
-        return float(row["total_ns"].iloc[0]) if not row.empty else None
-    except Exception:
-        return None
 
 
 def _parse_parametric(stem: str) -> dict | None:
@@ -81,184 +72,195 @@ def _parse_parametric(stem: str) -> dict | None:
 
 # ── SDDMM-specific ────────────────────────────────────────────────────────────
 
-def _sddmm_tflops_per_sec(nblocks: int, R: int, C: int, K: int, ms: float) -> float:
+def _algo_throughput(algo_dir: Path) -> dict[tuple, dict]:
     """
-    SDDMM throughput in TFLOPs/s.
-    A = B ⊙ (C × D)  where C is (M×K), D is (K×N), B is sparse mask (M×N).
-    For each nonzero block: (R×K) × (K×C) matmul.
-    FLOPs = 2 × nblocks × R × C × K
+    Walk a single algorithm's CSVs in a sweep directory and return a mapping
+    keyed by parameter tuple → {nblocks, tflops}.
+
+    TFLOP/s is read directly from the `Device TFLOP/s` line in the matching
+    `<stem>_mask.log` file rather than being recomputed from host-side timing.
     """
-    flops = 2 * nblocks * R * C * K
-    return flops / 1e12 / (ms / 1e3)
+    out: dict[tuple, dict] = {}
+    if not algo_dir.exists():
+        return out
+    for csv in sorted(algo_dir.glob("*.csv")):
+        if csv.stem.endswith(".device"):
+            continue
+        params = _parse_parametric(csv.stem)
+        if params is None:
+            continue
+        log = csv.parent / f"{csv.stem}_mask.log"
+        meta = parse_log_metadata(log)
+        nblocks = meta.get("nblocks")
+        tflops = meta.get("tflops")
+        if nblocks is None or tflops is None:
+            continue
+        key = (params["M"], params["N"], params["K"],
+               params["R"], params["C"], params["density"])
+        out[key] = {
+            "nblocks": nblocks,
+            "tflops": tflops,
+        }
+    return out
 
 
-def load_sddmm_sweep(data_dir: Path, registry: str, sweep_param: str) -> pd.DataFrame:
+def _format_tflops(t: float | None) -> str:
+    if t is None or pd.isna(t):
+        return "---"
+    return f"{t:.2f}"
+
+
+def _format_speedup(s: float | None) -> str:
+    if s is None or pd.isna(s):
+        return "---"
+    return f"{s:.2f}$\\times$"
+
+
+def build_latex_table(df: pd.DataFrame) -> str:
     """
-    Load timing data for all SDDMM algorithms in a parametric sweep.
-    Returns a DataFrame with columns: algo, <sweep_param>, ..., ms, tflops
+    Render the SDDMM comparison DataFrame as a booktabs LaTeX table.
+
+    - Drops parameter columns whose value is constant across the whole table.
+    - Formats the speedup as "1.72$\\times$".
+    - Groups rows by sweep with \\midrule separators (sweep label via \\multirow).
+
+    Requires: \\usepackage{booktabs}, \\usepackage{multirow}.
+    """
+    # Identify constant parameter columns and drop them.
+    candidate_cols = ["M", "N", "K", "R", "C", "Density", "nblocks"]
+    kept = [c for c in candidate_cols if df[c].nunique() > 1]
+
+    label_map = {
+        "M": "$M$", "N": "$N$", "K": "$K$", "R": "$R$", "C": "$C$",
+        "Density": "Density",
+        "nblocks": "\\# blocks",
+    }
+    headers = ["Sweep", *(label_map[c] for c in kept),
+               "Naive (TFLOPs/s)", "CDA (TFLOPs/s)", "Speedup"]
+    col_spec = "l" + "r" * (len(headers) - 1)
+
+    # Build a short note about the dropped (constant) columns.
+    dropped = [c for c in candidate_cols if c not in kept and c != "nblocks"]
+    fixed_parts = []
+    for c in dropped:
+        v = int(df[c].iloc[0])
+        if c == "Density":
+            fixed_parts.append(f"density={v}\\%")
+        else:
+            fixed_parts.append(f"${c}={v}$")
+    fixed_note = (
+        f" Fixed across all rows: {', '.join(fixed_parts)}." if fixed_parts else ""
+    )
+
+    lines = [
+        "% Requires \\usepackage{booktabs} and \\usepackage{multirow}.",
+        "\\begin{table}[h]",
+        "\\centering",
+        "\\caption{SDDMM throughput: naive vs.\\ CDA across the density, "
+        "$N$, and $K$ sweeps." + fixed_note + "}",
+        "\\label{tab:sddmm_naive_vs_cda}",
+        f"\\begin{{tabular}}{{{col_spec}}}",
+        "\\toprule",
+        " & ".join(headers) + " \\\\",
+        "\\midrule",
+    ]
+
+    sweep_groups = list(df.groupby("Sweep", sort=False))
+    for i, (sweep_name, group) in enumerate(sweep_groups):
+        if i > 0:
+            lines.append("\\midrule")
+        n = len(group)
+        for j, (_, row) in enumerate(group.iterrows()):
+            cells = []
+            if j == 0:
+                cells.append(f"\\multirow{{{n}}}{{*}}{{{sweep_name}}}")
+            else:
+                cells.append("")
+            for c in kept:
+                v = row[c]
+                if c == "Density":
+                    cells.append(f"{int(v)}\\%")
+                else:
+                    cells.append(f"{int(v)}")
+            n_tf = row["naive_tflops"]
+            c_tf = row["cda_tflops"]
+            n_str = _format_tflops(n_tf)
+            c_str = _format_tflops(c_tf)
+            # Bold the larger of the two TFLOP/s values on this row.
+            if pd.notna(n_tf) and pd.notna(c_tf):
+                if n_tf > c_tf:
+                    n_str = f"\\textbf{{{n_str}}}"
+                elif c_tf > n_tf:
+                    c_str = f"\\textbf{{{c_str}}}"
+            cells.append(n_str)
+            cells.append(c_str)
+            cells.append(_format_speedup(row["speedup"]))
+            lines.append(" & ".join(cells) + " \\\\")
+
+    lines.append("\\bottomrule")
+    lines.append("\\end{tabular}")
+    lines.append("\\end{table}")
+    return "\n".join(lines) + "\n"
+
+
+def build_sddmm_table(data_dir: Path) -> pd.DataFrame:
+    """
+    Build a single naive-vs-CDA comparison table across the density/N/K sweeps.
+    Columns: Sweep, M, N, K, R, C, Density, nblocks, naive_tflops, cda_tflops, speedup
     """
     rows = []
-    reg_dir = data_dir / registry
-    for algo in SDDMM_ALGOS:
-        algo_dir = reg_dir / algo
-        if not algo_dir.exists():
-            continue
-        for csv in sorted(algo_dir.glob("*.csv")):
-            if csv.suffix != ".csv" or csv.stem.endswith(".device"):
-                continue
-            params = _parse_parametric(csv.stem)
-            if params is None:
-                continue
-            log = csv.parent / f"{csv.stem}_mask.log"
-            meta = parse_log_metadata(log)
-            nblocks = meta.get("nblocks")
-            ns = get_metric(csv)
-            if ns is not None and nblocks is not None:
-                ns = ns / NUM_ITERS
-                ms = ns / 1e6
-                rows.append({
-                    "algo": algo, **params, "ms": ms,
-                    "nblocks": nblocks,
-                    "tflops": _sddmm_tflops_per_sec(
-                        nblocks, params["R"], params["C"], params["K"], ms),
-                })
-    df = pd.DataFrame(rows)
-    if not df.empty:
-        df = df.sort_values(["algo", sweep_param]).reset_index(drop=True)
-    return df
-
-
-# ── Shared bar-chart helper ────────────────────────────────────────────────────
-
-def _bar_chart(df: pd.DataFrame, sweep_col: str, fmt_label, title_param: str,
-               out_dir: Path, out_name: str, clean: bool = False) -> None:
-    """Reusable grouped bar chart of TFLOPs/s vs. a sweep parameter."""
-    values = sorted(df[sweep_col].unique())
-    tick_labels = [fmt_label(v) for v in values]
-
-    n_algos = len(SDDMM_ALGOS)
-    x = np.arange(len(values))
-    if n_algos == 1:
-        bar_w = 0.5
-    else:
-        bar_w = 0.75 / n_algos
-
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    for i, algo in enumerate(SDDMM_ALGOS):
-        sub = df[df["algo"] == algo]
-        ys = []
-        for v in values:
-            row = sub[sub[sweep_col] == v]
-            ys.append(row["tflops"].iloc[0] if not row.empty else 0)
-        offset = 0 if n_algos == 1 else (i - (n_algos - 1) / 2) * bar_w
-        bars = ax.bar(x + offset, ys, bar_w,
-                      label=SDDMM_ALGO_LABEL[algo], color=SDDMM_ALGO_COLOR[algo],
-                      edgecolor="white", linewidth=0.5, zorder=3)
-        if not clean:
-            for bar in bars:
-                h = bar.get_height()
-                if h > 0:
-                    ax.text(bar.get_x() + bar.get_width() / 2, h + 0.002,
-                            f"{h:.3f}", ha="center", va="bottom", fontsize=8)
-
-    ax.set_xticks(x)
-    ax.set_xticklabels(tick_labels, fontsize=10)
-    ax.set_ylabel("Throughput (TFLOPs/s)")
-    ax.set_ylim(bottom=0)
-    if not clean:
-        row0 = df.iloc[0]
-        fixed = []
-        if sweep_col != "M":
-            fixed.append(f"M={row0['M']}")
-        if sweep_col != "N":
-            fixed.append(f"N={row0['N']}")
-        if sweep_col != "K":
-            fixed.append(f"K={row0['K']}")
-        if sweep_col != "R":
-            fixed.append(f"R=C={row0['R']}")
-        if sweep_col != "density":
-            fixed.append(f"d={row0['density']}%")
-        ax.set_title(
-            f"SDDMM Throughput vs. {title_param}\n"
-            f"({', '.join(fixed)})",
-            pad=10, fontweight="bold",
-        )
-        if n_algos > 1:
-            ax.legend(fontsize=8, loc="upper right")
-        ax.grid(axis="y", alpha=0.25)
-        ax.set_axisbelow(True)
-    else:
-        ax.tick_params(axis="both", length=0)
-
-    fig.tight_layout()
-    suffix = "_clean" if clean else ""
-    out = out_dir / f"{out_name}{suffix}.png"
-    fig.savefig(out, bbox_inches="tight", dpi=150)
-    plt.close(fig)
-    print(f"Saved {out}")
-
-
-# ── Per-sweep figure functions ─────────────────────────────────────────────────
-
-def make_sddmm_density_figure(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
-    """Bar chart — SDDMM throughput vs. sparsity density."""
-    df = load_sddmm_sweep(data_dir, "SDDMMSweepDensity", "density")
-    if df.empty:
-        print("WARNING: No SDDMM density sweep data found. Skipping.")
-        return
-    _bar_chart(df, "density", lambda v: f"{v}%", "Sparsity Density",
-               out_dir, "sddmm_density_throughput", clean)
-
-
-def make_sddmm_n_figure(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
-    """Bar chart — SDDMM throughput vs. N (dense output width)."""
-    df = load_sddmm_sweep(data_dir, "SDDMMSweepN", "N")
-    if df.empty:
-        print("WARNING: No SDDMM N-sweep data found. Skipping.")
-        return
-    _bar_chart(df, "N", str, "N (Dense Output Width)",
-               out_dir, "sddmm_n_throughput", clean)
-
-
-def make_sddmm_k_figure(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
-    """Bar chart — SDDMM throughput vs. K (reduction dimension)."""
-    df = load_sddmm_sweep(data_dir, "SDDMMSweepK", "K")
-    if df.empty:
-        print("WARNING: No SDDMM K-sweep data found. Skipping.")
-        return
-    _bar_chart(df, "K", str, "K (Reduction Dimension)",
-               out_dir, "sddmm_k_throughput", clean)
-
-
-def make_sddmm_blocksize_figure(data_dir: Path, out_dir: Path, clean: bool = False) -> None:
-    """Bar chart — SDDMM throughput vs. block size (R=C)."""
-    df = load_sddmm_sweep(data_dir, "SDDMMSweepBlockSize", "R")
-    if df.empty:
-        print("WARNING: No SDDMM block-size sweep data found. Skipping.")
-        return
-    _bar_chart(df, "R", lambda v: f"{v}\u00d7{v}", "Block Size (R=C)",
-               out_dir, "sddmm_blocksize_throughput", clean)
+    for sweep_label, registry, _varying in SDDMM_SWEEPS:
+        reg_dir = data_dir / registry
+        naive = _algo_throughput(reg_dir / "bsr_sddmm_multicore_naive")
+        cda   = _algo_throughput(reg_dir / "bsr_sddmm_multicore_CDA")
+        # Union of test cases so a missing run still shows up as a blank cell.
+        keys = sorted(set(naive) | set(cda))
+        for key in keys:
+            M, N, K, R, C, density = key
+            n_entry = naive.get(key, {})
+            c_entry = cda.get(key, {})
+            n_tf = n_entry.get("tflops")
+            c_tf = c_entry.get("tflops")
+            nblocks = n_entry.get("nblocks") or c_entry.get("nblocks")
+            speedup = (c_tf / n_tf) if (n_tf and c_tf) else None
+            rows.append({
+                "Sweep": sweep_label,
+                "M": M, "N": N, "K": K, "R": R, "C": C,
+                "Density": density,
+                "nblocks": nblocks,
+                "naive_tflops": n_tf,
+                "cda_tflops": c_tf,
+                "speedup": speedup,
+            })
+    return pd.DataFrame(rows)
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot SDDMM profiling results.")
+        description="Build the SDDMM naive-vs-CDA comparison table.")
     parser.add_argument("--data-dir", type=Path, default=SDDMM_DATA_DIR,
                         help="Root directory with CSV data")
     parser.add_argument("--out-dir", type=Path, default=Path("sddmm_plots"),
-                        help="Output directory for figures")
-    parser.add_argument("--clean", action="store_true",
-                        help="Generate clean figures (no titles/annotations)")
+                        help="Output directory for the table")
     args = parser.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    make_sddmm_density_figure(args.data_dir, args.out_dir, clean=args.clean)
-    make_sddmm_n_figure(args.data_dir, args.out_dir, clean=args.clean)
-    make_sddmm_k_figure(args.data_dir, args.out_dir, clean=args.clean)
-    make_sddmm_blocksize_figure(args.data_dir, args.out_dir, clean=args.clean)
+    df = build_sddmm_table(args.data_dir)
+    if df.empty:
+        print("WARNING: No SDDMM sweep data found. Nothing to write.")
+        return
+
+    out_csv = args.out_dir / "sddmm_naive_vs_cda.csv"
+    df.to_csv(out_csv, index=False, float_format="%.4f")
+    print(f"Saved {out_csv}")
+
+    out_tex = args.out_dir / "sddmm_naive_vs_cda.tex"
+    out_tex.write_text(build_latex_table(df))
+    print(f"Saved {out_tex}")
+
+    print(df.to_string(index=False))
 
 
 if __name__ == "__main__":

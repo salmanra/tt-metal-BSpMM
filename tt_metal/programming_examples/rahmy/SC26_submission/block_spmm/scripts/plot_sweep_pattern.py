@@ -13,23 +13,19 @@ OUT_DIR = os.path.join(os.path.dirname(__file__), "figures")
 DDA_HC = "bsr_spmm_multicore_snfin0_cdain1"
 
 PATTERNS = ["row", "random", "multi_diag", "col"]
-PATTERN_LABELS = ["Row", "Random", "Multi-diag", "Col"]
+PATTERN_LABELS = ["Row", "Random", "Banded", "Col"]
 PATTERN_COLORS = ["#d62728", "#1f77b4", "#9467bd", "#2ca02c"]
 
 # Block size → (GPU csv filename, list of (density_label, registry_name))
 AXES = [
     ("32×32", "sweep_pattern_32.csv", [
         ("0.003%", "PatternUltra32_30"),
-        ("0.01%",  "PatternUltra32_100"),
         ("0.03%",  "PatternUltra32_300"),
-        ("0.1%",   "PatternUltra32_1000"),
         ("0.3%",   "PatternUltra32_3000"),
     ]),
     ("64×64", "sweep_pattern_64.csv", [
         ("0.006%", "PatternUltra64_60"),
-        ("0.02%",  "PatternUltra64_200"),
         ("0.06%",  "PatternUltra64_600"),
-        ("0.2%",   "PatternUltra64_2000"),
         ("0.6%",   "PatternUltra64_6000"),
         ("1%",     "PatternUltra64_10000"),
     ]),
@@ -105,81 +101,86 @@ def registry_to_gpu_index(registry_name):
 
 
 def plot_figure(axes_specs, title, out_name):
-    """Group by pattern: x-axis is pattern, density pairs are bars within each group."""
+    """Group by pattern; bars touch within each group; densities labelled below."""
     n_axes = len(axes_specs)
-    fig, axes = plt.subplots(1, n_axes, figsize=(12 * n_axes // 2, 6))
+
+    BAR_WIDTH = 1.0     # bars touch (width = unit step within group)
+    PATTERN_GAP = 4.0   # gap of 4 bar-widths between adjacent pattern groups
+
+    # Width is set by the WIDEST single axis (axes are stacked vertically)
+    units_per_axis = []
+    for _, _, densities in axes_specs:
+        n_d = len(densities)
+        units_per_axis.append(len(PATTERNS) * (2 * n_d) + (len(PATTERNS) - 1) * PATTERN_GAP)
+    fig_width = max(14.0, max(units_per_axis) * 0.32 + 3.0)
+    fig_height = 7.5 * n_axes + 1.5  # ~7.5" per axis + room for suptitle/margins
+    fig, axes = plt.subplots(n_axes, 1, figsize=(fig_width, fig_height))
     if n_axes == 1:
         axes = [axes]
-
-    # Colors per density (cycle through a palette)
-    density_palette = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#e377c2", "#17becf", "#ff7f0e", "#8c564b"]
 
     for ax_idx, (block_label, gpu_csv_name, densities) in enumerate(axes_specs):
         ax = axes[ax_idx]
         gpu_data = parse_gpu_csv(os.path.join(GPU_DIR, gpu_csv_name))
 
         n_densities = len(densities)
-        n_patterns = len(PATTERNS)
-        bar_width = 0.35
-        # Each pattern group: n_densities pairs of bars (DDA+GPU)
-        pair_width = bar_width * 2 + 0.05
-        density_spacing = pair_width + 0.1
-        pattern_spacing = n_densities * density_spacing + 0.8
-
-        colors = [density_palette[i % len(density_palette)] for i in range(n_densities)]
+        bars_per_group = n_densities * 2
+        pattern_spacing = bars_per_group * BAR_WIDTH + PATTERN_GAP
 
         for p_idx, pat in enumerate(PATTERNS):
-            pattern_center = p_idx * pattern_spacing
+            group_left = p_idx * pattern_spacing
 
             for d_idx, (density_label, registry_name) in enumerate(densities):
                 dda_data = parse_dda_tflops(registry_name)
                 gpu_reg_idx = registry_to_gpu_index(registry_name)
 
-                x_center = pattern_center + d_idx * density_spacing
+                dda_x = group_left + (2 * d_idx + 0.5) * BAR_WIDTH
+                gpu_x = group_left + (2 * d_idx + 1.5) * BAR_WIDTH
 
                 dda_val = dda_data.get(pat, 0)
                 gpu_val = gpu_data.get((gpu_reg_idx, pat), 0) if gpu_reg_idx is not None else 0
 
-                # DDA bar (solid)
-                ax.bar(x_center - bar_width/2, dda_val, bar_width,
-                       color=colors[d_idx], edgecolor="white", linewidth=0.5,
-                       label=f"d={density_label} (DDA)" if p_idx == 0 else "")
-                # GPU bar (hatched)
-                ax.bar(x_center + bar_width/2, gpu_val, bar_width,
-                       color=colors[d_idx], alpha=0.4, hatch="//",
-                       edgecolor=colors[d_idx], linewidth=0.5,
-                       label=f"d={density_label} (GPU)" if p_idx == 0 else "")
+                # DDA: white fill, dotted hatch
+                ax.bar(dda_x, dda_val, BAR_WIDTH,
+                       facecolor="white", edgecolor="black", linewidth=1.2,
+                       hatch=".",
+                       label="DDA" if (p_idx == 0 and d_idx == 0) else None)
+                # GPU: white fill, diagonal hatch
+                ax.bar(gpu_x, gpu_val, BAR_WIDTH,
+                       facecolor="white", edgecolor="black", linewidth=1.2,
+                       hatch="////",
+                       label="GPU" if (p_idx == 0 and d_idx == 0) else None)
 
-        # X-axis: pattern labels
-        pattern_centers = [p_idx * pattern_spacing + (n_densities - 1) * density_spacing / 2
-                          for p_idx in range(n_patterns)]
-        ax.set_xticks(pattern_centers)
-        ax.set_xticklabels(PATTERN_LABELS, fontsize=9)
-        ax.set_xlabel("Sparsity Pattern")
+                # Density label southwest from the pair center, anchored at top-right
+                pair_center = group_left + (2 * d_idx + 1) * BAR_WIDTH
+                ax.text(pair_center, -0.01, density_label,
+                        ha="right", va="top", rotation=45, rotation_mode="anchor",
+                        fontsize=24, transform=ax.get_xaxis_transform())
 
-        ax.set_title(f"R=C={block_label}", fontsize=12)
+        # Pattern labels manually placed just below the density labels
+        ax.set_xticks([])
+        for p_idx, pattern_label in enumerate(PATTERN_LABELS):
+            group_center = p_idx * pattern_spacing + bars_per_group * BAR_WIDTH / 2
+            ax.text(group_center, -0.28, pattern_label,
+                    ha="center", va="top", fontsize=32, fontweight="bold",
+                    transform=ax.get_xaxis_transform())
+
+        ax.set_title(f"R=C={block_label}", fontsize=36)
         ax.grid(axis='y', alpha=0.3)
+        ax.tick_params(axis='y', labelsize=28)
+
+        ax.set_ylabel("TFLOP/s", fontsize=34)
 
         if ax_idx == 0:
-            ax.set_ylabel("TFLOP/s")
-        # Each axis gets its own legend (densities may differ between axes)
-        handles, labels = ax.get_legend_handles_labels()
-        seen = {}
-        unique_handles = []
-        unique_labels = []
-        for h, l in zip(handles, labels):
-            if l not in seen:
-                seen[l] = True
-                unique_handles.append(h)
-                unique_labels.append(l)
-        ax.legend(unique_handles, unique_labels, loc='upper left', fontsize=7, ncol=2)
+            ax.legend(loc='upper left', fontsize=28, framealpha=0.9)
+        ax.set_xlim(-BAR_WIDTH,
+                    len(PATTERNS) * pattern_spacing - PATTERN_GAP + BAR_WIDTH)
 
-    fig.suptitle(title, fontsize=14)
-    plt.tight_layout()
+    fig.subplots_adjust(top=0.88, bottom=0.06, hspace=0.55)
+    fig.suptitle(title, fontsize=36, y=0.96)
 
     out_path = os.path.join(OUT_DIR, out_name)
     os.makedirs(OUT_DIR, exist_ok=True)
-    fig.savefig(out_path, dpi=150)
+    fig.savefig(out_path, dpi=150, bbox_inches='tight', pad_inches=0.3)
     print(f"Saved {out_path}")
     plt.close(fig)
 
@@ -187,11 +188,11 @@ def plot_figure(axes_specs, title, out_name):
 if __name__ == "__main__":
     plot_figure(
         AXES[:2],
-        "DDA (N150) vs GPU: Ultra-Sparse (R=C=32, R=C=64)",
+        "DDA (N150) vs GPU: Sparse (R=C=32, R=C=64)",
         "sweep_pattern_dda_vs_gpu_ultrasparse.png",
     )
     plot_figure(
         AXES[2:],
-        "DDA (N150) vs GPU: Standard Density (R=C=128, R=C=256)",
+        "DDA (N150) vs GPU: Semi-Sparse (R=C=128, R=C=256)",
         "sweep_pattern_dda_vs_gpu_standard.png",
     )

@@ -24,10 +24,10 @@ pattern; the others use the indicated block-density $d$.}
 \toprule
 Case & Algorithm & in0 reads & in1 reads & TFLOP/s \\
 \midrule
-\multirow{3}{*}{Row, $R{=}C{=}256$, $d{=}50\%$}
-  & Naive & 16{,}384 & 16{,}384 & 21.6 \\
-  & SnF   & 2{,}048  & 16{,}384 & 40.5 \\
-  & DDA   & 2{,}048  & 2{,}048  & \textbf{48.2} \\
+\multirow{3}{*}{Row, $R{=}C{=}256$, $d{=}25\%$}
+  & Naive & 8{,}192 & 8{,}192 & 21.8 \\
+  & SnF   & 1{,}024 & 8{,}192 & 39.8 \\
+  & DDA   & 1{,}024 & 1{,}024 & \textbf{50.6} \\
 \midrule
 \multirow{3}{*}{Multi-diag, $R{=}C{=}256$, $d{=}50\%$}
   & Naive & 16{,}384 & 16{,}384 & 19.2 \\

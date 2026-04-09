@@ -1,0 +1,29 @@
+% Requires \usepackage{booktabs} and \usepackage{multirow}.
+\begin{table}[h]
+\centering
+\caption{SDDMM throughput: naive vs.\ CDA across the density, $N$, and $K$ sweeps. Fixed across all rows: $M=8192$, $R=256$, $C=256$.}
+\label{tab:sddmm_naive_vs_cda}
+\begin{tabular}{lrrrrrrr}
+\toprule
+Sweep & $N$ & $K$ & Density & \# blocks & Naive (TFLOPs/s) & CDA (TFLOPs/s) & Speedup \\
+\midrule
+\multirow{5}{*}{Density} & 8192 & 8192 & 5\% & 51 & 18.80 & \textbf{33.07} & 1.76$\times$ \\
+ & 8192 & 8192 & 10\% & 102 & 21.59 & \textbf{38.26} & 1.77$\times$ \\
+ & 8192 & 8192 & 25\% & 256 & 21.87 & \textbf{34.82} & 1.59$\times$ \\
+ & 8192 & 8192 & 50\% & 512 & 21.65 & \textbf{33.06} & 1.53$\times$ \\
+ & 8192 & 8192 & 75\% & 768 & 21.66 & \textbf{31.92} & 1.47$\times$ \\
+\midrule
+\multirow{5}{*}{N} & 512 & 8192 & 25\% & 16 & 10.72 & \textbf{11.98} & 1.12$\times$ \\
+ & 1024 & 8192 & 25\% & 32 & 14.52 & \textbf{17.96} & 1.24$\times$ \\
+ & 2048 & 8192 & 25\% & 64 & 23.44 & \textbf{33.02} & 1.41$\times$ \\
+ & 4096 & 8192 & 25\% & 128 & 22.01 & \textbf{43.67} & 1.98$\times$ \\
+ & 8192 & 8192 & 25\% & 256 & 21.78 & \textbf{36.25} & 1.66$\times$ \\
+\midrule
+\multirow{5}{*}{K} & 8192 & 512 & 25\% & 256 & \textbf{17.06} & 15.12 & 0.89$\times$ \\
+ & 8192 & 1024 & 25\% & 256 & 18.55 & \textbf{19.47} & 1.05$\times$ \\
+ & 8192 & 2048 & 25\% & 256 & 18.71 & \textbf{26.13} & 1.40$\times$ \\
+ & 8192 & 4096 & 25\% & 256 & 19.85 & \textbf{30.42} & 1.53$\times$ \\
+ & 8192 & 8192 & 25\% & 256 & 21.82 & \textbf{34.64} & 1.59$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}

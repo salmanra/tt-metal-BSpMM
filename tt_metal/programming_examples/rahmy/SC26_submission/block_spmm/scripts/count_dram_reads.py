@@ -81,6 +81,42 @@ def _load_imbalance_random_runs():
     return [(4, 3, hc_v, label) for hc_v, label in hcs]
 
 
+def _table1_sparse_runs():
+    """Paper Table 1 sparse-pattern rows: 4 cases x 3 LB algorithms = 12 runs.
+
+    Row, R=C=256, d=25%      -> registry 4  (PatternD25),        test 0 (row)
+    Banded, R=C=256, d=50%   -> registry 5  (PatternD50),        test 2 (multi_diag)
+    Row, R=C=64, d=0.6%      -> registry 27 (PatternUltra64_6000), test 0 (row)
+    Diagonal, R=C=64, d=0.6% -> registry 27 (PatternUltra64_6000), test 2 (multi_diag)
+    """
+    cases = [
+        (4,  0, "Row_R256_d25"),
+        (5,  2, "Banded_R256_d50"),
+        (27, 0, "Row_R64_d0.6"),
+        (27, 2, "Diagonal_R64_d0.6"),
+    ]
+    hcs = [(0, "Naive"), (1, "SnF"), (2, "CDA")]
+    return [(reg, test, hc_v, f"{hc_label}_{desc}")
+            for reg, test, desc in cases
+            for hc_v, hc_label in hcs]
+
+
+def _table1_triangular_runs():
+    """Paper Table 1 triangular rows: 2 cases x 3 LB algorithms = 6 runs.
+
+    Lower-triangular, R=C=256, M=N=K=8192 -> registry 29 (Triangular),      test 0
+    Upper-triangular, R=C=256, M=N=K=8192 -> registry 30 (UpperTriangular), test 0
+    """
+    cases = [
+        (29, 0, "LowerTri_R256"),
+        (30, 0, "UpperTri_R256"),
+    ]
+    hcs = [(0, "Naive"), (1, "SnF"), (2, "CDA")]
+    return [(reg, test, hc_v, f"{hc_label}_{desc}")
+            for reg, test, desc in cases
+            for hc_v, hc_label in hcs]
+
+
 GROUPS = {
     "load_imbalance": {
         "runs": _load_imbalance_runs(29),
@@ -105,6 +141,14 @@ GROUPS = {
     "mixed_sweep": {
         "runs": _mixed_sweep_runs(),
         "output": "dram_reads_mixed_sweep.csv",
+    },
+    "table1_sparse_cases": {
+        "runs": _table1_sparse_runs(),
+        "output": "dram_reads_table1_sparse_cases.csv",
+    },
+    "table1_triangular_cases": {
+        "runs": _table1_triangular_runs(),
+        "output": "dram_reads_table1_triangular_cases.csv",
     },
 }
 

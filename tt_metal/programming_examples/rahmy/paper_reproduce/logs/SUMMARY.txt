@@ -1,0 +1,41 @@
+Paper reproduction run started at 2026-04-21T17:57:32+00:00
+
+
+========== reproduce_fig3 started at 2026-04-21T17:57:32+00:00 ==========
+[OK]  reproduce_fig3  0h 13m 32s  log=/home/user/tt-metal/tt_metal/programming_examples/rahmy/paper_reproduce/logs/reproduce_fig3.log
+
+========== reproduce_fig4 started at 2026-04-21T18:11:04+00:00 ==========
+[OK]  reproduce_fig4  0h 23m 35s  log=/home/user/tt-metal/tt_metal/programming_examples/rahmy/paper_reproduce/logs/reproduce_fig4.log
+
+========== reproduce_table1 started at 2026-04-21T18:34:39+00:00 ==========
+[OK]  reproduce_table1  0h 18m 45s  log=/home/user/tt-metal/tt_metal/programming_examples/rahmy/paper_reproduce/logs/reproduce_table1.log
+
+========== reproduce_table2 started at 2026-04-21T18:53:24+00:00 ==========
+[OK]  reproduce_table2  0h 21m 17s  log=/home/user/tt-metal/tt_metal/programming_examples/rahmy/paper_reproduce/logs/reproduce_table2.log
+
+========== reproduce_table3 started at 2026-04-21T19:14:41+00:00 ==========
+[FAIL (exit=134)]  reproduce_table3  0h 00m 47s  log=/home/user/tt-metal/tt_metal/programming_examples/rahmy/paper_reproduce/logs/reproduce_table3.log
+
+========== ALL DONE at 2026-04-21T19:15:28+00:00 ==========
+Total wall time: 1h 17m 56s
+
+Aggregated CSVs:
+total 24
+drwxr-xr-x 2 user user 4096 Apr 21 19:14 .
+drwxr-xr-x 4 user user 4096 Apr 21 19:02 ..
+-rw-r--r-- 1 user user 1240 Apr 21 18:11 fig3_dda_throughput.csv
+-rw-r--r-- 1 user user 1191 Apr 21 18:34 fig4_dda_throughput.csv
+-rw-r--r-- 1 user user 1005 Apr 21 19:02 table1_dram_and_throughput.csv
+-rw-r--r-- 1 user user 1272 Apr 21 19:14 table2_load_balance.csv
+
+========== reproduce_table3 retry (after fixing kernel include paths + restoring read_sddmm_profiler.py) ==========
+[OK]  reproduce_table3_retry  0h 14m 33s  log=/home/user/tt-metal/tt_metal/programming_examples/rahmy/paper_reproduce/logs/reproduce_table3.log
+
+========== FINAL ALL DONE ==========
+All 5 reproduction scripts succeeded. Combined wall time (inc. retry):
+  reproduce_fig3      0h 13m 32s
+  reproduce_fig4      0h 23m 35s
+  reproduce_table1    0h 18m 45s
+  reproduce_table2    0h 21m 17s
+  reproduce_table3    0h 14m 33s  (retry)
+  TOTAL run-time:    ~1h 31m 42s

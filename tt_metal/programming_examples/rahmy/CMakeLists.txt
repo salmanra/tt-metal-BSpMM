@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.22...3.30)
 
 add_subdirectory(sparse_common)
 add_subdirectory(block_spgemm)
-add_subdirectory(block_sddmm)
 add_subdirectory(SC26_submission)
 
 set(RAHMY_SRCS
@@ -10,14 +9,14 @@ set(RAHMY_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/block_spgemm/src/test_spgemm.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/block_spgemm/src/run_spgemm.cpp
     # SDDMM entry points
-    ${CMAKE_CURRENT_SOURCE_DIR}/block_sddmm/src/test_sddmm.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/block_sddmm/src/run_sddmm.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/block_sddmm/src/export_sddmm.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SC26_submission/block_sddmm/src/test_sddmm.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SC26_submission/block_sddmm/src/run_sddmm.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/SC26_submission/block_sddmm/src/export_sddmm.cpp
 )
 
 if(ENABLE_TRACY)
     list(APPEND RAHMY_SRCS
-        ${CMAKE_CURRENT_SOURCE_DIR}/block_sddmm/src/profile_sddmm.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/SC26_submission/block_sddmm/src/profile_sddmm.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/SC26_submission/block_spmm/src/profile_block_spmm.cpp
     )
 endif()
